@@ -45,6 +45,22 @@ pub const QUERY_REFINE_INSTRUCTION: &str = "\
 Rewrite the user's request as a single, well-formed web-search query. Fix spelling and grammar and \
 keep it short. Output only the query, nothing else.";
 
+/// The system prompt for a **conversational reply** in a discussion (as opposed to writing a note
+/// body). Concise, grounded in the provided context, never a wrapping fence.
+pub const CHAT_INSTRUCTION: &str = "\
+You are a study assistant talking in a note's discussion. Answer conversationally and concisely, \
+using ONLY the conversation, notes, and search results provided — never from memory — and say plainly \
+when they do not answer the question. Markdown, and do not wrap the whole reply in a code fence.";
+
+/// One conversational turn's output: a chat `reply` to post to the discussion, and — when `/propose`
+/// was asked — a `proposal` body for the host note. The orchestrator owns the LLM calls that make it;
+/// the caller (a store-aware runner) does the I/O (post the reply, create the proposal).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Turn {
+    pub reply: Option<String>,
+    pub proposal: Option<String>,
+}
+
 /// A well-defined error from a pipeline step. Deliberately opaque (a message): the orchestrator does
 /// not branch on *why* a step failed, it stops.
 #[derive(Debug, thiserror::Error)]
@@ -204,6 +220,52 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
         let refined = refined.content.trim();
         Ok(if refined.is_empty() { seed.to_string() } else { refined.to_string() })
     }
+
+    /// Handle one **conversational turn** in a discussion — the heart of the warm session loop.
+    /// `history` is the prior conversation (oldest→newest, already summarized to fit by the caller);
+    /// `intent` is the parsed latest message; `context` is the retrieved notes + web results the
+    /// caller assembled (RAG + search). It always produces a chat `reply` (so the discussion sees the
+    /// agent respond), capped at `max_reply_chars`, and a `proposal` body when `/propose` was asked.
+    /// The orchestrator owns every LLM call; the caller does the I/O (post the reply, create the
+    /// proposal). The user does not care how the reply arrives — this is the layer that makes it smooth.
+    pub fn turn(
+        &self,
+        history: &str,
+        intent: &crate::convo::Intent,
+        context: &[InputDoc],
+        max_reply_chars: Option<usize>,
+    ) -> Result<Turn, AgentError> {
+        let ctx = assemble_turn_context(history, context);
+
+        // A proposal edit to the host note, when asked — reuses the house-format write step.
+        let proposal = if intent.propose {
+            let user = format!("{ctx}\n\n# Task\n{}", intent.ask.trim());
+            let resp = self.llm.complete(OUTPUT_FORMAT_INSTRUCTION, &user)?;
+            if resp.truncated() {
+                return Err(AgentError::new(
+                    "the proposed note was cut off at the token limit — raise max_tokens",
+                ));
+            }
+            Some(strip_wrapping_fence(&resp.content))
+        } else {
+            None
+        };
+
+        // A conversational reply — always, so the discussion sees the agent respond.
+        let user = if proposal.is_some() {
+            format!(
+                "{ctx}\n\n# Task\nYou just proposed an edit for: \"{}\". In ONE short sentence, tell the \
+                 user what you proposed and that it awaits their review.",
+                intent.ask.trim()
+            )
+        } else {
+            format!("{ctx}\n\n# Question\n{}", intent.ask.trim())
+        };
+        let resp = self.llm.complete(CHAT_INSTRUCTION, &user)?;
+        let reply = crate::convo::cap_reply(&strip_wrapping_fence(&resp.content), max_reply_chars);
+
+        Ok(Turn { reply: Some(reply), proposal })
+    }
 }
 
 /// Strip a single fence that wraps the *entire* answer (```` ```markdown … ``` ````) — a common
@@ -219,6 +281,24 @@ fn strip_wrapping_fence(s: &str) -> String {
         }
     }
     t.to_string()
+}
+
+/// Assemble a conversational turn's context: the prior conversation, then the retrieved notes and
+/// search results — clearly delimited so the exact text is trivial to assert.
+fn assemble_turn_context(history: &str, context: &[InputDoc]) -> String {
+    let mut p = String::new();
+    if !history.trim().is_empty() {
+        p.push_str("# Conversation so far\n");
+        p.push_str(history.trim());
+        p.push('\n');
+    }
+    if !context.is_empty() {
+        p.push_str("\n# Notes and search results\n");
+        for d in context {
+            p.push_str(&format!("## {}\n{}\n", d.label.trim(), d.text.trim()));
+        }
+    }
+    p
 }
 
 /// Assemble the writing step's user prompt from the request and the search hits, in a fixed,
@@ -365,6 +445,45 @@ mod tests {
         assert_eq!(draft.new_body, "# Title\n\n- a\n- b");
         // A body with a genuine inner code block, not a wrapping fence, is left intact.
         assert_eq!(super::strip_wrapping_fence("see this:\n```rust\nfn x(){}\n```"), "see this:\n```rust\nfn x(){}\n```");
+    }
+
+    #[test]
+    fn a_chat_turn_replies_and_does_not_propose() {
+        use crate::convo::Intent;
+        let web = FakeWeb { hits: vec![], seen: RefCell::new(Vec::new()) };
+        let agent = StudyAssistant::new(FakeLlm::new(&["Here is the answer."]), web);
+        let intent = Intent { ask: "what does the note say?".into(), search: false, propose: false };
+        let ctx = [InputDoc { label: "note".into(), text: "the note body".into() }];
+        let turn = agent.turn("earlier: hi", &intent, &ctx, Some(200)).unwrap();
+        assert_eq!(turn.reply.as_deref(), Some("Here is the answer."));
+        assert!(turn.proposal.is_none());
+        // Exactly one model call (the reply); the writing prompt carried the history + the note.
+        let seen = agent.llm.seen.borrow();
+        assert_eq!(seen.len(), 1);
+        assert!(seen[0].1.contains("earlier: hi") && seen[0].1.contains("the note body"));
+    }
+
+    #[test]
+    fn a_propose_turn_produces_a_proposal_and_a_short_reply() {
+        use crate::convo::Intent;
+        let web = FakeWeb { hits: vec![], seen: RefCell::new(Vec::new()) };
+        // First canned reply is the proposal body, second is the acknowledgement.
+        let agent = StudyAssistant::new(FakeLlm::new(&["# Clean note\n\n- point", "Proposed a tidy version."]), web);
+        let intent = Intent { ask: "tidy this".into(), search: false, propose: true };
+        let turn = agent.turn("", &intent, &[], Some(200)).unwrap();
+        assert_eq!(turn.proposal.as_deref(), Some("# Clean note\n\n- point"));
+        assert_eq!(turn.reply.as_deref(), Some("Proposed a tidy version."));
+        assert_eq!(agent.llm.seen.borrow().len(), 2, "one call to write, one to acknowledge");
+    }
+
+    #[test]
+    fn a_turn_reply_is_capped_at_the_max_length() {
+        use crate::convo::Intent;
+        let web = FakeWeb { hits: vec![], seen: RefCell::new(Vec::new()) };
+        let agent = StudyAssistant::new(FakeLlm::new(&["this reply is quite a bit too long for the cap"]), web);
+        let intent = Intent { ask: "hi".into(), search: false, propose: false };
+        let turn = agent.turn("", &intent, &[], Some(12)).unwrap();
+        assert!(turn.reply.unwrap().chars().count() <= 12);
     }
 
     #[test]
