@@ -30,6 +30,13 @@ FILE="$(model_file "$MODEL")"
 [ -f "$HERE/models/$FILE" ] || { echo "model not fetched — run 'pixi run fetch-model $MODEL'" >&2; exit 1; }
 
 CTX="$(conf_get ctx)"; THREADS="$(conf_get threads)"; PORT="$(conf_get port)"
-exec cargo run -q -p fm-agent-run --bin agent-serve -- \
+
+# Prefer the prebuilt release binary (works when launched from the icon, with no pixi/cargo on PATH);
+# fall back to `cargo run` for the dev loop.
+REPO="$(cd "$HERE/.." && pwd)"
+BIN="$REPO/target/release/agent-serve"
+if [ -x "$BIN" ]; then RUN=("$BIN"); else RUN=(cargo run -q -p fm-agent-run --bin agent-serve --); fi
+
+exec "${RUN[@]}" \
   --model-gguf "$HERE/models/$FILE" --runtime "$HERE/runtime" \
   --model-port "${PORT:-8081}" --ctx "${CTX:-2048}" --threads "${THREADS:-4}" "$@"
