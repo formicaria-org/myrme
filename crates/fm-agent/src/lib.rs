@@ -20,7 +20,9 @@
 //! plumbing in [`http`]. The orchestrator above never depends on them, so it stays testable with fakes.
 
 mod http;
+pub mod launch;
 pub mod openai;
+pub mod preflight;
 pub mod search;
 pub mod watchdog;
 
