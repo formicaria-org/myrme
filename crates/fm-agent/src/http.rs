@@ -12,7 +12,7 @@ use std::time::Duration;
 
 /// Send a raw HTTP/1.1 request to `host:port` and read the whole response. The request **must** set
 /// `Connection: close`, so the server closes when done and the read ends at EOF. Bounded by `timeout`.
-pub(crate) fn send(
+pub fn send(
     host: &str,
     port: u16,
     request: &[u8],
@@ -32,7 +32,7 @@ pub(crate) fn send(
 
 /// Split an HTTP response into head/body, require a `200`, decode a chunked body if present, and
 /// return the body. A non-200 is an error naming the status line, not a parse attempt.
-pub(crate) fn body(raw: &[u8]) -> Result<String, AgentError> {
+pub fn body(raw: &[u8]) -> Result<String, AgentError> {
     let text = String::from_utf8_lossy(raw);
     let (head, body) = text
         .split_once("\r\n\r\n")
@@ -72,7 +72,7 @@ fn dechunk(body: &str) -> Result<String, AgentError> {
 
 /// Percent-encode one query-string value: RFC 3986 unreserved characters pass through, everything
 /// else becomes `%XX`. Enough for a search query in a URL, without pulling a URL crate.
-pub(crate) fn encode(s: &str) -> String {
+pub fn encode(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {
         match b {
