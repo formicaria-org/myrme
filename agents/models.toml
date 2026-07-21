@@ -1,0 +1,41 @@
+# The agent's local model catalogue and runtime — the single place that says *which* model to fetch
+# and run. `fetch.sh` (or `pixi run fetch-model [name]`) reads this, downloads the runtime and the
+# chosen model into the gitignored `runtime/` and `models/` folders beside this file, and prints how
+# to serve it. Nothing here is huge, secret, or committed: only this manifest travels; the weights
+# and the binary stay local.
+#
+# Design stance (owner, 2026-07-22): **stay on the lightest model.** Quality comes from feeding it
+# good context (RAG: the user's own notes + clean web text), not from a bigger model. So the default
+# is the smallest that works; the larger entries exist only as deliberate, measured step-ups.
+
+# The model fetched when no name is given.
+default = "lfm2.5-230m"
+
+# Prebuilt llama.cpp server (CPU), pinned for reproducibility. A newer build is a deliberate bump.
+runtime_url = "https://github.com/ggml-org/llama.cpp/releases/download/b10076/llama-b10076-bin-ubuntu-x64.tar.gz"
+
+# Default serve settings — small context bounds the KV cache; threads leave the machine responsive.
+port = 8081
+ctx = 2048
+threads = 4
+
+# Each model: `name` (the key you pass to fetch), its Hugging Face `repo` and `file`, and a note.
+# Keep `name`, then `repo`, then `file` in that order — fetch.sh reads them positionally.
+
+[[models]]
+name = "lfm2.5-230m"
+repo = "LiquidAI/LFM2.5-230M-GGUF"
+file = "LFM2.5-230M-Q4_K_M.gguf"
+note = "the default — lightest phone-tier model (~150 MB, ~300 MB running). Proven on this laptop."
+
+[[models]]
+name = "lfm2.5-350m"
+repo = "LiquidAI/LFM2.5-350M-GGUF"
+file = "LFM2.5-350M-Q4_K_M.gguf"
+note = "a small step up if 230M's summaries prove too thin — still tiny."
+
+[[models]]
+name = "lfm2.5-1.2b"
+repo = "LiquidAI/LFM2.5-1.2B-Instruct-GGUF"
+file = "LFM2.5-1.2B-Instruct-Q4_K_M.gguf"
+note = "the heaviest we'd consider; a measured, deliberate choice, not a default."
