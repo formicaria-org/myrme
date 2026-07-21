@@ -1,0 +1,13 @@
+# The study assistant, as a DETERMINISTIC orchestrator (see src/lib.rs). Pure Rust, no model and no
+# network: the two model touch-points and the web sit behind trait seams, so this crate builds and
+# tests in the default `pixi run ci` with zero heavy deps. The real seams (a local llama.cpp step, a
+# text-only web search) are implemented elsewhere, behind the `agent` runtime — this crate holds only
+# the control logic, which is the whole point: the agent is the orchestrator, not the model.
+[package]
+name = "fm-agent"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror.workspace = true
