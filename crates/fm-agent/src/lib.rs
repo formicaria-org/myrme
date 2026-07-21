@@ -48,9 +48,16 @@ keep it short. Output only the query, nothing else.";
 /// The system prompt for a **conversational reply** in a discussion (as opposed to writing a note
 /// body). Concise, grounded in the provided context, never a wrapping fence.
 pub const CHAT_INSTRUCTION: &str = "\
-You are a study assistant talking in a note's discussion. Answer conversationally and concisely, \
-using ONLY the conversation, notes, and search results provided — never from memory — and say plainly \
-when they do not answer the question. Markdown, and do not wrap the whole reply in a code fence.";
+You are a study assistant talking in a note's discussion. Answer the user's question directly, \
+conversationally, and concisely, using ONLY the conversation, notes, and search results provided — \
+never from memory — and say plainly when they do not answer the question. Do NOT add a heading, do \
+NOT repeat the question, and do NOT wrap the reply in a code fence — just the answer.";
+
+/// The fixed acknowledgement posted after a `/propose` turn. Deterministic on purpose: asking a tiny
+/// model to "acknowledge in one sentence" is a meta-instruction it fails (it echoes the prompt), and
+/// a proposal needs no model-written confirmation — so this is a constant, saving a call too.
+pub const PROPOSAL_ACK: &str =
+    "I've proposed an edit to this note — review and merge it in the Collaboration view.";
 
 /// One conversational turn's output: a chat `reply` to post to the discussion, and — when `/propose`
 /// was asked — a `proposal` body for the host note. The orchestrator owns the LLM calls that make it;
@@ -251,18 +258,16 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
             None
         };
 
-        // A conversational reply — always, so the discussion sees the agent respond.
-        let user = if proposal.is_some() {
-            format!(
-                "{ctx}\n\n# Task\nYou just proposed an edit for: \"{}\". In ONE short sentence, tell the \
-                 user what you proposed and that it awaits their review.",
-                intent.ask.trim()
-            )
+        // A conversational reply — always, so the discussion sees the agent respond. A proposal turn
+        // uses a fixed acknowledgement (no second model call — a tiny model fails that meta-task); a
+        // chat turn gets a real model-written answer.
+        let reply = if proposal.is_some() {
+            PROPOSAL_ACK.to_string()
         } else {
-            format!("{ctx}\n\n# Question\n{}", intent.ask.trim())
+            let user = format!("{ctx}\n\n# Question\n{}", intent.ask.trim());
+            let resp = self.llm.complete(CHAT_INSTRUCTION, &user)?;
+            crate::convo::cap_reply(&strip_wrapping_fence(&resp.content), max_reply_chars)
         };
-        let resp = self.llm.complete(CHAT_INSTRUCTION, &user)?;
-        let reply = crate::convo::cap_reply(&strip_wrapping_fence(&resp.content), max_reply_chars);
 
         Ok(Turn { reply: Some(reply), proposal })
     }
@@ -467,13 +472,13 @@ mod tests {
     fn a_propose_turn_produces_a_proposal_and_a_short_reply() {
         use crate::convo::Intent;
         let web = FakeWeb { hits: vec![], seen: RefCell::new(Vec::new()) };
-        // First canned reply is the proposal body, second is the acknowledgement.
-        let agent = StudyAssistant::new(FakeLlm::new(&["# Clean note\n\n- point", "Proposed a tidy version."]), web);
+        // Only one canned reply is needed — the proposal body; the acknowledgement is deterministic.
+        let agent = StudyAssistant::new(FakeLlm::new(&["# Clean note\n\n- point"]), web);
         let intent = Intent { ask: "tidy this".into(), search: false, propose: true };
         let turn = agent.turn("", &intent, &[], Some(200)).unwrap();
         assert_eq!(turn.proposal.as_deref(), Some("# Clean note\n\n- point"));
-        assert_eq!(turn.reply.as_deref(), Some("Proposed a tidy version."));
-        assert_eq!(agent.llm.seen.borrow().len(), 2, "one call to write, one to acknowledge");
+        assert_eq!(turn.reply.as_deref(), Some(super::PROPOSAL_ACK));
+        assert_eq!(agent.llm.seen.borrow().len(), 1, "one call to write; the ack is deterministic");
     }
 
     #[test]
