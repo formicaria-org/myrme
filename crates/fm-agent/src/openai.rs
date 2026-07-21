@@ -11,9 +11,7 @@
 //! timeout — because the orchestrator calls it as a single bounded step. The model is never in
 //! charge; this is the narrow place where its text comes back.
 
-use crate::{AgentError, LlmStep};
-use std::io::{Read, Write};
-use std::net::TcpStream;
+use crate::{http, AgentError, LlmStep};
 use std::time::Duration;
 
 /// A single-shot client for a local OpenAI-compatible `/v1/chat/completions` endpoint.
@@ -68,16 +66,6 @@ impl LlmStep for OpenAiStep {
         })
         .to_string();
 
-        let mut stream = TcpStream::connect((self.host.as_str(), self.port)).map_err(|e| {
-            AgentError::new(format!(
-                "cannot reach the model server at {}:{} — is it running? ({e})",
-                self.host, self.port
-            ))
-        })?;
-        let net = |e: std::io::Error| AgentError::new(format!("model server I/O failed: {e}"));
-        stream.set_read_timeout(Some(self.timeout)).map_err(net)?;
-        stream.set_write_timeout(Some(self.timeout)).map_err(net)?;
-
         let request = format!(
             "POST /v1/chat/completions HTTP/1.1\r\n\
              Host: {host}:{port}\r\n\
@@ -88,39 +76,15 @@ impl LlmStep for OpenAiStep {
             port = self.port,
             len = body.len(),
         );
-        stream.write_all(request.as_bytes()).map_err(net)?;
-
-        // `Connection: close` ⇒ the server closes when done, so read to EOF.
-        let mut raw = Vec::new();
-        stream.read_to_end(&mut raw).map_err(net)?;
-
-        let content = parse_completion(&raw)?;
-        Ok(content)
+        let raw = http::send(&self.host, self.port, request.as_bytes(), self.timeout)?;
+        let json = http::body(&raw)?;
+        parse_completion(&json)
     }
 }
 
-/// Pull `choices[0].message.content` out of a raw HTTP response. Split out and pure so it can be
-/// tested on captured bytes, and so the transport above stays small.
-fn parse_completion(raw: &[u8]) -> Result<String, AgentError> {
-    let text = String::from_utf8_lossy(raw);
-    let (head, body) = text
-        .split_once("\r\n\r\n")
-        .ok_or_else(|| AgentError::new("malformed HTTP response from the model server"))?;
-
-    let status = head.lines().next().unwrap_or("");
-    if !status.contains(" 200") {
-        return Err(AgentError::new(format!("model server returned: {}", status.trim())));
-    }
-
-    // Content-Length + `Connection: close` is what llama-server/ollama send for a non-streaming
-    // reply, so `body` is the JSON directly. Handle `Transfer-Encoding: chunked` too, in case a
-    // server ignores `Connection: close`.
-    let json = if head.to_ascii_lowercase().contains("transfer-encoding: chunked") {
-        dechunk(body)?
-    } else {
-        body.to_string()
-    };
-
+/// Pull `choices[0].message.content` out of a chat-completion JSON body. Split out and pure so the
+/// transport above stays small and the extraction is trivial to test.
+fn parse_completion(json: &str) -> Result<String, AgentError> {
     let v: serde_json::Value = serde_json::from_str(json.trim())
         .map_err(|e| AgentError::new(format!("model server response was not JSON: {e}")))?;
     v["choices"][0]["message"]["content"]
@@ -129,55 +93,21 @@ fn parse_completion(raw: &[u8]) -> Result<String, AgentError> {
         .ok_or_else(|| AgentError::new("model response had no choices[0].message.content"))
 }
 
-/// Minimal HTTP/1.1 chunked-body decoder: `<hex-size>\r\n<data>\r\n…0\r\n\r\n`.
-fn dechunk(body: &str) -> Result<String, AgentError> {
-    let mut out = String::new();
-    let mut rest = body;
-    loop {
-        let (size_line, after) = rest
-            .split_once("\r\n")
-            .ok_or_else(|| AgentError::new("truncated chunked response"))?;
-        let size = usize::from_str_radix(size_line.trim(), 16)
-            .map_err(|_| AgentError::new("bad chunk size in response"))?;
-        if size == 0 {
-            break;
-        }
-        if after.len() < size {
-            return Err(AgentError::new("truncated chunk in response"));
-        }
-        out.push_str(&after[..size]);
-        // Skip the chunk data and its trailing CRLF.
-        rest = after[size..].strip_prefix("\r\n").unwrap_or(&after[size..]);
-    }
-    Ok(out)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Read as _;
+    use std::io::{Read as _, Write as _};
     use std::net::TcpListener;
 
-    /// Parsing works on a plain Content-Length response.
     #[test]
-    fn it_pulls_the_message_content_out_of_a_completion() {
-        let raw = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 60\r\n\r\n\
-                    {\"choices\":[{\"message\":{\"content\":\"the answer\"}}]}";
-        assert_eq!(parse_completion(raw).unwrap(), "the answer");
+    fn it_pulls_the_message_content_out_of_a_completion_body() {
+        let json = "{\"choices\":[{\"message\":{\"content\":\"the answer\"}}]}";
+        assert_eq!(parse_completion(json).unwrap(), "the answer");
     }
 
     #[test]
-    fn a_non_200_status_is_an_error_not_a_parse() {
-        let raw = b"HTTP/1.1 500 Internal Server Error\r\n\r\noops";
-        let err = parse_completion(raw).unwrap_err();
-        assert!(format!("{err}").contains("500"), "got: {err}");
-    }
-
-    #[test]
-    fn it_decodes_a_chunked_body() {
-        let raw = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n\
-                    2c\r\n{\"choices\":[{\"message\":{\"content\":\"hi\"}}]}\r\n0\r\n\r\n";
-        assert_eq!(parse_completion(raw).unwrap(), "hi");
+    fn a_response_without_content_is_an_error() {
+        assert!(parse_completion("{\"choices\":[]}").unwrap_err().to_string().contains("content"));
     }
 
     /// End to end over a real loopback socket: a fake server returns a canned completion, and the

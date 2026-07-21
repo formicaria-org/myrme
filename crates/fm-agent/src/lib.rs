@@ -15,10 +15,13 @@
 //! named. It creates and deletes nothing; the caller turns the draft into a guardrailed proposal via
 //! `fm_app::commands::create_proposal`, so the agent inherits the same blast-radius bound a person has.
 //!
-//! The concrete [`LlmStep`] that talks to a local model server lives in [`openai`]; the orchestrator
-//! above never depends on it, so it stays testable with fakes.
+//! The concrete seams live beside the orchestrator: [`openai`] (an [`LlmStep`] to a local model
+//! server) and [`search`] (a text-only [`WebSearch`] to a local SearXNG), sharing minimal HTTP
+//! plumbing in [`http`]. The orchestrator above never depends on them, so it stays testable with fakes.
 
+mod http;
 pub mod openai;
+pub mod search;
 
 /// The fixed **house-format instruction** given to the model as the system prompt for the writing
 /// step. It formats within a closed set — Markdown plus the note vocabulary the renderers already
