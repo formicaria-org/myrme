@@ -52,10 +52,42 @@ impl AgentError {
     }
 }
 
-/// The **one** bounded model touch-point: text in → text out, no tools, no loop, no state. Real
-/// implementations wrap a local llama.cpp/LFM step or a remote provider; tests use a fake.
+/// Token accounting a model returns alongside its text — kept even when unused, because it is how a
+/// caller sees the shape of what it paid for. Optional: a bare local server may omit it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Usage {
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+}
+
+/// A model reply: the text, plus **why the model stopped** and its token usage. The finish reason is
+/// the load-bearing addition (research 2026-07-21, mirroring smolagents/Goose): `"length"` means the
+/// answer was **cut off at the token cap** — a truncation a study summary must never ship unnoticed —
+/// versus `"stop"` for a complete answer. `None` when the server omits it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LlmResponse {
+    pub content: String,
+    pub finish_reason: Option<String>,
+    pub usage: Option<Usage>,
+}
+
+impl LlmResponse {
+    /// A complete (non-truncated) reply — the common shape a fake or a simple server returns.
+    pub fn complete(content: impl Into<String>) -> Self {
+        Self { content: content.into(), finish_reason: Some("stop".into()), usage: None }
+    }
+
+    /// Did the model stop because it hit the token cap? Then its text is truncated.
+    pub fn truncated(&self) -> bool {
+        self.finish_reason.as_deref() == Some("length")
+    }
+}
+
+/// The **one** bounded model touch-point: text in → text out (plus why it stopped), no tools, no
+/// loop, no state. Real implementations wrap a local llama.cpp/LFM step or a remote provider; tests
+/// use a fake.
 pub trait LlmStep {
-    fn complete(&self, system: &str, user: &str) -> Result<String, AgentError>;
+    fn complete(&self, system: &str, user: &str) -> Result<LlmResponse, AgentError>;
 }
 
 /// The web seam: a **text-only** search+fetch the *orchestrator* runs — the model never calls it.
@@ -142,17 +174,24 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
 
         // (3)–(4) Deterministic prompt, one bounded writing call under the fixed house format.
         let user = assemble_prompt(req, &hits);
-        let new_body = self.llm.complete(OUTPUT_FORMAT_INSTRUCTION, &user)?;
+        let resp = self.llm.complete(OUTPUT_FORMAT_INSTRUCTION, &user)?;
+        // A note cut off at the token cap must never be proposed silently — refuse, don't ship half.
+        if resp.truncated() {
+            return Err(AgentError::new(
+                "the model's answer was cut off at the token limit — raise max_tokens and re-run",
+            ));
+        }
 
         // (5) Well-defined output for the one host note.
-        Ok(ProposalDraft { host_note: req.host_note.clone(), new_body, sources })
+        Ok(ProposalDraft { host_note: req.host_note.clone(), new_body: resp.content, sources })
     }
 
     /// One bounded LLM call that turns a rough request into a search query, falling back to the seed
-    /// if the model returns nothing usable — the pipeline never stalls on an empty refinement.
+    /// if the model returns nothing usable — the pipeline never stalls on an empty refinement. A
+    /// truncated query is harmless (it is still a query), so it is not refused here.
     fn refine_query(&self, seed: &str) -> Result<String, AgentError> {
         let refined = self.llm.complete(QUERY_REFINE_INSTRUCTION, seed)?;
-        let refined = refined.trim();
+        let refined = refined.content.trim();
         Ok(if refined.is_empty() { seed.to_string() } else { refined.to_string() })
     }
 }
@@ -200,9 +239,21 @@ mod tests {
         }
     }
     impl LlmStep for FakeLlm {
-        fn complete(&self, system: &str, user: &str) -> Result<String, AgentError> {
+        fn complete(&self, system: &str, user: &str) -> Result<LlmResponse, AgentError> {
             self.seen.borrow_mut().push((system.to_string(), user.to_string()));
-            self.replies.borrow_mut().pop().ok_or_else(|| AgentError::new("no canned reply left"))
+            self.replies
+                .borrow_mut()
+                .pop()
+                .map(LlmResponse::complete)
+                .ok_or_else(|| AgentError::new("no canned reply left"))
+        }
+    }
+
+    /// A model that always stops at the token cap — its text is truncated.
+    struct TruncatingLlm;
+    impl LlmStep for TruncatingLlm {
+        fn complete(&self, _: &str, _: &str) -> Result<LlmResponse, AgentError> {
+            Ok(LlmResponse { content: "half a not".into(), finish_reason: Some("length".into()), usage: None })
         }
     }
 
@@ -279,6 +330,14 @@ mod tests {
 
         agent.run(&req(Some("seed query"))).unwrap();
         assert_eq!(agent.web.seen.borrow().as_slice(), &["seed query".to_string()]);
+    }
+
+    #[test]
+    fn a_truncated_write_is_refused_not_proposed_half_finished() {
+        let web = FakeWeb { hits: vec![], seen: RefCell::new(Vec::new()) };
+        let agent = StudyAssistant::new(TruncatingLlm, web);
+        let err = agent.run(&req(None)).unwrap_err();
+        assert!(format!("{err}").contains("cut off"), "a truncated note must be refused: {err}");
     }
 
     #[test]
