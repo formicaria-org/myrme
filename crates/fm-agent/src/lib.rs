@@ -19,6 +19,7 @@
 //! server) and [`search`] (a text-only [`WebSearch`] to a local SearXNG), sharing minimal HTTP
 //! plumbing in [`http`]. The orchestrator above never depends on them, so it stays testable with fakes.
 
+pub mod convo;
 mod http;
 pub mod launch;
 pub mod openai;
