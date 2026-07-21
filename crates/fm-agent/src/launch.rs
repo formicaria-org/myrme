@@ -45,6 +45,12 @@ impl SupervisedModel {
         self.stop.clone()
     }
 
+    /// Has supervision already ended (the model finished, or the watchdog stopped it)? Lets a caller
+    /// notice the model went away without blocking on [`wait`](Self::wait).
+    pub fn finished(&self) -> bool {
+        self.handle.is_finished()
+    }
+
     /// Stop the model and wait for the watchdog to finish, returning why it ended.
     pub fn stop(self) -> Outcome {
         self.stop.stop();
