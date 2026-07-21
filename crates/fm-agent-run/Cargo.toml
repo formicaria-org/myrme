@@ -1,0 +1,19 @@
+# The out-of-process study-assistant RUNNER — how a user invokes the agent. It depends on fm-app (to
+# read the vault and create a proposal) and fm-agent (the deterministic pipeline); NOTHING depends on
+# it, so the core app still never knows the agent exists. It talks to an already-running local model
+# over HTTP, so it drags no model/heavy deps into the graph.
+[package]
+name = "fm-agent-run"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "fm-agent-run"
+path = "src/main.rs"
+
+[dependencies]
+fm-core = { workspace = true }
+fm-app = { path = "../fm-app" }
+fm-agent = { path = "../fm-agent" }
+clap = { workspace = true }

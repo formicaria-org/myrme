@@ -30,12 +30,13 @@ pub mod watchdog;
 /// step. It formats within a closed set — Markdown plus the note vocabulary the renderers already
 /// understand — and is **not** user-editable, the same literal-free discipline the renderers enforce.
 pub const OUTPUT_FORMAT_INSTRUCTION: &str = "\
-You write the body of a study note. Output GitHub-flavored Markdown only, using ONLY: headings, \
-paragraphs, bullet and numbered lists, tables, fenced code blocks, block quotes, callouts \
-(`> [!note]` / `> [!tip]` / `> [!warning]`), Mermaid diagrams (```mermaid fenced), and KaTeX math \
-($…$ inline, $$…$$ block). Do not invent other syntax, do not add front-matter, and do not answer \
-from memory: use only the provided inputs and search results, and state plainly when they do not \
-answer the question.";
+You write the body of a study note. Output ONLY the note body itself — do NOT repeat the task or \
+these instructions, do NOT add a heading like '# Task', and do NOT wrap the whole answer in a code \
+fence. Use GitHub-flavored Markdown, and ONLY: headings, paragraphs, bullet and numbered lists, \
+tables, fenced code blocks (for code only), block quotes, callouts (`> [!note]` / `> [!tip]` / \
+`> [!warning]`), Mermaid diagrams (```mermaid fenced), and KaTeX math ($…$ inline, $$…$$ block). Do \
+not invent other syntax, do not add front-matter, and do not answer from memory: use only the \
+provided notes and search results, and say plainly when they do not answer the question.";
 
 /// The system prompt for the optional query-refinement step: rough request in, one clean search
 /// query out. Bounded, single-shot, no tools.
@@ -185,8 +186,13 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
             ));
         }
 
-        // (5) Well-defined output for the one host note.
-        Ok(ProposalDraft { host_note: req.host_note.clone(), new_body: resp.content, sources })
+        // (5) Well-defined output for the one host note. Strip a wrapping code fence — small models
+        // often wrap the whole answer in ```markdown despite being told not to.
+        Ok(ProposalDraft {
+            host_note: req.host_note.clone(),
+            new_body: strip_wrapping_fence(&resp.content),
+            sources,
+        })
     }
 
     /// One bounded LLM call that turns a rough request into a search query, falling back to the seed
@@ -197,6 +203,21 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
         let refined = refined.content.trim();
         Ok(if refined.is_empty() { seed.to_string() } else { refined.to_string() })
     }
+}
+
+/// Strip a single fence that wraps the *entire* answer (```` ```markdown … ``` ````) — a common
+/// small-model tic. Leaves genuine inner code blocks alone; only unwraps when the whole thing is one
+/// fence. Free function so it is trivially tested.
+fn strip_wrapping_fence(s: &str) -> String {
+    let t = s.trim();
+    if let Some(rest) = t.strip_prefix("```") {
+        if let Some((_lang, body)) = rest.split_once('\n') {
+            if let Some(inner) = body.trim_end().strip_suffix("```") {
+                return inner.trim().to_string();
+            }
+        }
+    }
+    t.to_string()
 }
 
 /// Assemble the writing step's user prompt from the request and the search hits, in a fixed,
@@ -333,6 +354,16 @@ mod tests {
 
         agent.run(&req(Some("seed query"))).unwrap();
         assert_eq!(agent.web.seen.borrow().as_slice(), &["seed query".to_string()]);
+    }
+
+    #[test]
+    fn a_wrapping_code_fence_is_stripped_but_inner_blocks_survive() {
+        let web = FakeWeb { hits: vec![], seen: RefCell::new(Vec::new()) };
+        let agent = StudyAssistant::new(FakeLlm::new(&["```markdown\n# Title\n\n- a\n- b\n```"]), web);
+        let draft = agent.run(&req(None)).unwrap();
+        assert_eq!(draft.new_body, "# Title\n\n- a\n- b");
+        // A body with a genuine inner code block, not a wrapping fence, is left intact.
+        assert_eq!(super::strip_wrapping_fence("see this:\n```rust\nfn x(){}\n```"), "see this:\n```rust\nfn x(){}\n```");
     }
 
     #[test]
