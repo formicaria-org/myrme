@@ -53,6 +53,11 @@ conversationally, and concisely, using ONLY the conversation, notes, and search 
 never from memory — and say plainly when they do not answer the question. Do NOT add a heading, do \
 NOT repeat the question, and do NOT wrap the reply in a code fence — just the answer.";
 
+/// The system prompt for compressing older conversation so it fits a tiny model's context window.
+pub const SUMMARY_INSTRUCTION: &str = "\
+Summarize the following conversation compactly, keeping the facts, decisions, and open questions a \
+reader would need to continue it. Plain prose, a few sentences at most. Output only the summary.";
+
 /// The fixed acknowledgement posted after a `/propose` turn. Deterministic on purpose: asking a tiny
 /// model to "acknowledge in one sentence" is a meta-instruction it fails (it echoes the prompt), and
 /// a proposal needs no model-written confirmation — so this is a constant, saving a call too.
@@ -217,6 +222,14 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
             new_body: strip_wrapping_fence(&resp.content),
             sources,
         })
+    }
+
+    /// Compress a block of prior conversation into a short summary that fits a tiny model's context —
+    /// **summarize-before-overflow**. One bounded call; on any failure the caller keeps the recent
+    /// turns without the summary rather than losing the conversation.
+    pub fn summarize(&self, text: &str) -> Result<String, AgentError> {
+        let resp = self.llm.complete(SUMMARY_INSTRUCTION, text)?;
+        Ok(strip_wrapping_fence(&resp.content))
     }
 
     /// One bounded LLM call that turns a rough request into a search query, falling back to the seed

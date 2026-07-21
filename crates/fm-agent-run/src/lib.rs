@@ -1,0 +1,152 @@
+//! Shared runner logic for the study agent: the fm-serve client and the "handle one discussion turn"
+//! glue that both the chat REPL and the resident `@name` watcher use. All store I/O goes through a
+//! running fm-serve (the single vault writer — no second FileStore), and retrieval is RAG over the
+//! vault (FTS via fm-serve) plus optional web search through a local proxy.
+
+pub mod fmserve;
+
+use fm_agent::openai::OpenAiStep;
+use fm_agent::search::SearxngSearch;
+use fm_agent::{convo, AgentError, InputDoc, SearchHit, StudyAssistant, WebSearch};
+use fmserve::FmServe;
+
+/// A configured agent bound to a running fm-serve + a warm model (+ optional web-search proxy).
+pub struct Agent {
+    pub fm: FmServe,
+    pub model_port: u16,
+    /// The model/agent name — also what a user `@name`-mentions, and the git author of its proposals.
+    pub model: String,
+    /// The local web-search proxy port, or `None` to run without the web.
+    pub searxng_port: Option<u16>,
+    pub max_reply_chars: usize,
+    /// How many related notes to retrieve as RAG context.
+    pub retrieve: usize,
+    /// History budget (chars); older turns beyond it are summarized to fit a tiny model's window.
+    pub history_budget: usize,
+}
+
+impl Agent {
+    /// Handle one already-posted user message on `note`'s discussion end to end: gather context (host
+    /// note + RAG + web when `/search`), summarize old history if it overflows, run the turn, and POST
+    /// the agent's reply (and a proposal when `allow_propose` and `/propose`). Returns the reply text.
+    /// The user's own message is assumed already in the discussion (the REPL or the app posted it).
+    pub fn handle(&self, note: &str, intent: &convo::Intent, allow_propose: bool) -> Result<String, String> {
+        // In a plain discussion there is nothing to propose an edit to, so propose is off there.
+        let intent = convo::Intent { propose: intent.propose && allow_propose, ..intent.clone() };
+
+        let history = self.history(note)?;
+        let mut context = self.host_note(note)?;
+        context.extend(self.retrieve(&intent.ask, note)?);
+        if intent.search {
+            context.extend(self.web(&intent.ask)?);
+        }
+
+        let agent = StudyAssistant::new(self.llm(), NoWeb);
+        let turn = agent
+            .turn(&history, &intent, &context, Some(self.max_reply_chars))
+            .map_err(|e| e.to_string())?;
+
+        let reply = turn.reply.clone().unwrap_or_default();
+        if let Some(r) = &turn.reply {
+            self.fm.reply(note, r)?;
+        }
+        if let Some(body) = &turn.proposal {
+            let email = format!("{}@fm-agents.local", self.model);
+            self.fm.create_proposal(note, body, &self.model, &email)?;
+        }
+        Ok(reply)
+    }
+
+    fn llm(&self) -> OpenAiStep {
+        OpenAiStep::local(self.model_port, &self.model)
+    }
+
+    /// The discussion so far as text, oldest first, within `history_budget`. When it overflows, the
+    /// older turns are compressed with the model (**summarize-before-overflow**) and the recent tail
+    /// is kept verbatim — so the conversation never blows a tiny model's context.
+    fn history(&self, note: &str) -> Result<String, String> {
+        let view = self.fm.thread(note)?;
+        let msgs: Vec<String> = view["messages"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|m| m["body"].as_str().map(|b| format!("- {}", b.trim())))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let full = msgs.join("\n");
+        if full.chars().count() <= self.history_budget {
+            return Ok(full);
+        }
+        // Keep the most recent turns (up to half the budget) verbatim; summarize the older rest.
+        let recent_budget = self.history_budget / 2;
+        let mut recent = String::new();
+        let mut older: Vec<String> = Vec::new();
+        for m in msgs.iter().rev() {
+            if recent.chars().count() + m.chars().count() < recent_budget {
+                recent = format!("{m}\n{recent}");
+            } else {
+                older.push(m.clone());
+            }
+        }
+        older.reverse();
+        let older_text = older.join("\n");
+        let summary = if older_text.trim().is_empty() {
+            String::new()
+        } else {
+            StudyAssistant::new(self.llm(), NoWeb)
+                .summarize(&older_text)
+                .unwrap_or_else(|_| "[earlier conversation omitted]".into())
+        };
+        Ok(format!("(summary of earlier conversation) {summary}\n{}", recent.trim()))
+    }
+
+    /// The host note itself — what the discussion is about, so always included.
+    fn host_note(&self, note: &str) -> Result<Vec<InputDoc>, String> {
+        let v = self.fm.get(note)?;
+        let body = v["body"].as_str().unwrap_or_default();
+        if body.is_empty() {
+            return Ok(Vec::new());
+        }
+        let title = v["title"].as_str().unwrap_or("this note");
+        Ok(vec![InputDoc { label: format!("{title} (this note)"), text: body.chars().take(1200).collect() }])
+    }
+
+    /// RAG: the most relevant vault notes to the ask (FTS via fm-serve), trimmed; excludes the host.
+    fn retrieve(&self, ask: &str, host: &str) -> Result<Vec<InputDoc>, String> {
+        if ask.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+        let hits = self.fm.search(ask)?;
+        let mut docs = Vec::new();
+        let Some(arr) = hits.as_array() else { return Ok(docs) };
+        for h in arr.iter().filter(|h| h["id"].as_str() != Some(host)).take(self.retrieve) {
+            let Some(id) = h["id"].as_str() else { continue };
+            if let Ok(note) = self.fm.get(id) {
+                let body = note["body"].as_str().unwrap_or_default();
+                let title = note["title"].as_str().unwrap_or(id);
+                docs.push(InputDoc { label: title.to_string(), text: body.chars().take(600).collect() });
+            }
+        }
+        Ok(docs)
+    }
+
+    /// Web search via the local proxy (text-only), as context. `None` proxy ⇒ no web.
+    fn web(&self, ask: &str) -> Result<Vec<InputDoc>, String> {
+        let Some(port) = self.searxng_port else { return Ok(Vec::new()) };
+        let hits = SearxngSearch::local(port).search(ask).map_err(|e| e.to_string())?;
+        Ok(hits
+            .into_iter()
+            .map(|h| InputDoc { label: format!("web: {} ({})", h.title, h.url), text: h.text })
+            .collect())
+    }
+}
+
+/// `turn`/`summarize` never call web (they take pre-assembled context), so this stub satisfies the
+/// generic; the runner does web search itself and folds it into the context.
+struct NoWeb;
+impl WebSearch for NoWeb {
+    fn search(&self, _query: &str) -> Result<Vec<SearchHit>, AgentError> {
+        Err(AgentError::new("unused"))
+    }
+}

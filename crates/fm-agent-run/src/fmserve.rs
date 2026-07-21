@@ -50,9 +50,19 @@ impl FmServe {
         self.call("get", json!({ "id": id }))
     }
 
-    /// A note's discussion — `{ root, count, messages: [{ body, ... }] }`.
+    /// A note's discussion — `{ root, count, messages: [{ id, body, ... }] }`.
     pub fn thread(&self, note: &str) -> Result<Value, String> {
         self.call("thread", json!({ "id": note }))
+    }
+
+    /// Every first-class discussion, newest-active first — `[{ id, title, ... }]`.
+    pub fn discussions(&self) -> Result<Value, String> {
+        self.call("discussions", json!({}))
+    }
+
+    /// Is fm-serve answering? A cheap liveness probe (fm-serve shuts down with the app).
+    pub fn alive(&self) -> bool {
+        self.call("alive", Value::Null).is_ok()
     }
 
     /// Full-text search over the vault (RAG retrieval) — `[{ id, title, preview }]`.

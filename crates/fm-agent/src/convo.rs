@@ -41,6 +41,23 @@ pub fn parse(message: &str) -> Intent {
     Intent { ask: rest.join(" "), search, propose }
 }
 
+/// Which agent, if any, a message addresses — so an agent responds **only when called by name**
+/// (`@name`). This lets several agents (a research model, a math model, …) share a discussion and the
+/// user pick one; a message that names no known agent is ignored (the agent stays quiet). Returns the
+/// matched agent name and the [`Intent`] parsed from the rest of the message (the mention removed).
+/// Case-insensitive on the name.
+pub fn addressed<'a>(message: &str, agents: &'a [&str]) -> Option<(&'a str, Intent)> {
+    for tok in message.split_whitespace() {
+        if let Some(name) = tok.strip_prefix('@') {
+            if let Some(agent) = agents.iter().find(|a| a.eq_ignore_ascii_case(name)) {
+                let rest: Vec<&str> = message.split_whitespace().filter(|t| *t != tok).collect();
+                return Some((agent, parse(&rest.join(" "))));
+            }
+        }
+    }
+    None
+}
+
 /// Cap a chat reply at the vault's user-defined `max_reply_chars`, if set. The orchestrator both
 /// *asks* the model to be brief and *enforces* it here — belt-and-suspenders, like the proposal
 /// guardrails — because a small model does not reliably obey a length instruction. The result never
@@ -105,6 +122,19 @@ mod tests {
         let i = parse("/search /search a query /propose /propose");
         assert!(i.search && i.propose);
         assert_eq!(i.ask, "a query");
+    }
+
+    #[test]
+    fn an_agent_responds_only_when_addressed_by_name() {
+        let agents = ["lfm2.5-230m", "math-helper"];
+        // Addressed → the matched agent + the parsed rest (mention removed), case-insensitive.
+        let (who, intent) = addressed("Hey @Math-Helper how much is 1 + 1? /search", &agents).unwrap();
+        assert_eq!(who, "math-helper");
+        assert!(intent.search && !intent.propose);
+        assert_eq!(intent.ask, "Hey how much is 1 + 1?");
+        // Not addressed to any known agent → ignored (the agent stays quiet).
+        assert!(addressed("just chatting with people @someone-else", &agents).is_none());
+        assert!(addressed("no mention at all", &agents).is_none());
     }
 
     #[test]
