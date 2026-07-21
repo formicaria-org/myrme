@@ -11,3 +11,7 @@ license.workspace = true
 
 [dependencies]
 thiserror.workspace = true
+# For the `openai` LlmStep only — a hand-rolled localhost HTTP client over `std::net` (no HTTP
+# framework, no TLS), the same minimal-dependency stance as fm-serve's hand-rolled server. The
+# orchestrator itself stays pure; this is just how the concrete model-server seam frames its JSON.
+serde_json = "1"

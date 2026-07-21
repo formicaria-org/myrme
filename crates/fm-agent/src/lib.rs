@@ -14,6 +14,11 @@
 //! Its only output is a [`ProposalDraft`] — proposed text for the **one** host note the request
 //! named. It creates and deletes nothing; the caller turns the draft into a guardrailed proposal via
 //! `fm_app::commands::create_proposal`, so the agent inherits the same blast-radius bound a person has.
+//!
+//! The concrete [`LlmStep`] that talks to a local model server lives in [`openai`]; the orchestrator
+//! above never depends on it, so it stays testable with fakes.
+
+pub mod openai;
 
 /// The fixed **house-format instruction** given to the model as the system prompt for the writing
 /// step. It formats within a closed set — Markdown plus the note vocabulary the renderers already
