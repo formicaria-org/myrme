@@ -22,6 +22,7 @@
 mod http;
 pub mod openai;
 pub mod search;
+pub mod watchdog;
 
 /// The fixed **house-format instruction** given to the model as the system prompt for the writing
 /// step. It formats within a closed set — Markdown plus the note vocabulary the renderers already
