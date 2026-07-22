@@ -48,8 +48,36 @@ pub fn ensure_model(
     let url = manifest
         .download_url(name)
         .ok_or_else(|| format!("model '{name}' is absent and has no `repo` to fetch it from"))?;
-    fetch(&Download { url: &url, dest: &dest, sha256: model.sha256.as_deref() }, on_progress)?;
-    Ok(dest)
+    let dl = Download { url: &url, dest: &dest, sha256: model.sha256.as_deref() };
+
+    // Mobile networks drop large transfers mid-stream and hit intermittent DNS failures (both seen
+    // on-device: HF aborts every ~10 MB, and the resolver blips). Each `fetch` resumes from
+    // `<dest>.part`, so keep retrying — a download must survive a flaky link. The stall counter only
+    // rises on an attempt that moved **zero** bytes; any progress resets it, so a normal drop-and-
+    // resume never counts. We give up only after MAX_STALLS truly-dead attempts in a row, with a
+    // capped exponential backoff so a longer outage is tolerated without spinning hot.
+    const MAX_STALLS: u32 = 12;
+    let part = part_path(&dest);
+    let part_len = || fs::metadata(&part).map(|m| m.len()).unwrap_or(0);
+    let mut stalls = 0u32;
+    loop {
+        let before = part_len();
+        match fetch(&dl, on_progress) {
+            Ok(()) => return Ok(dest),
+            Err(e) => {
+                if part_len() > before {
+                    stalls = 0; // made headway; a dropped connection is expected, keep going
+                } else {
+                    stalls += 1;
+                    if stalls >= MAX_STALLS {
+                        return Err(format!("gave up after {MAX_STALLS} stalled attempts: {e}"));
+                    }
+                }
+                let backoff = 2u64.saturating_pow(stalls.min(4)).min(16); // 2,4,8,16,16… seconds
+                std::thread::sleep(std::time::Duration::from_secs(backoff));
+            }
+        }
+    }
 }
 
 /// Fetch `d`, resuming a partial `<dest>.part` if present. `on_progress(done, total)` fires as bytes
