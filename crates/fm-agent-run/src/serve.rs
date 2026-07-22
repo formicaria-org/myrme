@@ -7,20 +7,14 @@
 //!   pixi run agent-serve -- --searxng-port 8888
 
 use clap::Parser;
-use fm_agent::convo;
 use fm_agent::launch::SupervisedModel;
 use fm_agent::preflight::Need;
 use fm_agent::watchdog::{Limits, SystemMonitor};
-use fm_agent_run::fmserve::{FmServe, VaultAccess};
+use fm_agent_run::fmserve::FmServe;
 use fm_agent_run::manifest::Manifest;
 use fm_agent_run::Agent;
-use serde_json::json;
-use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 #[derive(Parser)]
 #[command(name = "agent-serve", about = "Serve the model + answer @name mentions; tied to formicaria's life.")]
@@ -105,7 +99,7 @@ fn run() -> Result<(), String> {
     // Resident, not one-shot: no wall-clock cliff (a per-turn cap is already on the model call), so it
     // stays warm for the whole session instead of being SIGKILLed after 5 minutes.
     let model = SupervisedModel::launch(cmd, SystemMonitor, &Need::new(model_bytes, a.headroom), Limits::resident())?;
-    wait_ready(model_port);
+    fm_agent_run::watch::wait_ready(model_port);
 
     let agent = Agent {
         fm: FmServe::local(a.serve_port),
@@ -125,207 +119,11 @@ fn run() -> Result<(), String> {
         name,
     );
 
+    // The reusable watch loop — the same one the in-process mobile app runs, just with FmServe here.
     let stopper = model.stopper();
-    // Message ids already seen, so each is answered at most once. Seed it with every message that
-    // already exists, so a fresh start (or a restart) answers only what arrives *while it watches* —
-    // never the historical backlog of every discussion.
-    let mut handled: HashSet<String> = HashSet::new();
-    // Last message count we saw per discussion, from the discussions list. A poll skips any
-    // discussion whose count is unchanged — no thread fetch, no work — so it can run often (snappy
-    // pickup) while costing only one `discussions()` call plus a `thread()` for what actually moved.
-    let mut last_count: HashMap<String, u64> = HashMap::new();
-    if let Ok(discs) = agent.fm.discussions() {
-        if let Some(arr) = discs.as_array() {
-            for d in arr {
-                let Some(id) = d["id"].as_str() else { continue };
-                last_count.insert(id.to_string(), d["count"].as_u64().unwrap_or(0));
-                let Ok(view) = agent.fm.thread(id) else { continue };
-                let Some(msgs) = view["messages"].as_array() else { continue };
-                for m in msgs {
-                    if let Some(mid) = m["id"].as_str() {
-                        handled.insert(mid.to_string());
-                    }
-                }
-            }
-        }
-    }
-    // Poll fast right after activity, then ease off toward POLL_MAX while idle — snappy when the user
-    // is talking, near-free when they are not (the Android-battery concern). The heartbeat and the
-    // full rescan are time-based, so they stay regular even as the poll backs off.
-    const HEARTBEAT: Duration = Duration::from_secs(5);
-    const FORCE_SCAN: Duration = Duration::from_secs(60);
-    let poll_min = Duration::from_secs(a.poll_secs.max(1));
-    // Cap the idle backoff low enough that the *first* mention after a quiet spell is picked up
-    // quickly (a long backoff shows as a pause before the working wheel appears); still ~5x cheaper
-    // than polling every second when idle.
-    let poll_max = Duration::from_secs(5);
-    let mut interval = poll_min;
-    let mut last_full_scan = Instant::now();
-    agent.fm.present(&name); // show online at once, before the first heartbeat tick
-    let mut last_hb = Instant::now();
-    loop {
-        std::thread::sleep(interval);
-        if model.finished() {
-            println!("model runtime ended — the model server exited (see the log above for why).");
-            break;
-        }
-        if !agent.fm.alive() {
-            println!("formicaria is gone — stopping the model.");
-            stopper.stop();
-            break;
-        }
-
-        // Heartbeat at most every HEARTBEAT, independent of the (backing-off) poll cadence, so the app
-        // keeps seeing the assistant online and can warn instead of going silent when it is off.
-        if last_hb.elapsed() >= HEARTBEAT {
-            agent.fm.present(&name);
-            last_hb = Instant::now();
-        }
-
-        // Cheap count-skip most polls; a full rescan only occasionally, so a message can never be
-        // *permanently* missed if a count ever fails to reflect a new one.
-        let force_scan = last_full_scan.elapsed() >= FORCE_SCAN;
-        if force_scan {
-            last_full_scan = Instant::now();
-        }
-
-        let mut worked = false; // answered anything this poll? then snap back to fast polling
-        let discs = agent.fm.discussions().ok();
-        for d in discs.as_ref().and_then(|d| d.as_array()).into_iter().flatten() {
-            let Some(id) = d["id"].as_str() else { continue };
-            let count = d["count"].as_u64().unwrap_or(0);
-            if !force_scan && last_count.get(id) == Some(&count) {
-                continue; // nothing new here since we last looked — skip the thread fetch entirely
-            }
-            let Ok(view) = agent.fm.thread(id) else { continue };
-            let Some(msgs) = view["messages"].as_array() else { continue };
-            // Answer *every* pending mention in order, not just the last — a user who fires several
-            // questions quickly (there is a poll delay) must get every one, never only the newest.
-            // Identical resends within this batch (a double-tap on send) are coalesced to one answer.
-            let mut asked_this_pass: HashSet<String> = HashSet::new();
-            let mut posted = 0u64; // messages we add this pass, so we can advance last_count past them
-            for m in msgs {
-                let (Some(mid), Some(body)) = (m["id"].as_str(), m["body"].as_str()) else {
-                    continue;
-                };
-                if !handled.insert(mid.to_string()) {
-                    continue; // already seen (seeded backlog, our own replies, or an earlier pass)
-                }
-                let Some((_who, intent)) = convo::addressed(body, &[name.as_str()]) else {
-                    continue;
-                };
-                if !asked_this_pass.insert(intent.ask.clone()) {
-                    continue; // a duplicate of one we are already answering this pass — coalesce
-                }
-                worked = true; // real work — keep polling fast while the conversation is live
-
-                // Show the user what the whole pipeline is doing, stage by stage, then clear it when
-                // the reply lands or the turn fails — the wheel never spins forever.
-                let question = intent.ask.clone();
-                // Time every stage as we enter it (the on_stage events already mark the boundaries),
-                // so the timing log can show where the turn actually spends its time.
-                let marks = RefCell::new(Vec::<(String, Instant)>::new());
-                let on_stage = |stage: &str| {
-                    marks.borrow_mut().push((stage.to_string(), Instant::now()));
-                    agent.fm.activity(id, stage, &question);
-                };
-                // Chat only in a discussion (nothing to propose an edit to there).
-                let result = agent.handle(id, &intent, false, &on_stage);
-                log_timing(&runtime, id, &question, &marks.borrow(), Instant::now(), result.is_ok());
-                match result {
-                    Ok((reply, reply_id)) => {
-                        // Mark the agent's own reply seen so it never answers itself — the tiny
-                        // model echoes the @name in its output, which would otherwise loop forever.
-                        if let Some(rid) = reply_id {
-                            handled.insert(rid);
-                        }
-                        posted += 1;
-                        println!(
-                            "@{} replied in {}: {}",
-                            name,
-                            &id[..8.min(id.len())],
-                            reply.chars().take(60).collect::<String>()
-                        );
-                    }
-                    Err(e) => {
-                        // A timeout or failure must be *visible* (never a silent stall): tell the
-                        // user and record the notice so it is not itself re-processed.
-                        eprintln!("turn failed in {id}: {e}");
-                        let notice = format!("⚠️ I couldn't finish that one — {e}. Try again, or simplify it.");
-                        let email = format!("{}@fm-agents.local", name);
-                        if let Ok(meta) = agent.fm.reply_as(id, &notice, &name, &email) {
-                            posted += 1;
-                            if let Some(rid) = meta["id"].as_str() {
-                                handled.insert(rid.to_string());
-                            }
-                        }
-                    }
-                }
-                agent.fm.activity_done(id);
-            }
-            // Advance our watermark past everything now in this discussion (the messages we just saw
-            // plus the replies we posted), so we skip it next poll until something new actually lands.
-            last_count.insert(id.to_string(), count + posted);
-        }
-        // Snap back to fast polling on activity; otherwise ease off toward the idle cap.
-        interval = if worked { poll_min } else { (interval * 2).min(poll_max) };
-    }
+    fm_agent_run::watch::serve_loop(&agent, &name, &runtime, a.poll_secs, &|| model.finished(), &|| stopper.stop());
 
     let outcome = model.wait();
     println!("model stopped: {outcome:?}");
     Ok(())
-}
-
-/// Append one turn's per-stage timing to `<runtime>/timing.jsonl` and echo a one-line summary, so it
-/// is clear where the orchestration spends its time (the LLM is often *not* the slow part — a web
-/// search or retrieval can dominate). Best-effort: never breaks or slows a turn.
-fn log_timing(runtime: &Path, disc: &str, question: &str, marks: &[(String, Instant)], ended: Instant, ok: bool) {
-    if marks.is_empty() {
-        return;
-    }
-    // Duration of each stage = gap to the next stage's start (the last runs until the turn ended).
-    let dur = |i: usize, t: &Instant| {
-        let next = marks.get(i + 1).map(|(_, t2)| *t2).unwrap_or(ended);
-        next.saturating_duration_since(*t).as_millis() as u64
-    };
-    let mut stages = serde_json::Map::new();
-    for (i, (name, t)) in marks.iter().enumerate() {
-        stages.insert(name.clone(), json!(dur(i, t)));
-    }
-    let total_ms = ended.saturating_duration_since(marks[0].1).as_millis() as u64;
-    let slowest = marks
-        .iter()
-        .enumerate()
-        .map(|(i, (name, t))| (name.as_str(), dur(i, t)))
-        .max_by_key(|(_, ms)| *ms)
-        .map(|(name, ms)| format!("{name} {ms}ms"))
-        .unwrap_or_default();
-    println!("  ⏱ turn {total_ms}ms (slowest: {slowest})");
-
-    let ts = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-    let line = json!({
-        "ts": ts,
-        "disc": disc,
-        "q": question.chars().take(80).collect::<String>(),
-        "total_ms": total_ms,
-        "ok": ok,
-        "stages": stages,
-    });
-    let path = runtime.join("timing.jsonl");
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
-        let _ = writeln!(f, "{line}");
-    }
-}
-
-/// Wait for the model server to answer /health (up to ~40 s).
-fn wait_ready(port: u16) {
-    let req = format!("GET /health HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n");
-    for _ in 0..40 {
-        if let Ok(raw) = fm_agent::http::send("127.0.0.1", port, req.as_bytes(), Duration::from_secs(2)) {
-            if String::from_utf8_lossy(&raw).contains("\"status\":\"ok\"") {
-                return;
-            }
-        }
-        std::thread::sleep(Duration::from_secs(1));
-    }
 }

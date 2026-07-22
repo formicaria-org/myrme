@@ -5,6 +5,7 @@
 
 pub mod fmserve;
 pub mod manifest;
+pub mod watch;
 
 use fm_agent::openai::OpenAiStep;
 use fm_agent::search::SearxngSearch;
