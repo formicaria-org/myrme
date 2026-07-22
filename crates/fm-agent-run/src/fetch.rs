@@ -7,6 +7,7 @@
 //! pure-Rust blocking HTTPS client (`ureq`, default `rustls` TLS with bundled roots) so it needs no
 //! system TLS and cross-compiles to Android, plus `sha2` to verify. The notes core links neither.
 
+use crate::manifest::Manifest;
 use sha2::{Digest, Sha256};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
@@ -17,6 +18,38 @@ pub struct Download<'a> {
     pub url: &'a str,
     pub dest: &'a Path,
     pub sha256: Option<&'a str>,
+}
+
+/// Ensure the GGUF for `name` is present under `models_dir`, fetching it from Hugging Face on first
+/// enable, and return its local path. `on_progress(done, total)` fires while downloading. Idempotent:
+/// an already-present file (checksum-valid, if the manifest pins one) returns with no network — so a
+/// **sideloaded** model, or one with no `repo`, is used as-is. This is the one call the phone's
+/// first-run provisioning makes; the desktop still has `fetch.sh`.
+pub fn ensure_model(
+    models_dir: &Path,
+    manifest: &Manifest,
+    name: &str,
+    on_progress: &dyn Fn(u64, Option<u64>),
+) -> Result<PathBuf, String> {
+    let model = manifest
+        .model(name)
+        .ok_or_else(|| format!("model '{name}' is not in the manifest"))?;
+    let dest = models_dir.join(&model.file);
+
+    // Already provisioned (a prior fetch, or sideloaded)? Then no URL is even needed.
+    if dest.exists() {
+        match model.sha256.as_deref() {
+            Some(want) if verify(&dest, want)? => return Ok(dest),
+            None => return Ok(dest),
+            Some(_) => {} // present but wrong bytes — fall through to refetch
+        }
+    }
+
+    let url = manifest
+        .download_url(name)
+        .ok_or_else(|| format!("model '{name}' is absent and has no `repo` to fetch it from"))?;
+    fetch(&Download { url: &url, dest: &dest, sha256: model.sha256.as_deref() }, on_progress)?;
+    Ok(dest)
 }
 
 /// Fetch `d`, resuming a partial `<dest>.part` if present. `on_progress(done, total)` fires as bytes
@@ -140,7 +173,6 @@ fn verify(path: &Path, want: &str) -> Result<bool, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Read as _;
     use std::net::TcpListener;
     use std::thread;
 
@@ -229,6 +261,34 @@ mod tests {
         fetch(&Download { url: &url, dest: &dest, sha256: Some(&want) }, &|_, _| {}).unwrap();
 
         assert_eq!(fs::read(&dest).unwrap(), body, "resumed file equals the whole body");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn ensure_model_uses_a_present_file_without_network() {
+        // No server is started: if ensure_model touched the network this would hang/fail. A present,
+        // unpinned file must be returned as-is (the sideloaded / already-fetched case).
+        let m = Manifest::parse(
+            "[[models]]\nname = \"x\"\nrepo = \"r/x\"\nfile = \"x.gguf\"\n",
+        );
+        let dir = std::env::temp_dir().join(format!("fm-ensure-{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        fs::write(dir.join("x.gguf"), b"already here").unwrap();
+
+        let got = ensure_model(&dir, &m, "x", &|_, _| {}).unwrap();
+        assert_eq!(got, dir.join("x.gguf"));
+        assert_eq!(fs::read(&got).unwrap(), b"already here");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn ensure_model_errors_when_absent_and_unfetchable() {
+        // Absent + no repo ⇒ a clear error, not a panic or a bogus URL fetch.
+        let m = Manifest::parse("[[models]]\nname = \"x\"\nfile = \"x.gguf\"\n");
+        let dir = std::env::temp_dir().join(format!("fm-ensure-none-{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        let err = ensure_model(&dir, &m, "x", &|_, _| {}).unwrap_err();
+        assert!(err.contains("no `repo`"), "got: {err}");
         let _ = fs::remove_dir_all(&dir);
     }
 

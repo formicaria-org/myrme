@@ -8,6 +8,19 @@
 
 use std::path::Path;
 
+/// One catalogued model: enough to fetch it (`repo` + `file`, optionally checksum-pinned) and to run
+/// it (`file` is the local GGUF name).
+pub struct Model {
+    /// The key a user passes to fetch/run (and `@name`-mentions).
+    pub name: String,
+    /// The GGUF filename — both the Hugging Face asset and the local file under `models/`.
+    pub file: String,
+    /// The Hugging Face repo the file lives in, e.g. `LiquidAI/LFM2.5-230M-GGUF`. Empty if unset.
+    pub repo: String,
+    /// Optional SHA-256 (hex) to verify a download against. `None` ⇒ fetch without verification.
+    pub sha256: Option<String>,
+}
+
 /// The runtime defaults and the model list from `models.toml`.
 pub struct Manifest {
     /// The model run when none is named.
@@ -18,8 +31,8 @@ pub struct Manifest {
     pub ctx: u32,
     /// Inference threads.
     pub threads: u32,
-    /// `(name, gguf-filename)` for each catalogued model.
-    models: Vec<(String, String)>,
+    /// Every catalogued model.
+    models: Vec<Model>,
 }
 
 impl Manifest {
@@ -34,9 +47,18 @@ impl Manifest {
     /// default, unknown keys are skipped. (Kept `pub` so the parse is unit-tested without a file.)
     pub fn parse(text: &str) -> Self {
         let (mut default, mut port, mut ctx, mut threads) = (String::new(), 8081u16, 2048u32, 4u32);
-        let mut models: Vec<(String, String)> = Vec::new();
-        let mut in_models = false;
-        let mut cur_name: Option<String> = None;
+        let mut models: Vec<Model> = Vec::new();
+        // The block currently being parsed. `Some` ⇒ we are inside a `[[models]]` block (so top-level
+        // keys no longer apply); a block is committed on the next `[[models]]` or at EOF, when it has
+        // at least a name + file. Keys within a block are order-free.
+        let mut cur: Option<Model> = None;
+        let flush = |cur: &mut Option<Model>, models: &mut Vec<Model>| {
+            if let Some(m) = cur.take() {
+                if !m.name.is_empty() && !m.file.is_empty() {
+                    models.push(m);
+                }
+            }
+        };
 
         for raw in text.lines() {
             let line = raw.split('#').next().unwrap_or("").trim();
@@ -44,39 +66,55 @@ impl Manifest {
                 continue;
             }
             if line == "[[models]]" {
-                in_models = true;
-                cur_name = None;
+                flush(&mut cur, &mut models);
+                cur = Some(Model { name: String::new(), file: String::new(), repo: String::new(), sha256: None });
                 continue;
             }
             let Some((key, val)) = line.split_once('=') else { continue };
             let key = key.trim();
             let val = val.trim().trim_matches('"').trim();
-            if in_models {
-                match key {
-                    "name" => cur_name = Some(val.to_string()),
-                    "file" => {
-                        if let Some(n) = cur_name.take() {
-                            models.push((n, val.to_string()));
-                        }
-                    }
+            match cur.as_mut() {
+                // Inside a [[models]] block: fill the current model, ignore unknown keys.
+                Some(m) => match key {
+                    "name" => m.name = val.to_string(),
+                    "file" => m.file = val.to_string(),
+                    "repo" => m.repo = val.to_string(),
+                    "sha256" => m.sha256 = Some(val.to_string()),
                     _ => {}
-                }
-            } else {
-                match key {
+                },
+                // Top-level (before any [[models]]).
+                None => match key {
                     "default" => default = val.to_string(),
                     "port" => port = val.parse().unwrap_or(port),
                     "ctx" => ctx = val.parse().unwrap_or(ctx),
                     "threads" => threads = val.parse().unwrap_or(threads),
                     _ => {}
-                }
+                },
             }
         }
+        flush(&mut cur, &mut models); // the last block has no trailing [[models]] to flush it
         Manifest { default, port, ctx, threads, models }
     }
 
     /// The gguf filename for `name`, or `None` if the catalogue has no such model.
     pub fn file(&self, name: &str) -> Option<&str> {
-        self.models.iter().find(|(n, _)| n == name).map(|(_, f)| f.as_str())
+        self.model(name).map(|m| m.file.as_str())
+    }
+
+    /// The catalogued model named `name`, or `None`.
+    pub fn model(&self, name: &str) -> Option<&Model> {
+        self.models.iter().find(|m| m.name == name)
+    }
+
+    /// The Hugging Face download URL for `name`'s GGUF, or `None` if the model is unknown or has no
+    /// `repo`. Uses the `resolve/main` path — the stable "download the actual file" URL (an LFS repo
+    /// serves the real bytes here, not a pointer), which is what a plain HTTPS `GET` needs.
+    pub fn download_url(&self, name: &str) -> Option<String> {
+        let m = self.model(name)?;
+        if m.repo.is_empty() {
+            return None;
+        }
+        Some(format!("https://huggingface.co/{}/resolve/main/{}", m.repo, m.file))
     }
 }
 
@@ -111,6 +149,28 @@ mod tests {
         assert_eq!(m.file("lfm2.5-230m"), Some("LFM2.5-230M-Q4_K_M.gguf"));
         assert_eq!(m.file("lfm2.5-1.2b"), Some("LFM2.5-1.2B-Instruct-Q4_K_M.gguf"));
         assert_eq!(m.file("nope"), None);
+        // repo is captured even though it appears before `file` in the first block and after it
+        // in the second — key order within a block must not matter.
+        assert_eq!(m.model("lfm2.5-230m").unwrap().repo, "LiquidAI/LFM2.5-230M-GGUF");
+        assert!(m.model("lfm2.5-230m").unwrap().sha256.is_none());
+    }
+
+    #[test]
+    fn builds_the_hugging_face_download_url() {
+        let m = Manifest::parse(SAMPLE);
+        assert_eq!(
+            m.download_url("lfm2.5-230m").as_deref(),
+            Some("https://huggingface.co/LiquidAI/LFM2.5-230M-GGUF/resolve/main/LFM2.5-230M-Q4_K_M.gguf"),
+        );
+        assert_eq!(m.download_url("nope"), None);
+    }
+
+    #[test]
+    fn captures_an_optional_sha256() {
+        let m = Manifest::parse(
+            "[[models]]\nname = \"x\"\nrepo = \"r/x\"\nfile = \"x.gguf\"\nsha256 = \"abc123\"\n",
+        );
+        assert_eq!(m.model("x").unwrap().sha256.as_deref(), Some("abc123"));
     }
 
     #[test]
