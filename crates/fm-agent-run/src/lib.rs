@@ -31,13 +31,16 @@ pub struct Agent<V: VaultAccess> {
     pub max_reply_chars: usize,
     /// How many related notes to retrieve as RAG context.
     pub retrieve: usize,
-    /// History budget (chars); older turns beyond it are summarized to fit a tiny model's window.
+    /// History budget (chars). When the discussion overflows it, `history` pins both ends — the first
+    /// turn (the original ask) and the latest — and fills the middle with the most recent turns that
+    /// fit (plain truncation, not summarized). Cheap, predictable, and it never drops the standing
+    /// constraints the opener carries.
     pub history_budget: usize,
 }
 
 impl<V: VaultAccess> Agent<V> {
     /// Handle one already-posted user message on `note`'s discussion end to end: gather context (host
-    /// note + RAG + web when `/search`), summarize old history if it overflows, run the turn, and POST
+    /// note + RAG + web when `/search`), truncate old history if it overflows, run the turn, and POST
     /// the agent's reply (and a proposal when `allow_propose` and `/propose`). Returns the reply text.
     /// The user's own message is assumed already in the discussion (the REPL or the app posted it).
     /// Returns the reply text and, when one was posted, the id of the reply message — so a caller
@@ -121,8 +124,11 @@ impl<V: VaultAccess> Agent<V> {
     }
 
     /// The discussion so far as text, oldest first, within `history_budget`. When it overflows, the
-    /// older turns are compressed with the model (**summarize-before-overflow**) and the recent tail
-    /// is kept verbatim — so the conversation never blows a tiny model's context.
+    /// **first turn and the latest turn are both pinned** and the middle is filled with the most recent
+    /// turns that fit — so the conversation never blows a tiny model's context *and* the original ask
+    /// (the constraints every later round must still honour) is never the thing that drops. Plain,
+    /// deterministic truncation — no summarize-model call (the owner cut that orchestration; a tiny
+    /// model's summary of a chat is unreliable anyway).
     fn history(&self, note: &str) -> Result<String, String> {
         let view = self.fm.thread(note)?;
         let msgs: Vec<String> = view["messages"]
@@ -134,20 +140,42 @@ impl<V: VaultAccess> Agent<V> {
             })
             .unwrap_or_default();
         let full = msgs.join("\n");
-        if full.chars().count() <= self.history_budget {
+        if full.chars().count() <= self.history_budget || msgs.len() <= 1 {
+            // Fits, or a lone over-long turn there is nothing to drop from — keep it whole (never
+            // return empty, the old tail-only bound's edge case).
             return Ok(full);
         }
-        // Over budget: keep the most recent turns that fit and drop the oldest — a plain, predictable
-        // bound (the safety: never blow a tiny model's context window). No summarize-model call; that
-        // was orchestration the owner asked to cut, and a 230M summary of a chat is unreliable anyway.
-        let mut kept = String::new();
-        for m in msgs.iter().rev() {
-            if kept.chars().count() + m.chars().count() + 1 > self.history_budget {
+        // Over budget. Pin BOTH ends: the FIRST turn (the original ask + standing constraints) and the
+        // LATEST turn (the current state), then fill the middle with the most recent turns that fit.
+        // The old "keep the recent tail, drop the oldest" bound is what let a long refinement silently
+        // lose an early requirement and re-break it (oscillation); pinning the opener fixes that.
+        let last = msgs.len() - 1;
+        let gap = "- […earlier turns omitted…]";
+        // Reserve room for both ends and (if the kept turns aren't contiguous) the gap marker, so the
+        // result stays within budget.
+        let mut used = msgs[0].chars().count() + msgs[last].chars().count() + gap.chars().count() + 2;
+        let mut middle: Vec<usize> = Vec::new();
+        for i in (1..last).rev() {
+            let cost = msgs[i].chars().count() + 1;
+            if used + cost > self.history_budget {
                 break;
             }
-            kept = if kept.is_empty() { m.clone() } else { format!("{m}\n{kept}") };
+            used += cost;
+            middle.push(i);
         }
-        Ok(kept)
+        middle.reverse(); // back to chronological order
+        let mut out = vec![msgs[0].clone()];
+        // A gap marker only when a real hole was left between the opener and what follows it.
+        let hole = match middle.first() {
+            Some(&i) => i > 1,
+            None => last > 1,
+        };
+        if hole {
+            out.push(gap.to_string());
+        }
+        out.extend(middle.into_iter().map(|i| msgs[i].clone()));
+        out.push(msgs[last].clone());
+        Ok(out.join("\n"))
     }
 
     /// The host note itself — what the discussion is about, so always included.
@@ -295,6 +323,61 @@ mod tests {
         let fm = FakeVault { thread: json!({ "messages": [{ "body": "hi" }, { "body": "there" }] }), alive: true };
         let history = agent(fm).history("note").unwrap();
         assert!(history.contains("hi") && history.contains("there"), "got: {history:?}");
+    }
+
+    // --- history() budgeting: the multi-round refinement fix (pin both ends, trim the middle). ---
+
+    #[test]
+    fn history_returns_the_whole_thread_when_it_fits_the_budget() {
+        // The common case: under budget, nothing is dropped and the order is oldest-first.
+        let thread = json!({ "messages": [{ "body": "one" }, { "body": "two" }, { "body": "three" }] });
+        let h = agent(FakeVault { thread, alive: true }).history("note").unwrap();
+        assert_eq!(h, "- one\n- two\n- three");
+    }
+
+    #[test]
+    fn history_pins_the_original_ask_and_the_latest_turn_when_it_overflows() {
+        // The refinement fix: over budget, the FIRST turn (the standing constraints an early round set)
+        // and the LATEST turn (the current state) are both kept, a dropped middle is marked, and it is
+        // a *middle* turn that gives way — not the opener. Without this, a long back-and-forth loses its
+        // earliest requirement and the model re-breaks it (oscillation).
+        let thread = json!({ "messages": [
+            { "body": "FIRST: always keep the action items" },
+            { "body": "second turn — some middle padding here" },
+            { "body": "third turn — more middle padding here" },
+            { "body": "LATEST: and fix the title" },
+        ]});
+        let mut a = agent(FakeVault { thread, alive: true });
+        a.history_budget = 120; // room for both ends + the gap marker, but not every middle turn
+        let h = a.history("note").unwrap();
+        assert!(h.contains("FIRST: always keep"), "the original ask is pinned, never dropped: {h:?}");
+        assert!(h.contains("LATEST: and fix"), "the most recent turn is always kept: {h:?}");
+        assert!(h.contains("omitted"), "a dropped middle is marked as a gap: {h:?}");
+        assert!(!h.contains("second turn"), "a middle turn is what gives way to fit the budget: {h:?}");
+        // The opener leads and the latest closes — order preserved.
+        assert!(h.find("FIRST").unwrap() < h.find("LATEST").unwrap(), "chronological: {h:?}");
+    }
+
+    #[test]
+    fn history_keeps_both_short_turns_without_a_marker_or_duplication() {
+        // Two turns are both ends, so even under an absurdly tight budget both survive, in order, with
+        // no gap marker and no duplicated opener.
+        let thread = json!({ "messages": [{ "body": "the ask" }, { "body": "the answer" }] });
+        let mut a = agent(FakeVault { thread, alive: true });
+        a.history_budget = 5;
+        let h = a.history("note").unwrap();
+        assert_eq!(h, "- the ask\n- the answer");
+    }
+
+    #[test]
+    fn history_keeps_a_lone_over_long_turn_rather_than_returning_nothing() {
+        // One turn longer than the whole budget: there is nothing to drop, so it is kept whole — never
+        // the empty string the old tail-only loop could return.
+        let thread = json!({ "messages": [{ "body": "a single very long turn that exceeds the budget" }] });
+        let mut a = agent(FakeVault { thread, alive: true });
+        a.history_budget = 5;
+        let h = a.history("note").unwrap();
+        assert!(h.contains("single very long turn"), "a lone turn is kept whole, not dropped to empty: {h:?}");
     }
 
     #[test]
