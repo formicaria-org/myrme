@@ -76,7 +76,7 @@ fn run() -> Result<(), String> {
         // Record the user's message, then answer (propose allowed — this is a note's discussion).
         agent.fm.reply(&a.note, msg)?;
         let intent = convo::parse(msg);
-        let reply = agent.handle(&a.note, &intent, true)?;
+        let (reply, _) = agent.handle(&a.note, &intent, true, &|stage| println!("  … {stage}"))?;
         println!("\n{}> {reply}\n", a.model);
     }
     println!("bye.");

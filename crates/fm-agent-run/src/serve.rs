@@ -100,8 +100,24 @@ fn run() -> Result<(), String> {
     );
 
     let stopper = model.stopper();
-    // Message ids already seen, so each is answered at most once.
+    // Message ids already seen, so each is answered at most once. Seed it with every message that
+    // already exists, so a fresh start (or a restart) answers only what arrives *while it watches* —
+    // never the historical backlog of every discussion.
     let mut handled: HashSet<String> = HashSet::new();
+    if let Ok(discs) = agent.fm.discussions() {
+        if let Some(arr) = discs.as_array() {
+            for d in arr {
+                let Some(id) = d["id"].as_str() else { continue };
+                let Ok(view) = agent.fm.thread(id) else { continue };
+                let Some(msgs) = view["messages"].as_array() else { continue };
+                for m in msgs {
+                    if let Some(mid) = m["id"].as_str() {
+                        handled.insert(mid.to_string());
+                    }
+                }
+            }
+        }
+    }
     loop {
         std::thread::sleep(Duration::from_secs(a.poll_secs));
         if model.finished() {
@@ -120,24 +136,56 @@ fn run() -> Result<(), String> {
             let Some(id) = d["id"].as_str() else { continue };
             let Ok(view) = agent.fm.thread(id) else { continue };
             let Some(msgs) = view["messages"].as_array() else { continue };
-            let Some(last) = msgs.last() else { continue };
-            let (Some(mid), Some(body)) = (last["id"].as_str(), last["body"].as_str()) else {
-                continue;
-            };
-            if !handled.insert(mid.to_string()) {
-                continue; // already processed this message
-            }
-            if let Some((_who, intent)) = convo::addressed(body, &[a.name.as_str()]) {
-                // Chat only in a discussion (nothing to propose an edit to there).
-                match agent.handle(id, &intent, false) {
-                    Ok(reply) => println!(
-                        "@{} replied in {}: {}",
-                        a.name,
-                        &id[..8.min(id.len())],
-                        reply.chars().take(60).collect::<String>()
-                    ),
-                    Err(e) => eprintln!("turn failed in {id}: {e}"),
+            // Answer *every* pending mention in order, not just the last — a user who fires several
+            // questions quickly (there is a poll delay) must get every one, never only the newest.
+            // Identical resends within this batch (a double-tap on send) are coalesced to one answer.
+            let mut asked_this_pass: HashSet<String> = HashSet::new();
+            for m in msgs {
+                let (Some(mid), Some(body)) = (m["id"].as_str(), m["body"].as_str()) else {
+                    continue;
+                };
+                if !handled.insert(mid.to_string()) {
+                    continue; // already seen (seeded backlog, our own replies, or an earlier pass)
                 }
+                let Some((_who, intent)) = convo::addressed(body, &[a.name.as_str()]) else {
+                    continue;
+                };
+                if !asked_this_pass.insert(intent.ask.clone()) {
+                    continue; // a duplicate of one we are already answering this pass — coalesce
+                }
+
+                // Show the user what the whole pipeline is doing, stage by stage, then clear it when
+                // the reply lands or the turn fails — the wheel never spins forever.
+                let question = intent.ask.clone();
+                let on_stage = |stage: &str| agent.fm.activity(id, stage, &question);
+                // Chat only in a discussion (nothing to propose an edit to there).
+                match agent.handle(id, &intent, false, &on_stage) {
+                    Ok((reply, reply_id)) => {
+                        // Mark the agent's own reply seen so it never answers itself — the tiny
+                        // model echoes the @name in its output, which would otherwise loop forever.
+                        if let Some(rid) = reply_id {
+                            handled.insert(rid);
+                        }
+                        println!(
+                            "@{} replied in {}: {}",
+                            a.name,
+                            &id[..8.min(id.len())],
+                            reply.chars().take(60).collect::<String>()
+                        );
+                    }
+                    Err(e) => {
+                        // A timeout or failure must be *visible* (never a silent stall): tell the
+                        // user and record the notice so it is not itself re-processed.
+                        eprintln!("turn failed in {id}: {e}");
+                        let notice = format!("⚠️ I couldn't finish that one — {e}. Try again, or simplify it.");
+                        if let Ok(meta) = agent.fm.reply(id, &notice) {
+                            if let Some(rid) = meta["id"].as_str() {
+                                handled.insert(rid.to_string());
+                            }
+                        }
+                    }
+                }
+                agent.fm.activity_done(id);
             }
         }
     }

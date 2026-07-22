@@ -82,4 +82,16 @@ impl FmServe {
             json!({ "id": note, "body": body, "authorName": name, "authorEmail": email }),
         )
     }
+
+    /// Report the current pipeline stage for a discussion, so the UI can show a live "working…" wheel
+    /// with what the agent is doing (`reading your notes`, `searching the web`, `thinking`).
+    /// Best-effort: a status update must never break or slow a real turn, so failures are ignored.
+    pub fn activity(&self, disc: &str, stage: &str, question: &str) {
+        let _ = self.call("agent_activity", json!({ "discussion": disc, "stage": stage, "question": question }));
+    }
+
+    /// Clear a discussion's status — the reply landed, or the turn errored/timed out. Hides the wheel.
+    pub fn activity_done(&self, disc: &str) {
+        let _ = self.call("agent_activity", json!({ "discussion": disc, "done": true }));
+    }
 }

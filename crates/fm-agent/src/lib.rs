@@ -279,7 +279,8 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
         } else {
             let user = format!("{ctx}\n\n# Question\n{}", intent.ask.trim());
             let resp = self.llm.complete(CHAT_INSTRUCTION, &user)?;
-            crate::convo::cap_reply(&strip_wrapping_fence(&resp.content), max_reply_chars)
+            let cleaned = strip_echoed_prompt(&strip_wrapping_fence(&resp.content), intent.ask.trim());
+            crate::convo::cap_reply(&cleaned, max_reply_chars)
         };
 
         Ok(Turn { reply: Some(reply), proposal })
@@ -299,6 +300,73 @@ fn strip_wrapping_fence(s: &str) -> String {
         }
     }
     t.to_string()
+}
+
+/// A tiny model sometimes ignores "don't repeat the question" and parrots the prompt back around the
+/// real answer. Two observed shapes: it echoes first and answers under an invented `# Answer` heading,
+/// or it answers first and then trails the echoed question/turns. We clean both with signals we can
+/// trust exactly — never guessing at the prose:
+/// 1. If an `Answer` heading is present, keep only the text after the *last* one (the answer-last shape).
+/// 2. Then cut at the first line that re-states the exact `question` we sent (the trailing-echo shape) —
+///    the system prompt forbids repeating the question, so a clean reply never contains that line.
+/// A well-behaved reply has neither signal and is returned unchanged.
+fn strip_echoed_prompt(s: &str, question: &str) -> String {
+    let mut after = None;
+    let mut off = 0usize;
+    for line in s.split_inclusive('\n') {
+        let key = line.trim().trim_start_matches('#').trim().trim_end_matches(':').trim();
+        if key.eq_ignore_ascii_case("answer") {
+            after = Some(off + line.len());
+        }
+        off += line.len();
+    }
+    let body = match after {
+        Some(i) => &s[i..],
+        None => s,
+    };
+
+    // Cut at the first line that is one of the section headings we injected into the prompt, or that
+    // repeats the exact question. These are strings the model was *given*, not asked to produce (the
+    // system prompt forbids headings and repeating the question), so their appearance is the echo
+    // boundary — everything before it is the real answer. A clean reply has none and is kept whole.
+    const HEADINGS: [&str; 6] = [
+        "# conversation so far",
+        "# notes and search results",
+        "# question",
+        "# task",
+        "# provided notes",
+        "# search results",
+    ];
+    let q = question.trim().to_lowercase();
+    let is_echo_line = |line: &str| {
+        let l = line.trim().to_lowercase();
+        HEADINGS.contains(&l.as_str()) || (!q.is_empty() && l.contains(&q))
+    };
+    // Answer-first: keep everything up to the first echoed heading/question line.
+    let mut kept = String::new();
+    for line in body.lines() {
+        if is_echo_line(line) {
+            break;
+        }
+        kept.push_str(line);
+        kept.push('\n');
+    }
+    let kept = kept.trim();
+    if !kept.is_empty() {
+        return kept.to_string();
+    }
+    // The echo *starts* with a heading (answer-last, no `# Answer` marker): the answer, if any, is
+    // whatever follows the last echoed heading/question line. Best remaining guess; a clean reply
+    // never reaches here (it has no such line).
+    let mut cut = 0usize;
+    let mut off = 0usize;
+    for line in body.split_inclusive('\n') {
+        if is_echo_line(line) {
+            cut = off + line.len();
+        }
+        off += line.len();
+    }
+    body[cut..].trim().to_string()
 }
 
 /// Assemble a conversational turn's context: the prior conversation, then the retrieved notes and
@@ -463,6 +531,25 @@ mod tests {
         assert_eq!(draft.new_body, "# Title\n\n- a\n- b");
         // A body with a genuine inner code block, not a wrapping fence, is left intact.
         assert_eq!(super::strip_wrapping_fence("see this:\n```rust\nfn x(){}\n```"), "see this:\n```rust\nfn x(){}\n```");
+    }
+
+    #[test]
+    fn an_echoed_prompt_is_reduced_to_the_answer_either_shape() {
+        let q = "what is the capital of France?";
+        // Answer-last: the model parrots the prompt, then answers under an invented heading.
+        let echoed = "# Conversation so far\n- hi\n\n# Question\nwhat is the capital of France?\n\n# Answer\nThe capital of France is Paris.";
+        assert_eq!(super::strip_echoed_prompt(echoed, q), "The capital of France is Paris.");
+        // Answer-first: the model answers, then trails an echo of the question/turns.
+        let trailing = "The capital of France is Paris.\n- The capital of France is Paris.\n- @agent what is the capital of France?\n\n#";
+        assert_eq!(super::strip_echoed_prompt(trailing, q), "The capital of France is Paris.\n- The capital of France is Paris.");
+        // Answer-first, trailing an echoed prompt section heading.
+        let heading_echo = "The capital of France is Paris.\n\n# Notes and search results\n## 01ABC";
+        assert_eq!(super::strip_echoed_prompt(heading_echo, q), "The capital of France is Paris.");
+        // Echo that STARTS with a heading (answer-last, no `# Answer`): take what follows the last one.
+        let starts_heading = "# Conversation so far\n- hi\n# Notes and search results\nParis is the capital.";
+        assert_eq!(super::strip_echoed_prompt(starts_heading, q), "Paris is the capital.");
+        // A clean reply (no heading, no echoed question) is returned unchanged.
+        assert_eq!(super::strip_echoed_prompt("Paris is the capital of France.", q), "Paris is the capital of France.");
     }
 
     #[test]

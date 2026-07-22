@@ -30,31 +30,51 @@ impl Agent {
     /// note + RAG + web when `/search`), summarize old history if it overflows, run the turn, and POST
     /// the agent's reply (and a proposal when `allow_propose` and `/propose`). Returns the reply text.
     /// The user's own message is assumed already in the discussion (the REPL or the app posted it).
-    pub fn handle(&self, note: &str, intent: &convo::Intent, allow_propose: bool) -> Result<String, String> {
+    /// Returns the reply text and, when one was posted, the id of the reply message — so a caller
+    /// watching the discussion can mark it seen and never answer the agent's own message.
+    ///
+    /// `on_stage` is called on entering each pipeline stage (`reading your notes`, `searching the
+    /// web`, `thinking`) so a caller can surface *what the agent is doing* — because in an agent the
+    /// slow part is often the tools (web search, retrieval), not the LLM. Pass `&|_| {}` to ignore it.
+    pub fn handle(
+        &self,
+        note: &str,
+        intent: &convo::Intent,
+        allow_propose: bool,
+        on_stage: &dyn Fn(&str),
+    ) -> Result<(String, Option<String>), String> {
         // In a plain discussion there is nothing to propose an edit to, so propose is off there.
         let intent = convo::Intent { propose: intent.propose && allow_propose, ..intent.clone() };
 
+        on_stage("reading the conversation");
         let history = self.history(note)?;
+        on_stage("reading your notes");
         let mut context = self.host_note(note)?;
         context.extend(self.retrieve(&intent.ask, note)?);
         if intent.search {
+            on_stage("searching the web");
             context.extend(self.web(&intent.ask)?);
         }
 
+        on_stage("thinking");
         let agent = StudyAssistant::new(self.llm(), NoWeb);
         let turn = agent
             .turn(&history, &intent, &context, Some(self.max_reply_chars))
             .map_err(|e| e.to_string())?;
 
+        on_stage("writing the reply");
+
         let reply = turn.reply.clone().unwrap_or_default();
+        let mut reply_id = None;
         if let Some(r) = &turn.reply {
-            self.fm.reply(note, r)?;
+            let meta = self.fm.reply(note, r)?;
+            reply_id = meta["id"].as_str().map(|s| s.to_string());
         }
         if let Some(body) = &turn.proposal {
             let email = format!("{}@fm-agents.local", self.model);
             self.fm.create_proposal(note, body, &self.model, &email)?;
         }
-        Ok(reply)
+        Ok((reply, reply_id))
     }
 
     fn llm(&self) -> OpenAiStep {
