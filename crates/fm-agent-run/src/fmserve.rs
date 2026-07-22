@@ -94,4 +94,11 @@ impl FmServe {
     pub fn activity_done(&self, disc: &str) {
         let _ = self.call("agent_activity", json!({ "discussion": disc, "done": true }));
     }
+
+    /// Heartbeat: "this agent, by this name, is alive right now." fm-serve times these out, so the app
+    /// can list online agents (the @-picker) and warn instead of going silent when one is off.
+    /// Best-effort — a missed heartbeat only briefly shows the agent as offline.
+    pub fn present(&self, name: &str) {
+        let _ = self.call("agent_present", json!({ "name": name }));
+    }
 }

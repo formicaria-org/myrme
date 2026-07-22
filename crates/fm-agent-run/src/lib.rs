@@ -51,9 +51,20 @@ impl Agent {
         on_stage("reading your notes");
         let mut context = self.host_note(note)?;
         context.extend(self.retrieve(&intent.ask, note)?);
+        // Web search is best-effort: if the proxy is unreachable, don't fail the whole turn — answer
+        // from notes/memory and *tell the user* the answer isn't web-grounded (a wrong answer that
+        // looks researched is worse than a flagged one).
+        let mut web_unavailable = false;
         if intent.search {
             on_stage("searching the web");
-            context.extend(self.web(&intent.ask)?);
+            match self.web(&intent.ask) {
+                Ok(docs) => context.extend(docs),
+                Err(e) => {
+                    web_unavailable = true;
+                    on_stage("web search unavailable");
+                    eprintln!("web search unavailable: {e}");
+                }
+            }
         }
 
         on_stage("thinking");
@@ -65,9 +76,17 @@ impl Agent {
         on_stage("writing the reply");
 
         let reply = turn.reply.clone().unwrap_or_default();
+        let reply = if web_unavailable && !reply.trim().is_empty() {
+            format!(
+                "_(Web search was unavailable — answering from your notes and the model's own \
+                 knowledge, which may be unreliable.)_\n\n{reply}"
+            )
+        } else {
+            reply
+        };
         let mut reply_id = None;
-        if let Some(r) = &turn.reply {
-            let meta = self.fm.reply(note, r)?;
+        if turn.reply.is_some() {
+            let meta = self.fm.reply(note, &reply)?;
             reply_id = meta["id"].as_str().map(|s| s.to_string());
         }
         if let Some(body) = &turn.proposal {
