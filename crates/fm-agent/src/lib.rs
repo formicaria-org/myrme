@@ -45,13 +45,13 @@ pub const QUERY_REFINE_INSTRUCTION: &str = "\
 Rewrite the user's request as a single, well-formed web-search query. Fix spelling and grammar and \
 keep it short. Output only the query, nothing else.";
 
-/// The system prompt for a **conversational reply** in a discussion (as opposed to writing a note
-/// body). Concise, grounded in the provided context, never a wrapping fence.
+/// The system prompt for a **conversational reply** in a discussion. Deliberately light: frame the
+/// role and ask for a direct, concise answer — nothing more. The owner's call is that pre/post exist
+/// for safety only and the user should see the model as it is, so this does not micro-manage format
+/// or forbid the model its own knowledge; any provided notes/search are offered, not mandated.
 pub const CHAT_INSTRUCTION: &str = "\
-You are a study assistant talking in a note's discussion. Answer the user's question directly, \
-conversationally, and concisely, using ONLY the conversation, notes, and search results provided — \
-never from memory — and say plainly when they do not answer the question. Do NOT add a heading, do \
-NOT repeat the question, and do NOT wrap the reply in a code fence — just the answer.";
+You are a study assistant in a note's discussion. Reply to the latest message directly and concisely. \
+Use the conversation and any notes or search results provided; you may also draw on your own knowledge.";
 
 /// The system prompt for compressing older conversation so it fits a tiny model's context window.
 pub const SUMMARY_INSTRUCTION: &str = "\
@@ -274,12 +274,31 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
         // A conversational reply — always, so the discussion sees the agent respond. A proposal turn
         // uses a fixed acknowledgement (no second model call — a tiny model fails that meta-task); a
         // chat turn gets a real model-written answer.
+        //
+        // **Minimal pre/post (owner, 2026-07-22).** The chat prompt is just the provided context, then
+        // the conversation, then the question — no `# Question`/`# Notes` scaffolding a tiny model
+        // parrots back. The only post-processing is the length cap (the "never berserk" safety bound);
+        // the reply is otherwise the model's own words. Earlier heavy orchestration (cross-note RAG +
+        // echo-stripping) made a 230M model reply with leaked context, so it was removed.
         let reply = if proposal.is_some() {
             PROPOSAL_ACK.to_string()
         } else {
-            let user = format!("{ctx}\n\n{}\n{}", heading::QUESTION, intent.ask.trim());
+            let mut user = String::new();
+            for doc in context {
+                let t = doc.text.trim();
+                if !t.is_empty() {
+                    user.push_str(t);
+                    user.push_str("\n\n");
+                }
+            }
+            let h = history.trim();
+            if !h.is_empty() {
+                user.push_str(h);
+                user.push('\n');
+            }
+            user.push_str(intent.ask.trim());
             let resp = self.llm.complete(CHAT_INSTRUCTION, &user)?;
-            normalize_answer(&resp.content, intent.ask.trim(), max_reply_chars)
+            normalize_answer(&resp.content, max_reply_chars)
         };
 
         Ok(Turn { reply: Some(reply), proposal })
@@ -301,57 +320,23 @@ fn strip_wrapping_fence(s: &str) -> String {
     t.to_string()
 }
 
-/// A tiny model sometimes sprinkles the prompt's own section headings into its reply, restates the
-/// question, or adds a bare `Answer:` label. Drop **exactly those lines** — the strings we handed the
-/// model and told it not to reproduce — and keep everything else. Deliberately minimal: it removes only
-/// lines it is certain are echo and never guesses at prose, and [`normalize_answer`] guarantees it
-/// never empties a real answer. (This replaced a cleverer two-shape stripper whose substring
-/// question-match ate legitimate answers — the "I couldn't get a usable answer" bug on the phone.)
-fn strip_echoed_prompt(s: &str, question: &str) -> String {
-    let q = question.trim().to_lowercase();
-    s.lines()
-        .filter(|line| {
-            let l = line.trim();
-            let bare = l.trim_start_matches('#').trim().trim_end_matches(':').trim();
-            // An injected section heading (with or without its leading `#`), a bare "Answer" label the
-            // model invents, or a line that exactly restates the question — all pure echo. Anything
-            // else (including an answer that merely *mentions* the topic) is kept.
-            let is_heading = heading::ALL.iter().any(|h| {
-                h.eq_ignore_ascii_case(l) || h.trim_start_matches('#').trim().eq_ignore_ascii_case(bare)
-            });
-            !(is_heading || bare.eq_ignore_ascii_case("answer") || (!q.is_empty() && l.to_lowercase() == q))
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-        .trim()
-        .to_string()
-}
-
-/// The section headings we inject into a prompt. Defined **once** so the assemblers and the
-/// echo-stripper cannot drift apart — the stripper recognises an echo by these exact strings, and a
-/// second hand-typed copy is precisely the silent-divergence trap this repo has been bitten by.
+/// The section headings the proposal/context assemblers inject into a prompt. Defined **once** so a
+/// second hand-typed copy cannot silently drift from the assembler — the trap this repo has been bitten
+/// by. (The chat path no longer scaffolds with headings; see `turn`'s minimal prompt.)
 mod heading {
     pub const CONVERSATION: &str = "# Conversation so far";
     pub const NOTES: &str = "# Notes and search results";
-    pub const QUESTION: &str = "# Question";
     pub const TASK: &str = "# Task";
     pub const PROVIDED: &str = "# Provided notes";
     pub const SEARCH: &str = "# Search results";
-    /// Every injected heading — what the echo detector scans for.
-    pub const ALL: [&str; 6] = [CONVERSATION, NOTES, QUESTION, TASK, PROVIDED, SEARCH];
 }
 
-/// Clean a small model's chat answer in one tested place: unwrap a fence that wraps the whole reply,
-/// strip an echoed prompt, and cap the length. The single seam for every small-model output tic, so a
-/// new tic is fixed here rather than sprinkled through `turn`.
-fn normalize_answer(content: &str, question: &str, max_chars: Option<usize>) -> String {
-    let unfenced = strip_wrapping_fence(content);
-    let stripped = strip_echoed_prompt(&unfenced, question);
-    // **Never let cleanup empty a real answer.** If stripping removed everything but the model *did*
-    // produce text, keep the unstripped text — a stray echo line is far better than the user seeing
-    // "(I couldn't get a usable answer from the model)". This is the guard the phone bug needed.
-    let cleaned = if stripped.trim().is_empty() { unfenced.trim().to_string() } else { stripped };
-    crate::convo::cap_reply(&cleaned, max_chars)
+/// Post-process a chat answer with the **safety** step only: cap the length (the "never berserk"
+/// bound). The reply is otherwise the model's own text — the owner's call: minimal post-processing,
+/// let the user see the LLM as it is. (The earlier echo-stripping / fence-unwrapping was removed: it
+/// was cosmetic, not safety, and on a tiny model it cleaned real answers down to nothing.)
+fn normalize_answer(content: &str, max_chars: Option<usize>) -> String {
+    crate::convo::cap_reply(content.trim(), max_chars)
 }
 
 /// Assemble a conversational turn's context: the prior conversation, then the retrieved notes and
@@ -527,43 +512,14 @@ mod tests {
     }
 
     #[test]
-    fn every_assembled_heading_is_one_the_stripper_knows() {
-        // The assembler and the echo-stripper share `heading::ALL`, so an injected heading is always
-        // a heading the stripper can cut on. Guard it against a future edit that adds a section.
-        let ctx = super::assemble_turn_context(
-            "earlier: hi",
-            &[super::InputDoc { label: "note".into(), text: "body".into() }],
-        );
-        for line in ctx.lines().filter(|l| l.starts_with("# ")) {
-            assert!(super::heading::ALL.contains(&line), "assembled heading {line:?} not in heading::ALL");
-        }
-    }
-
-    #[test]
-    fn strip_echoed_prompt_drops_only_echo_lines() {
-        let q = "what is the capital of France?";
-        // Injected headings and an exact restatement of the question are dropped; the answer survives.
-        let echoed = "# Question\nwhat is the capital of France?\n\nThe capital of France is Paris.";
-        assert_eq!(super::strip_echoed_prompt(echoed, q), "The capital of France is Paris.");
-        // A heading without its leading '#' (as a small model often writes it) is still recognised.
-        let heading_echo = "The capital of France is Paris.\n\nNotes and search results";
-        assert_eq!(super::strip_echoed_prompt(heading_echo, q), "The capital of France is Paris.");
-        // A bare "Answer" label the model invents is dropped, the answer beneath it kept.
-        let labeled = "Answer:\nThe capital of France is Paris.";
-        assert_eq!(super::strip_echoed_prompt(labeled, q), "The capital of France is Paris.");
-        // A clean reply that merely *mentions* the topic (not the exact question line) is kept whole —
-        // the old substring match wrongly ate answers like this.
-        assert_eq!(super::strip_echoed_prompt("Paris is the capital of France.", q), "Paris is the capital of France.");
-    }
-
-    #[test]
-    fn normalize_answer_never_empties_a_non_empty_reply() {
-        // The phone bug: the model produced text, cleanup removed all of it, the user saw the fallback.
-        // Even a reply that is *only* echo must return something, never an empty string.
-        assert!(!super::normalize_answer("# Answer", "what is 2+2?", None).is_empty());
-        assert!(!super::normalize_answer("# Question\nwhat is 2+2?", "what is 2+2?", None).is_empty());
-        // And a real answer is returned intact.
-        assert_eq!(super::normalize_answer("2 + 2 = 4.", "what is 2+2?", None), "2 + 2 = 4.");
+    fn normalize_answer_is_cap_only_and_passes_the_model_through() {
+        // Minimal post-processing: the reply is the model's own text, only length-capped. No
+        // echo-stripping — a reply that mentions the question, or has headings, is shown as-is.
+        assert_eq!(super::normalize_answer("2 + 2 = 4.", None), "2 + 2 = 4.");
+        assert_eq!(super::normalize_answer("# Answer\nParis.", None), "# Answer\nParis.");
+        // The one safety bound: length. cap_reply trims to the cap at a word boundary.
+        let long = "word ".repeat(50);
+        assert!(super::normalize_answer(&long, Some(20)).chars().count() <= 21);
     }
 
     #[test]

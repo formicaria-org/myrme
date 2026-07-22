@@ -58,9 +58,11 @@ impl<V: VaultAccess> Agent<V> {
 
         on_stage("reading the conversation");
         let history = self.history(note)?;
-        on_stage("reading your notes");
+        // Just the note being discussed — no cross-note RAG. Pulling "related" notes fed a tiny model
+        // a pile of unrelated fragments it then parroted back verbatim (leaked `## <ULID>` headings and
+        // other discussions' messages). Minimal context is the owner's call; `/search` still adds the web.
+        on_stage("reading this note");
         let mut context = self.host_note(note)?;
-        context.extend(self.retrieve(&intent.ask, note)?);
         // Web search is best-effort: if the proxy is unreachable, don't fail the whole turn — answer
         // from notes/memory and *tell the user* the answer isn't web-grounded (a wrong answer that
         // looks researched is worse than a flagged one).
@@ -134,27 +136,17 @@ impl<V: VaultAccess> Agent<V> {
         if full.chars().count() <= self.history_budget {
             return Ok(full);
         }
-        // Keep the most recent turns (up to half the budget) verbatim; summarize the older rest.
-        let recent_budget = self.history_budget / 2;
-        let mut recent = String::new();
-        let mut older: Vec<String> = Vec::new();
+        // Over budget: keep the most recent turns that fit and drop the oldest — a plain, predictable
+        // bound (the safety: never blow a tiny model's context window). No summarize-model call; that
+        // was orchestration the owner asked to cut, and a 230M summary of a chat is unreliable anyway.
+        let mut kept = String::new();
         for m in msgs.iter().rev() {
-            if recent.chars().count() + m.chars().count() < recent_budget {
-                recent = format!("{m}\n{recent}");
-            } else {
-                older.push(m.clone());
+            if kept.chars().count() + m.chars().count() + 1 > self.history_budget {
+                break;
             }
+            kept = if kept.is_empty() { m.clone() } else { format!("{m}\n{kept}") };
         }
-        older.reverse();
-        let older_text = older.join("\n");
-        let summary = if older_text.trim().is_empty() {
-            String::new()
-        } else {
-            StudyAssistant::new(self.llm(), NoWeb)
-                .summarize(&older_text)
-                .unwrap_or_else(|_| "[earlier conversation omitted]".into())
-        };
-        Ok(format!("(summary of earlier conversation) {summary}\n{}", recent.trim()))
+        Ok(kept)
     }
 
     /// The host note itself — what the discussion is about, so always included.
@@ -166,25 +158,6 @@ impl<V: VaultAccess> Agent<V> {
         }
         let title = v["title"].as_str().unwrap_or("this note");
         Ok(vec![InputDoc { label: format!("{title} (this note)"), text: body.chars().take(1200).collect() }])
-    }
-
-    /// RAG: the most relevant vault notes to the ask (FTS via fm-serve), trimmed; excludes the host.
-    fn retrieve(&self, ask: &str, host: &str) -> Result<Vec<InputDoc>, String> {
-        if ask.trim().is_empty() {
-            return Ok(Vec::new());
-        }
-        let hits = self.fm.search(ask)?;
-        let mut docs = Vec::new();
-        let Some(arr) = hits.as_array() else { return Ok(docs) };
-        for h in arr.iter().filter(|h| h["id"].as_str() != Some(host)).take(self.retrieve) {
-            let Some(id) = h["id"].as_str() else { continue };
-            if let Ok(note) = self.fm.get(id) {
-                let body = note["body"].as_str().unwrap_or_default();
-                let title = note["title"].as_str().unwrap_or(id);
-                docs.push(InputDoc { label: title.to_string(), text: body.chars().take(600).collect() });
-            }
-        }
-        Ok(docs)
     }
 
     /// Web search via the local proxy (text-only), as context. `None` proxy ⇒ no web.
