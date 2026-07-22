@@ -155,7 +155,10 @@ fn run() -> Result<(), String> {
     const HEARTBEAT: Duration = Duration::from_secs(5);
     const FORCE_SCAN: Duration = Duration::from_secs(60);
     let poll_min = Duration::from_secs(a.poll_secs.max(1));
-    let poll_max = Duration::from_secs(30);
+    // Cap the idle backoff low enough that the *first* mention after a quiet spell is picked up
+    // quickly (a long backoff shows as a pause before the working wheel appears); still ~5x cheaper
+    // than polling every second when idle.
+    let poll_max = Duration::from_secs(5);
     let mut interval = poll_min;
     let mut last_full_scan = Instant::now();
     agent.fm.present(&name); // show online at once, before the first heartbeat tick
