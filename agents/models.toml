@@ -14,16 +14,24 @@
 default = "qwen3-4b-2507"
 default_mobile = "lfm2.5-1.2b"
 
-# Prebuilt llama.cpp server (CPU), pinned for reproducibility. A newer build is a deliberate bump.
+# Prebuilt llama.cpp server, pinned for reproducibility. `runtime_url` is the portable CPU build;
+# `runtime_url_gpu` is the Vulkan build that offloads to a discrete GPU (measured: the RTX 3050 runs the
+# 4B at ~52 tok/s vs ~14 on CPU, and holds it in VRAM instead of system RAM). fetch.sh picks the GPU
+# build when `gpu` != "off" and a Vulkan loader is present — GPU speed with no config, CPU otherwise.
 runtime_url = "https://github.com/ggml-org/llama.cpp/releases/download/b10076/llama-b10076-bin-ubuntu-x64.tar.gz"
+runtime_url_gpu = "https://github.com/ggml-org/llama.cpp/releases/download/b10076/llama-b10076-bin-ubuntu-vulkan-x64.tar.gz"
 
 # Serve settings. `threads` is the laptop value (8 physical cores); `threads_mobile` is the phone's —
 # 4 = the Dimensity 7300's big cores, which is *both* fastest and leaves the little cores for the UI
-# (measured). Small `ctx` bounds the KV cache.
+# (measured). Small `ctx` bounds the KV cache. Each [[models]] block may override `ctx`/`threads`.
 port = 8081
 ctx = 2048
 threads = 8
 threads_mobile = 4
+
+# GPU policy for the desktop runtime: "auto" (use the best GPU when one is present, else CPU), "on"
+# (always offload), or "off" (CPU only). Default is GPU-when-available.
+gpu = "auto"
 
 # Each model: `name` (the key you pass to fetch), its Hugging Face `repo` and `file`, and a note.
 # Keep `name`, then `repo`, then `file` in that order — fetch.sh reads them positionally.

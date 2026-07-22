@@ -54,7 +54,15 @@ mkdir -p "$RUNTIME_DIR" "$MODELS_DIR"
 if [ -x "$RUNTIME_BIN" ]; then
   echo "runtime already present: $RUNTIME_BIN"
 else
+  # GPU by default, CPU fallback: take the Vulkan build when `gpu` is not "off" AND a Vulkan loader is
+  # installed (a discrete GPU then offloads via `-ngl`; the same binary still runs on CPU where there is
+  # no GPU). Otherwise the portable CPU build. So a GPU machine gets GPU speed with no configuration.
+  GPU="$(conf_get gpu)"; GPU="${GPU:-auto}"
   URL="$(conf_get runtime_url)"
+  if [ "$GPU" != "off" ] && ldconfig -p 2>/dev/null | grep -q 'libvulkan\.so'; then
+    GPU_URL="$(conf_get runtime_url_gpu)"
+    if [ -n "$GPU_URL" ]; then URL="$GPU_URL"; echo "GPU detected (Vulkan) — using the GPU runtime"; fi
+  fi
   echo "fetching llama.cpp runtime…"
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' EXIT

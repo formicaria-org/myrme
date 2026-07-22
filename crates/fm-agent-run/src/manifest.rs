@@ -19,6 +19,10 @@ pub struct Model {
     pub repo: String,
     /// Optional SHA-256 (hex) to verify a download against. `None` ⇒ fetch without verification.
     pub sha256: Option<String>,
+    /// Per-model context-window override; falls back to the manifest's `ctx` when unset.
+    pub ctx: Option<u32>,
+    /// Per-model thread-count override; falls back to the manifest's `threads` when unset.
+    pub threads: Option<u32>,
 }
 
 /// The runtime defaults and the model list from `models.toml`.
@@ -37,6 +41,11 @@ pub struct Manifest {
     /// The phone's thread count, when it differs (its big-core count). Falls back to
     /// [`threads`](Self::threads) — read it through [`mobile_threads`](Self::mobile_threads).
     pub threads_mobile: Option<u32>,
+    /// GPU policy for the desktop runtime: `"auto"` (use the best GPU when one is present, else CPU),
+    /// `"on"` (always offload), or `"off"` (CPU only). Default `"auto"`. Read via [`gpu_layers`].
+    ///
+    /// [`gpu_layers`]: Self::gpu_layers
+    pub gpu: String,
     /// Every catalogued model.
     models: Vec<Model>,
 }
@@ -54,6 +63,7 @@ impl Manifest {
     pub fn parse(text: &str) -> Self {
         let (mut default, mut port, mut ctx, mut threads) = (String::new(), 8081u16, 2048u32, 4u32);
         let (mut default_mobile, mut threads_mobile): (Option<String>, Option<u32>) = (None, None);
+        let mut gpu = String::from("auto");
         let mut models: Vec<Model> = Vec::new();
         // The block currently being parsed. `Some` ⇒ we are inside a `[[models]]` block (so top-level
         // keys no longer apply); a block is committed on the next `[[models]]` or at EOF, when it has
@@ -74,7 +84,7 @@ impl Manifest {
             }
             if line == "[[models]]" {
                 flush(&mut cur, &mut models);
-                cur = Some(Model { name: String::new(), file: String::new(), repo: String::new(), sha256: None });
+                cur = Some(Model { name: String::new(), file: String::new(), repo: String::new(), sha256: None, ctx: None, threads: None });
                 continue;
             }
             let Some((key, val)) = line.split_once('=') else { continue };
@@ -87,6 +97,8 @@ impl Manifest {
                     "file" => m.file = val.to_string(),
                     "repo" => m.repo = val.to_string(),
                     "sha256" => m.sha256 = Some(val.to_string()),
+                    "ctx" => m.ctx = val.parse().ok(),
+                    "threads" => m.threads = val.parse().ok(),
                     _ => {}
                 },
                 // Top-level (before any [[models]]).
@@ -97,12 +109,34 @@ impl Manifest {
                     "ctx" => ctx = val.parse().unwrap_or(ctx),
                     "threads" => threads = val.parse().unwrap_or(threads),
                     "threads_mobile" => threads_mobile = val.parse().ok(),
+                    "gpu" => gpu = val.to_string(),
                     _ => {}
                 },
             }
         }
         flush(&mut cur, &mut models); // the last block has no trailing [[models]] to flush it
-        Manifest { default, default_mobile, port, ctx, threads, threads_mobile, models }
+        Manifest { default, default_mobile, port, ctx, threads, threads_mobile, gpu, models }
+    }
+
+    /// The context window for `name` — the model's own `ctx` override, else the manifest default.
+    pub fn model_ctx(&self, name: &str) -> u32 {
+        self.model(name).and_then(|m| m.ctx).unwrap_or(self.ctx)
+    }
+
+    /// The thread count for `name` — the model's own `threads` override, else the manifest default.
+    pub fn model_threads(&self, name: &str) -> u32 {
+        self.model(name).and_then(|m| m.threads).unwrap_or(self.threads)
+    }
+
+    /// How many layers to offload to a GPU (`-ngl`) under the current `gpu` policy. `"off"` ⇒ 0 (CPU
+    /// only); `"auto"`/`"on"` ⇒ all (99) — safe to pass to a CPU-only build too (it has no GPU to
+    /// offload to, so it silently runs on CPU), which is the "best GPU, else CPU" fallback in one flag.
+    pub fn gpu_layers(&self) -> u32 {
+        if self.gpu.eq_ignore_ascii_case("off") {
+            0
+        } else {
+            99
+        }
     }
 
     /// The phone's default model name — `default_mobile` if set, else the shared `default`.
@@ -204,6 +238,22 @@ mod tests {
         let m2 = Manifest::parse("default = \"only\"\nthreads = 6\n");
         assert_eq!(m2.mobile_default(), "only");
         assert_eq!(m2.mobile_threads(), 6);
+    }
+
+    #[test]
+    fn gpu_policy_and_per_model_overrides() {
+        let m = Manifest::parse(
+            "default = \"a\"\nctx = 2048\nthreads = 8\ngpu = \"auto\"\n\
+             [[models]]\nname = \"a\"\nfile = \"a.gguf\"\nrepo = \"r/a\"\nctx = 4096\n",
+        );
+        // gpu auto/on => offload all; off => none.
+        assert_eq!(m.gpu_layers(), 99);
+        assert_eq!(Manifest::parse("gpu = \"off\"").gpu_layers(), 0);
+        assert_eq!(Manifest::parse("").gpu_layers(), 99); // default is GPU-when-available
+        // per-model ctx overrides the global; threads falls back to the global.
+        assert_eq!(m.model_ctx("a"), 4096);
+        assert_eq!(m.model_threads("a"), 8);
+        assert_eq!(m.model_ctx("nope"), 2048); // unknown model → global default
     }
 
     #[test]

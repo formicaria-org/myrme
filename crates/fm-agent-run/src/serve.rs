@@ -43,6 +43,9 @@ struct Args {
     /// Inference threads; defaults to the manifest's `threads`.
     #[arg(long)]
     threads: Option<u32>,
+    /// GPU layers to offload (`-ngl`); defaults from the manifest's `gpu` policy (99 unless `off`).
+    #[arg(long)]
+    ngl: Option<u32>,
     #[arg(long, default_value_t = 600)]
     max_reply_chars: usize,
     #[arg(long, default_value_t = 3)]
@@ -78,8 +81,13 @@ fn run() -> Result<(), String> {
     let runtime = a.agents_dir.join("runtime");
     let name = a.name.clone().unwrap_or_else(|| model_name.clone());
     let model_port = a.model_port.unwrap_or(manifest.port);
-    let ctx = a.ctx.unwrap_or(manifest.ctx);
-    let threads = a.threads.unwrap_or(manifest.threads);
+    // Per-model settings from the manifest (each falls back to the global default), CLI flags override.
+    let ctx = a.ctx.unwrap_or_else(|| manifest.model_ctx(&model_name));
+    let threads = a.threads.unwrap_or_else(|| manifest.model_threads(&model_name));
+    // GPU by default, CPU fallback: `-ngl 99` under the manifest's `gpu` policy. On a machine with a
+    // GPU (and a GPU-capable runtime), the model offloads; with no GPU it silently runs on CPU. `--ngl`
+    // overrides.
+    let ngl = a.ngl.unwrap_or_else(|| manifest.gpu_layers());
 
     // Launch the model under the watchdog (preflight → resource caps → guaranteed kill). Its
     // stdout/stderr are inherited (not nulled) so a crash is visible in the agent log.
@@ -93,6 +101,7 @@ fn run() -> Result<(), String> {
             "--port", &model_port.to_string(),
             "-c", &ctx.to_string(),
             "-t", &threads.to_string(),
+            "-ngl", &ngl.to_string(),
             "--no-warmup",
         ]);
     let model_bytes = std::fs::metadata(&model_gguf).map(|m| m.len()).unwrap_or(500_000_000);
