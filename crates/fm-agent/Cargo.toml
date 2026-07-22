@@ -15,3 +15,8 @@ thiserror.workspace = true
 # framework, no TLS), the same minimal-dependency stance as fm-serve's hand-rolled server. The
 # orchestrator itself stays pure; this is just how the concrete model-server seam frames its JSON.
 serde_json = "1"
+
+# Unix only, and used only by the launcher: a single `prctl(PR_SET_PDEATHSIG)` so a spawned model
+# server dies with its supervisor (see launch.rs). No other libc use — the orchestrator stays pure.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

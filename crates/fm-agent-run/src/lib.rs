@@ -244,6 +244,7 @@ mod tests {
     #[derive(Default)]
     struct FakeVault {
         thread: Value,
+        alive: bool,
     }
     impl VaultAccess for FakeVault {
         fn get(&self, _: &str) -> Result<Value, String> {
@@ -256,7 +257,7 @@ mod tests {
             Ok(json!([]))
         }
         fn alive(&self) -> bool {
-            true
+            self.alive
         }
         fn search(&self, _: &str) -> Result<Value, String> {
             Ok(json!([]))
@@ -291,8 +292,22 @@ mod tests {
     fn the_runner_reads_the_thread_through_the_vault_seam_not_fm_serve() {
         // No fm-serve, no socket — Agent runs against a plain in-memory VaultAccess, which is exactly
         // what makes the Android in-process impl a drop-in.
-        let fm = FakeVault { thread: json!({ "messages": [{ "body": "hi" }, { "body": "there" }] }) };
+        let fm = FakeVault { thread: json!({ "messages": [{ "body": "hi" }, { "body": "there" }] }), alive: true };
         let history = agent(fm).history("note").unwrap();
         assert!(history.contains("hi") && history.contains("there"), "got: {history:?}");
+    }
+
+    #[test]
+    fn serve_loop_stops_the_model_when_formicaria_is_gone() {
+        // The "no orphaned agent" guarantee, checked with NO real model or network so it holds on both
+        // the desktop and the phone: when the vault — fm-serve, i.e. formicaria — is gone (`alive()` is
+        // false), the watch loop must trip `stop_model` and RETURN, rather than keep the model (and its
+        // memory / GPU VRAM) loaded. This is the seam that failed when a restarted fm-serve was mistaken
+        // for the original: the agent must go out after formicaria does.
+        let agent = agent(FakeVault { alive: false, ..Default::default() });
+        let stopped = std::cell::Cell::new(false);
+        // `finished` stays false (the model itself is fine); only the missing vault should end the loop.
+        crate::watch::serve_loop(&agent, "test", std::path::Path::new("/tmp"), 1, &|| false, &|| stopped.set(true));
+        assert!(stopped.get(), "serve_loop must call stop_model when the vault (formicaria) is not alive");
     }
 }
