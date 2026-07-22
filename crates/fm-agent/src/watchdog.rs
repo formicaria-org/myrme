@@ -72,12 +72,16 @@ impl Limits {
     }
 
     /// For a model kept **warm for a whole session** (the @name watcher: "on with the app, off with
-    /// it"). Same device-safety floors and the off-switch, but **no wall-clock bound** — a per-turn
-    /// cap belongs on the model *call* (`OpenAiStep`'s own timeout), not on the long-lived server, or
-    /// the assistant is SIGKILLed mid-session (the 300 s cliff). A resource breach or `stop()` still
-    /// ends it promptly.
+    /// it"). Keeps the **memory floor** (the real OOM danger) and the off-switch, but drops both the
+    /// wall-clock bound and the load-average ceiling:
+    /// - no wall-clock — a per-turn cap belongs on the model *call* (`OpenAiStep`'s timeout), not on
+    ///   the long-lived server, or the assistant is SIGKILLed mid-session (the 300 s cliff);
+    /// - no load ceiling — the model *is* the workload the user asked for; killing it for the CPU its
+    ///   own bounded (batch=1, capped-tokens) inference uses is self-defeating, and load-average is a
+    ///   poor phone governor anyway (it lags bursts and reads oddly on Android). Memory is the safety;
+    ///   thermal headroom is the right *additional* phone signal, a later `ResourceMonitor` refinement.
     pub fn resident() -> Self {
-        Self { max_duration: Duration::MAX, ..Self::conservative() }
+        Self { max_duration: Duration::MAX, max_load_per_core: f32::INFINITY, ..Self::conservative() }
     }
 }
 
@@ -207,11 +211,13 @@ pub struct SystemMonitor;
 
 impl ResourceMonitor for SystemMonitor {
     fn sample(&self) -> Result<Resources, WatchdogError> {
-        #[cfg(target_os = "linux")]
+        // Android is a Linux kernel — it has `/proc/meminfo`/`/proc/loadavg` too — so it shares this
+        // path (its `target_os` is "android", not "linux", which is why it was fail-closing before).
+        #[cfg(any(target_os = "linux", target_os = "android"))]
         {
-            linux_sample()
+            proc_sample()
         }
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
         {
             Err(WatchdogError::new(
                 "resource monitoring is not implemented on this OS yet — refusing to run the model unmonitored",
@@ -220,20 +226,37 @@ impl ResourceMonitor for SystemMonitor {
     }
 }
 
-#[cfg(target_os = "linux")]
-fn linux_sample() -> Result<Resources, WatchdogError> {
+/// Read `/proc` for available memory + load. Shared by Linux and Android (both expose these).
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn proc_sample() -> Result<Resources, WatchdogError> {
     let meminfo = std::fs::read_to_string("/proc/meminfo")
         .map_err(|e| WatchdogError::new(format!("cannot read /proc/meminfo: {e}")))?;
     let loadavg = std::fs::read_to_string("/proc/loadavg")
         .map_err(|e| WatchdogError::new(format!("cannot read /proc/loadavg: {e}")))?;
-    let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1) as f32;
-    parse_linux(&meminfo, &loadavg, cores)
+    parse_proc(&meminfo, &loadavg, proc_cores())
+}
+
+/// The system's core count for the load-per-core denominator. `available_parallelism()` returns 1 on
+/// some Android builds (affinity/bionic quirk), which would inflate load-per-core ~8× and make the
+/// watchdog kill the model for the load its *own* inference creates. Count `/proc/cpuinfo` instead,
+/// which lists every online core, and fall back to `available_parallelism`.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn proc_cores() -> f32 {
+    let counted = std::fs::read_to_string("/proc/cpuinfo")
+        .map(|s| s.lines().filter(|l| l.starts_with("processor")).count())
+        .unwrap_or(0);
+    let n = if counted > 0 {
+        counted
+    } else {
+        std::thread::available_parallelism().map(|c| c.get()).unwrap_or(1)
+    };
+    n.max(1) as f32
 }
 
 /// Parse the two `/proc` texts into [`Resources`]. Pure, so it is tested on captured samples. Uses
 /// `MemAvailable` (not `MemFree`) — the kernel's own honest "how much can I use" figure.
-#[cfg(target_os = "linux")]
-fn parse_linux(meminfo: &str, loadavg: &str, cores: f32) -> Result<Resources, WatchdogError> {
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn parse_proc(meminfo: &str, loadavg: &str, cores: f32) -> Result<Resources, WatchdogError> {
     let mem_available_kb = meminfo
         .lines()
         .find_map(|l| l.strip_prefix("MemAvailable:"))
@@ -284,18 +307,18 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn parse_linux_reads_memavailable_and_load_per_core() {
+    fn parse_proc_reads_memavailable_and_load_per_core() {
         let mem = "MemTotal:  16000000 kB\nMemFree: 500000 kB\nMemAvailable:  2000000 kB\n";
         let load = "0.50 0.40 0.30 1/500 12345\n";
-        let r = parse_linux(mem, load, 4.0).unwrap();
+        let r = parse_proc(mem, load, 4.0).unwrap();
         assert_eq!(r.mem_available_bytes, 2_000_000 * 1024);
         assert!((r.load_per_core - 0.125).abs() < 1e-6, "load per core = {}", r.load_per_core);
     }
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn parse_linux_errs_without_memavailable() {
-        assert!(parse_linux("MemTotal: 1 kB\n", "0.1 0.1 0.1 1/1 1", 1.0).is_err());
+    fn parse_proc_errs_without_memavailable() {
+        assert!(parse_proc("MemTotal: 1 kB\n", "0.1 0.1 0.1 1/1 1", 1.0).is_err());
     }
 
     /// A monitor that returns a canned reading (or a failure), for supervision tests.

@@ -79,7 +79,13 @@ impl<V: VaultAccess> Agent<V> {
         on_stage("writing the reply");
 
         let reply = turn.reply.clone().unwrap_or_default();
-        let reply = if web_unavailable && !reply.trim().is_empty() {
+        // A tiny model sometimes returns nothing usable, or the echo-stripper cleans it to empty.
+        // Never post an empty message — the store rejects it (a reply "needs something in it"), which
+        // would surface as a 500; say so plainly instead.
+        let reply = if reply.trim().is_empty() {
+            "(I couldn't get a usable answer from the model — try rephrasing, or ask something simpler.)"
+                .to_string()
+        } else if web_unavailable {
             format!(
                 "_(Web search was unavailable — answering from your notes and the model's own \
                  knowledge, which may be unreliable.)_\n\n{reply}"
