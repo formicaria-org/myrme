@@ -97,7 +97,9 @@ impl VaultAccess for FmServe {
     }
 
     fn discussions(&self) -> Result<Value, String> {
-        self.call("discussions", json!({}))
+        // `thread_roots`, not `discussions`: the agent must watch **note comment threads** too, not
+        // only first-class discussions — else an @-mention in a note's discussion is never seen.
+        self.call("thread_roots", json!({}))
     }
 
     fn alive(&self) -> bool {
