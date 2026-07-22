@@ -259,7 +259,7 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
 
         // A proposal edit to the host note, when asked — reuses the house-format write step.
         let proposal = if intent.propose {
-            let user = format!("{ctx}\n\n# Task\n{}", intent.ask.trim());
+            let user = format!("{ctx}\n\n{}\n{}", heading::TASK, intent.ask.trim());
             let resp = self.llm.complete(OUTPUT_FORMAT_INSTRUCTION, &user)?;
             if resp.truncated() {
                 return Err(AgentError::new(
@@ -277,10 +277,9 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
         let reply = if proposal.is_some() {
             PROPOSAL_ACK.to_string()
         } else {
-            let user = format!("{ctx}\n\n# Question\n{}", intent.ask.trim());
+            let user = format!("{ctx}\n\n{}\n{}", heading::QUESTION, intent.ask.trim());
             let resp = self.llm.complete(CHAT_INSTRUCTION, &user)?;
-            let cleaned = strip_echoed_prompt(&strip_wrapping_fence(&resp.content), intent.ask.trim());
-            crate::convo::cap_reply(&cleaned, max_reply_chars)
+            normalize_answer(&resp.content, intent.ask.trim(), max_reply_chars)
         };
 
         Ok(Turn { reply: Some(reply), proposal })
@@ -329,18 +328,12 @@ fn strip_echoed_prompt(s: &str, question: &str) -> String {
     // repeats the exact question. These are strings the model was *given*, not asked to produce (the
     // system prompt forbids headings and repeating the question), so their appearance is the echo
     // boundary — everything before it is the real answer. A clean reply has none and is kept whole.
-    const HEADINGS: [&str; 6] = [
-        "# conversation so far",
-        "# notes and search results",
-        "# question",
-        "# task",
-        "# provided notes",
-        "# search results",
-    ];
+    // The heading set is the *same* `heading::ALL` the assemblers write, so the two cannot drift.
     let q = question.trim().to_lowercase();
     let is_echo_line = |line: &str| {
-        let l = line.trim().to_lowercase();
-        HEADINGS.contains(&l.as_str()) || (!q.is_empty() && l.contains(&q))
+        let l = line.trim();
+        heading::ALL.iter().any(|h| h.eq_ignore_ascii_case(l))
+            || (!q.is_empty() && l.to_lowercase().contains(&q))
     };
     // Answer-first: keep everything up to the first echoed heading/question line.
     let mut kept = String::new();
@@ -369,17 +362,42 @@ fn strip_echoed_prompt(s: &str, question: &str) -> String {
     body[cut..].trim().to_string()
 }
 
+/// The section headings we inject into a prompt. Defined **once** so the assemblers and the
+/// echo-stripper cannot drift apart — the stripper recognises an echo by these exact strings, and a
+/// second hand-typed copy is precisely the silent-divergence trap this repo has been bitten by.
+mod heading {
+    pub const CONVERSATION: &str = "# Conversation so far";
+    pub const NOTES: &str = "# Notes and search results";
+    pub const QUESTION: &str = "# Question";
+    pub const TASK: &str = "# Task";
+    pub const PROVIDED: &str = "# Provided notes";
+    pub const SEARCH: &str = "# Search results";
+    /// Every injected heading — what the echo detector scans for.
+    pub const ALL: [&str; 6] = [CONVERSATION, NOTES, QUESTION, TASK, PROVIDED, SEARCH];
+}
+
+/// Clean a small model's chat answer in one tested place: unwrap a fence that wraps the whole reply,
+/// strip an echoed prompt, and cap the length. The single seam for every small-model output tic, so a
+/// new tic is fixed here rather than sprinkled through `turn`.
+fn normalize_answer(content: &str, question: &str, max_chars: Option<usize>) -> String {
+    let cleaned = strip_echoed_prompt(&strip_wrapping_fence(content), question);
+    crate::convo::cap_reply(&cleaned, max_chars)
+}
+
 /// Assemble a conversational turn's context: the prior conversation, then the retrieved notes and
 /// search results — clearly delimited so the exact text is trivial to assert.
 fn assemble_turn_context(history: &str, context: &[InputDoc]) -> String {
     let mut p = String::new();
     if !history.trim().is_empty() {
-        p.push_str("# Conversation so far\n");
+        p.push_str(heading::CONVERSATION);
+        p.push('\n');
         p.push_str(history.trim());
         p.push('\n');
     }
     if !context.is_empty() {
-        p.push_str("\n# Notes and search results\n");
+        p.push('\n');
+        p.push_str(heading::NOTES);
+        p.push('\n');
         for d in context {
             p.push_str(&format!("## {}\n{}\n", d.label.trim(), d.text.trim()));
         }
@@ -391,19 +409,24 @@ fn assemble_turn_context(history: &str, context: &[InputDoc]) -> String {
 /// clearly-delimited structure. Free function (no `self`) so the exact text is trivial to assert.
 fn assemble_prompt(req: &ResearchRequest, hits: &[SearchHit]) -> String {
     let mut p = String::new();
-    p.push_str("# Task\n");
+    p.push_str(heading::TASK);
+    p.push('\n');
     p.push_str(req.ask.trim());
     p.push('\n');
 
     if !req.inputs.is_empty() {
-        p.push_str("\n# Provided notes\n");
+        p.push('\n');
+        p.push_str(heading::PROVIDED);
+        p.push('\n');
         for d in &req.inputs {
             p.push_str(&format!("## {}\n{}\n", d.label.trim(), d.text.trim()));
         }
     }
 
     if !hits.is_empty() {
-        p.push_str("\n# Search results\n");
+        p.push('\n');
+        p.push_str(heading::SEARCH);
+        p.push('\n');
         for h in hits {
             p.push_str(&format!("## {} ({})\n{}\n", h.title.trim(), h.url.trim(), h.text.trim()));
         }
@@ -531,6 +554,19 @@ mod tests {
         assert_eq!(draft.new_body, "# Title\n\n- a\n- b");
         // A body with a genuine inner code block, not a wrapping fence, is left intact.
         assert_eq!(super::strip_wrapping_fence("see this:\n```rust\nfn x(){}\n```"), "see this:\n```rust\nfn x(){}\n```");
+    }
+
+    #[test]
+    fn every_assembled_heading_is_one_the_stripper_knows() {
+        // The assembler and the echo-stripper share `heading::ALL`, so an injected heading is always
+        // a heading the stripper can cut on. Guard it against a future edit that adds a section.
+        let ctx = super::assemble_turn_context(
+            "earlier: hi",
+            &[super::InputDoc { label: "note".into(), text: "body".into() }],
+        );
+        for line in ctx.lines().filter(|l| l.starts_with("# ")) {
+            assert!(super::heading::ALL.contains(&line), "assembled heading {line:?} not in heading::ALL");
+        }
     }
 
     #[test]
