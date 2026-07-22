@@ -4,6 +4,7 @@
 //! vault (FTS via fm-serve) plus optional web search through a local proxy.
 
 pub mod fmserve;
+pub mod manifest;
 
 use fm_agent::openai::OpenAiStep;
 use fm_agent::search::SearxngSearch;

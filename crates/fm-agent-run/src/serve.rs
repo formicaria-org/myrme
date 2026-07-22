@@ -12,37 +12,43 @@ use fm_agent::launch::SupervisedModel;
 use fm_agent::preflight::Need;
 use fm_agent::watchdog::{Limits, SystemMonitor};
 use fm_agent_run::fmserve::{FmServe, VaultAccess};
+use fm_agent_run::manifest::Manifest;
 use fm_agent_run::Agent;
 use serde_json::json;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 #[derive(Parser)]
 #[command(name = "agent-serve", about = "Serve the model + answer @name mentions; tied to formicaria's life.")]
 struct Args {
+    /// Where `models.toml`, `models/`, and `runtime/` live — the single manifest resolves the rest.
+    #[arg(long, default_value = "agents")]
+    agents_dir: PathBuf,
+    /// Which catalogued model to run; defaults to the manifest's `default`.
     #[arg(long)]
-    model_gguf: PathBuf,
-    #[arg(long, default_value = "agents/runtime")]
-    runtime: PathBuf,
-    #[arg(long, default_value_t = 8081)]
-    model_port: u16,
+    model: Option<String>,
+    /// The model server port; defaults to the manifest's `port`.
+    #[arg(long)]
+    model_port: Option<u16>,
     /// The fm-serve port to serve/watch.
     #[arg(long, default_value_t = 8765)]
     serve_port: u16,
     /// The local web-search proxy port (enables /search); omit to run without the web.
     #[arg(long)]
     searxng_port: Option<u16>,
-    /// The name users address it by (`@name`) and the git author of its proposals.
-    #[arg(long, default_value = "lfm2.5-230m")]
-    name: String,
-    #[arg(long, default_value_t = 2048)]
-    ctx: u32,
-    #[arg(long, default_value_t = 4)]
-    threads: u32,
+    /// The name users address it by (`@name`) and the git author of its proposals; defaults to the model.
+    #[arg(long)]
+    name: Option<String>,
+    /// Context window; defaults to the manifest's `ctx`.
+    #[arg(long)]
+    ctx: Option<u32>,
+    /// Inference threads; defaults to the manifest's `threads`.
+    #[arg(long)]
+    threads: Option<u32>,
     #[arg(long, default_value_t = 600)]
     max_reply_chars: usize,
     #[arg(long, default_value_t = 3)]
@@ -68,31 +74,43 @@ fn main() {
 fn run() -> Result<(), String> {
     let a = Args::parse();
 
-    // Launch the model under the watchdog (preflight → resource caps → guaranteed kill).
-    let bin = a.runtime.join("llama-server");
+    // The manifest is the single source for which model, and the runtime defaults; flags override.
+    let manifest = Manifest::read(&a.agents_dir.join("models.toml"))?;
+    let model_name = a.model.clone().unwrap_or_else(|| manifest.default.clone());
+    let file = manifest
+        .file(&model_name)
+        .ok_or_else(|| format!("model '{model_name}' is not in {}/models.toml", a.agents_dir.display()))?;
+    let model_gguf = a.agents_dir.join("models").join(file);
+    let runtime = a.agents_dir.join("runtime");
+    let name = a.name.clone().unwrap_or_else(|| model_name.clone());
+    let model_port = a.model_port.unwrap_or(manifest.port);
+    let ctx = a.ctx.unwrap_or(manifest.ctx);
+    let threads = a.threads.unwrap_or(manifest.threads);
+
+    // Launch the model under the watchdog (preflight → resource caps → guaranteed kill). Its
+    // stdout/stderr are inherited (not nulled) so a crash is visible in the agent log.
+    let bin = runtime.join("llama-server");
     let mut cmd = Command::new(&bin);
-    cmd.env("LD_LIBRARY_PATH", &a.runtime)
+    cmd.env("LD_LIBRARY_PATH", &runtime)
         .arg("-m")
-        .arg(&a.model_gguf)
+        .arg(&model_gguf)
         .args([
             "--host", "127.0.0.1",
-            "--port", &a.model_port.to_string(),
-            "-c", &a.ctx.to_string(),
-            "-t", &a.threads.to_string(),
+            "--port", &model_port.to_string(),
+            "-c", &ctx.to_string(),
+            "-t", &threads.to_string(),
             "--no-warmup",
-        ])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    let model_bytes = std::fs::metadata(&a.model_gguf).map(|m| m.len()).unwrap_or(500_000_000);
+        ]);
+    let model_bytes = std::fs::metadata(&model_gguf).map(|m| m.len()).unwrap_or(500_000_000);
     // Resident, not one-shot: no wall-clock cliff (a per-turn cap is already on the model call), so it
     // stays warm for the whole session instead of being SIGKILLed after 5 minutes.
     let model = SupervisedModel::launch(cmd, SystemMonitor, &Need::new(model_bytes, a.headroom), Limits::resident())?;
-    wait_ready(a.model_port);
+    wait_ready(model_port);
 
     let agent = Agent {
         fm: FmServe::local(a.serve_port),
-        model_port: a.model_port,
-        model: a.name.clone(),
+        model_port,
+        model: name.clone(),
         searxng_port: a.searxng_port,
         max_reply_chars: a.max_reply_chars,
         retrieve: a.retrieve,
@@ -100,11 +118,11 @@ fn run() -> Result<(), String> {
     };
     println!(
         "agent '@{}' listening — model warm on :{}, watching fm-serve :{}{}. Mention @{} in a discussion.",
-        a.name,
-        a.model_port,
+        name,
+        model_port,
         a.serve_port,
         if a.searxng_port.is_some() { ", web on" } else { "" },
-        a.name,
+        name,
     );
 
     let stopper = model.stopper();
@@ -140,7 +158,7 @@ fn run() -> Result<(), String> {
     let poll_max = Duration::from_secs(30);
     let mut interval = poll_min;
     let mut last_full_scan = Instant::now();
-    agent.fm.present(&a.name); // show online at once, before the first heartbeat tick
+    agent.fm.present(&name); // show online at once, before the first heartbeat tick
     let mut last_hb = Instant::now();
     loop {
         std::thread::sleep(interval);
@@ -157,7 +175,7 @@ fn run() -> Result<(), String> {
         // Heartbeat at most every HEARTBEAT, independent of the (backing-off) poll cadence, so the app
         // keeps seeing the assistant online and can warn instead of going silent when it is off.
         if last_hb.elapsed() >= HEARTBEAT {
-            agent.fm.present(&a.name);
+            agent.fm.present(&name);
             last_hb = Instant::now();
         }
 
@@ -190,7 +208,7 @@ fn run() -> Result<(), String> {
                 if !handled.insert(mid.to_string()) {
                     continue; // already seen (seeded backlog, our own replies, or an earlier pass)
                 }
-                let Some((_who, intent)) = convo::addressed(body, &[a.name.as_str()]) else {
+                let Some((_who, intent)) = convo::addressed(body, &[name.as_str()]) else {
                     continue;
                 };
                 if !asked_this_pass.insert(intent.ask.clone()) {
@@ -210,7 +228,7 @@ fn run() -> Result<(), String> {
                 };
                 // Chat only in a discussion (nothing to propose an edit to there).
                 let result = agent.handle(id, &intent, false, &on_stage);
-                log_timing(&a.runtime, id, &question, &marks.borrow(), Instant::now(), result.is_ok());
+                log_timing(&runtime, id, &question, &marks.borrow(), Instant::now(), result.is_ok());
                 match result {
                     Ok((reply, reply_id)) => {
                         // Mark the agent's own reply seen so it never answers itself — the tiny
@@ -221,7 +239,7 @@ fn run() -> Result<(), String> {
                         posted += 1;
                         println!(
                             "@{} replied in {}: {}",
-                            a.name,
+                            name,
                             &id[..8.min(id.len())],
                             reply.chars().take(60).collect::<String>()
                         );
@@ -231,8 +249,8 @@ fn run() -> Result<(), String> {
                         // user and record the notice so it is not itself re-processed.
                         eprintln!("turn failed in {id}: {e}");
                         let notice = format!("⚠️ I couldn't finish that one — {e}. Try again, or simplify it.");
-                        let email = format!("{}@fm-agents.local", a.name);
-                        if let Ok(meta) = agent.fm.reply_as(id, &notice, &a.name, &email) {
+                        let email = format!("{}@fm-agents.local", name);
+                        if let Ok(meta) = agent.fm.reply_as(id, &notice, &name, &email) {
                             posted += 1;
                             if let Some(rid) = meta["id"].as_str() {
                                 handled.insert(rid.to_string());
