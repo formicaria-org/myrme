@@ -84,7 +84,9 @@ fn run() -> Result<(), String> {
         .stdout(Stdio::null())
         .stderr(Stdio::null());
     let model_bytes = std::fs::metadata(&a.model_gguf).map(|m| m.len()).unwrap_or(500_000_000);
-    let model = SupervisedModel::launch(cmd, SystemMonitor, &Need::new(model_bytes, a.headroom), Limits::conservative())?;
+    // Resident, not one-shot: no wall-clock cliff (a per-turn cap is already on the model call), so it
+    // stays warm for the whole session instead of being SIGKILLed after 5 minutes.
+    let model = SupervisedModel::launch(cmd, SystemMonitor, &Need::new(model_bytes, a.headroom), Limits::resident())?;
     wait_ready(a.model_port);
 
     let agent = Agent {
@@ -129,9 +131,19 @@ fn run() -> Result<(), String> {
             }
         }
     }
+    // Poll fast right after activity, then ease off toward POLL_MAX while idle — snappy when the user
+    // is talking, near-free when they are not (the Android-battery concern). The heartbeat and the
+    // full rescan are time-based, so they stay regular even as the poll backs off.
+    const HEARTBEAT: Duration = Duration::from_secs(5);
+    const FORCE_SCAN: Duration = Duration::from_secs(60);
+    let poll_min = Duration::from_secs(a.poll_secs.max(1));
+    let poll_max = Duration::from_secs(30);
+    let mut interval = poll_min;
     let mut last_full_scan = Instant::now();
+    agent.fm.present(&a.name); // show online at once, before the first heartbeat tick
+    let mut last_hb = Instant::now();
     loop {
-        std::thread::sleep(Duration::from_secs(a.poll_secs));
+        std::thread::sleep(interval);
         if model.finished() {
             println!("model runtime ended — the model server exited (see the log above for why).");
             break;
@@ -142,21 +154,23 @@ fn run() -> Result<(), String> {
             break;
         }
 
-        // Heartbeat: tell fm-serve we're alive and what we're called, so the app can show the
-        // assistant as online, offer it in the @-picker, and warn (instead of going silent) when a
-        // mention arrives while it is off.
-        agent.fm.present(&a.name);
+        // Heartbeat at most every HEARTBEAT, independent of the (backing-off) poll cadence, so the app
+        // keeps seeing the assistant online and can warn instead of going silent when it is off.
+        if last_hb.elapsed() >= HEARTBEAT {
+            agent.fm.present(&a.name);
+            last_hb = Instant::now();
+        }
 
-        // Most polls use the cheap count-skip, but every ~15s do a full rescan regardless — so a
-        // message can never be *permanently* missed if a count ever fails to reflect a new message.
-        let force_scan = last_full_scan.elapsed() >= Duration::from_secs(15);
+        // Cheap count-skip most polls; a full rescan only occasionally, so a message can never be
+        // *permanently* missed if a count ever fails to reflect a new one.
+        let force_scan = last_full_scan.elapsed() >= FORCE_SCAN;
         if force_scan {
             last_full_scan = Instant::now();
         }
 
-        let Ok(discs) = agent.fm.discussions() else { continue };
-        let Some(arr) = discs.as_array() else { continue };
-        for d in arr {
+        let mut worked = false; // answered anything this poll? then snap back to fast polling
+        let discs = agent.fm.discussions().ok();
+        for d in discs.as_ref().and_then(|d| d.as_array()).into_iter().flatten() {
             let Some(id) = d["id"].as_str() else { continue };
             let count = d["count"].as_u64().unwrap_or(0);
             if !force_scan && last_count.get(id) == Some(&count) {
@@ -182,6 +196,7 @@ fn run() -> Result<(), String> {
                 if !asked_this_pass.insert(intent.ask.clone()) {
                     continue; // a duplicate of one we are already answering this pass — coalesce
                 }
+                worked = true; // real work — keep polling fast while the conversation is live
 
                 // Show the user what the whole pipeline is doing, stage by stage, then clear it when
                 // the reply lands or the turn fails — the wheel never spins forever.
@@ -231,6 +246,8 @@ fn run() -> Result<(), String> {
             // plus the replies we posted), so we skip it next poll until something new actually lands.
             last_count.insert(id.to_string(), count + posted);
         }
+        // Snap back to fast polling on activity; otherwise ease off toward the idle cap.
+        interval = if worked { poll_min } else { (interval * 2).min(poll_max) };
     }
 
     let outcome = model.wait();

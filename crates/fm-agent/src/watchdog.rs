@@ -59,7 +59,9 @@ pub struct Limits {
 }
 
 impl Limits {
-    /// Conservative defaults — a caller tunes them per device (a phone floor is not a laptop floor).
+    /// Conservative defaults for a **one-shot** run — a caller tunes them per device (a phone floor is
+    /// not a laptop floor). The 300 s bound is a per-*run* backstop; do not use it for a resident
+    /// server (see [`resident`](Self::resident)).
     pub fn conservative() -> Self {
         Self {
             min_mem_available_bytes: 1_500_000_000, // keep ~1.5 GB free
@@ -67,6 +69,15 @@ impl Limits {
             max_duration: Duration::from_secs(300),
             poll_interval: Duration::from_secs(2),
         }
+    }
+
+    /// For a model kept **warm for a whole session** (the @name watcher: "on with the app, off with
+    /// it"). Same device-safety floors and the off-switch, but **no wall-clock bound** — a per-turn
+    /// cap belongs on the model *call* (`OpenAiStep`'s own timeout), not on the long-lived server, or
+    /// the assistant is SIGKILLed mid-session (the 300 s cliff). A resource breach or `stop()` still
+    /// ends it promptly.
+    pub fn resident() -> Self {
+        Self { max_duration: Duration::MAX, ..Self::conservative() }
     }
 }
 
