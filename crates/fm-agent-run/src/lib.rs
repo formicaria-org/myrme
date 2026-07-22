@@ -3,6 +3,10 @@
 //! running fm-serve (the single vault writer — no second FileStore), and retrieval is RAG over the
 //! vault (FTS via fm-serve) plus optional web search through a local proxy.
 
+/// In-app model downloader (resumable + checksum). Agent-only — behind the `download` feature so a
+/// build that runs an already-provisioned model links no HTTPS/TLS stack.
+#[cfg(feature = "download")]
+pub mod fetch;
 pub mod fmserve;
 pub mod manifest;
 pub mod watch;

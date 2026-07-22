@@ -21,7 +21,19 @@ path = "src/chat.rs"
 name = "agent-serve"
 path = "src/serve.rs"
 
+# The in-app model **downloader** (resumable + checksum). A phone has no `curl` to fetch the GGUF on
+# first enable, and the desktop's `fetch.sh` is a shell script — this feature is the Rust equivalent
+# both can call. Off by default so a build running an already-provisioned model stays lean; the mobile
+# `agent` feature turns it on. `ureq` is a small blocking HTTPS client whose default `rustls` TLS is
+# pure-Rust (bundled Mozilla roots via webpki-roots), so it needs no system TLS and cross-compiles to
+# Android; `sha2` verifies the download. Both are **agent-only** deps — the notes core links neither
+# (the owner's ruling: the core stays minimal, an agent may carry its own heavier deps).
+[features]
+download = ["dep:ureq", "dep:sha2"]
+
 [dependencies]
 fm-agent = { path = "../fm-agent" }
 clap = { workspace = true }
 serde_json = "1"
+ureq = { version = "2", optional = true }
+sha2 = { version = "0.11", optional = true }
