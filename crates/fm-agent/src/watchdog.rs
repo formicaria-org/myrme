@@ -231,8 +231,11 @@ impl ResourceMonitor for SystemMonitor {
 fn proc_sample() -> Result<Resources, WatchdogError> {
     let meminfo = std::fs::read_to_string("/proc/meminfo")
         .map_err(|e| WatchdogError::new(format!("cannot read /proc/meminfo: {e}")))?;
-    let loadavg = std::fs::read_to_string("/proc/loadavg")
-        .map_err(|e| WatchdogError::new(format!("cannot read /proc/loadavg: {e}")))?;
+    // `/proc/loadavg` is **denied to apps on Android** (SELinux) — and load is not the governor on a
+    // phone anyway; memory is (see `Limits::resident`). So an unreadable loadavg is tolerated as "load
+    // unknown", and only unreadable MEMORY fails closed — that is what actually prevents an OOM/crash.
+    // On the desktop loadavg is always readable, so nothing changes there.
+    let loadavg = std::fs::read_to_string("/proc/loadavg").unwrap_or_default();
     parse_proc(&meminfo, &loadavg, proc_cores())
 }
 
@@ -262,11 +265,13 @@ fn parse_proc(meminfo: &str, loadavg: &str, cores: f32) -> Result<Resources, Wat
         .find_map(|l| l.strip_prefix("MemAvailable:"))
         .and_then(|v| v.trim().trim_end_matches("kB").trim().parse::<u64>().ok())
         .ok_or_else(|| WatchdogError::new("no MemAvailable in /proc/meminfo"))?;
+    // Unreadable/absent loadavg (Android, or a `/proc` without it) ⇒ load unknown = 0.0: memory does
+    // the gating. We never fail the whole sample for a missing *load* figure.
     let load1 = loadavg
         .split_whitespace()
         .next()
         .and_then(|v| v.parse::<f32>().ok())
-        .ok_or_else(|| WatchdogError::new("could not parse /proc/loadavg"))?;
+        .unwrap_or(0.0);
     Ok(Resources {
         mem_available_bytes: mem_available_kb * 1024,
         load_per_core: load1 / cores.max(1.0),
@@ -319,6 +324,17 @@ mod tests {
     #[test]
     fn parse_proc_errs_without_memavailable() {
         assert!(parse_proc("MemTotal: 1 kB\n", "0.1 0.1 0.1 1/1 1", 1.0).is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn parse_proc_tolerates_an_unreadable_loadavg() {
+        // Android denies apps /proc/loadavg — an empty string must NOT fail the sample; memory still
+        // parses and load falls back to 0 (memory is the governor on a phone).
+        let mem = "MemAvailable:  3000000 kB\n";
+        let r = parse_proc(mem, "", 4.0).unwrap();
+        assert_eq!(r.mem_available_bytes, 3_000_000 * 1024);
+        assert_eq!(r.load_per_core, 0.0);
     }
 
     /// A monitor that returns a canned reading (or a failure), for supervision tests.
