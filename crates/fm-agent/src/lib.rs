@@ -301,65 +301,30 @@ fn strip_wrapping_fence(s: &str) -> String {
     t.to_string()
 }
 
-/// A tiny model sometimes ignores "don't repeat the question" and parrots the prompt back around the
-/// real answer. Two observed shapes: it echoes first and answers under an invented `# Answer` heading,
-/// or it answers first and then trails the echoed question/turns. We clean both with signals we can
-/// trust exactly — never guessing at the prose:
-/// 1. If an `Answer` heading is present, keep only the text after the *last* one (the answer-last shape).
-/// 2. Then cut at the first line that re-states the exact `question` we sent (the trailing-echo shape) —
-///    the system prompt forbids repeating the question, so a clean reply never contains that line.
-/// A well-behaved reply has neither signal and is returned unchanged.
+/// A tiny model sometimes sprinkles the prompt's own section headings into its reply, restates the
+/// question, or adds a bare `Answer:` label. Drop **exactly those lines** — the strings we handed the
+/// model and told it not to reproduce — and keep everything else. Deliberately minimal: it removes only
+/// lines it is certain are echo and never guesses at prose, and [`normalize_answer`] guarantees it
+/// never empties a real answer. (This replaced a cleverer two-shape stripper whose substring
+/// question-match ate legitimate answers — the "I couldn't get a usable answer" bug on the phone.)
 fn strip_echoed_prompt(s: &str, question: &str) -> String {
-    let mut after = None;
-    let mut off = 0usize;
-    for line in s.split_inclusive('\n') {
-        let key = line.trim().trim_start_matches('#').trim().trim_end_matches(':').trim();
-        if key.eq_ignore_ascii_case("answer") {
-            after = Some(off + line.len());
-        }
-        off += line.len();
-    }
-    let body = match after {
-        Some(i) => &s[i..],
-        None => s,
-    };
-
-    // Cut at the first line that is one of the section headings we injected into the prompt, or that
-    // repeats the exact question. These are strings the model was *given*, not asked to produce (the
-    // system prompt forbids headings and repeating the question), so their appearance is the echo
-    // boundary — everything before it is the real answer. A clean reply has none and is kept whole.
-    // The heading set is the *same* `heading::ALL` the assemblers write, so the two cannot drift.
     let q = question.trim().to_lowercase();
-    let is_echo_line = |line: &str| {
-        let l = line.trim();
-        heading::ALL.iter().any(|h| h.eq_ignore_ascii_case(l))
-            || (!q.is_empty() && l.to_lowercase().contains(&q))
-    };
-    // Answer-first: keep everything up to the first echoed heading/question line.
-    let mut kept = String::new();
-    for line in body.lines() {
-        if is_echo_line(line) {
-            break;
-        }
-        kept.push_str(line);
-        kept.push('\n');
-    }
-    let kept = kept.trim();
-    if !kept.is_empty() {
-        return kept.to_string();
-    }
-    // The echo *starts* with a heading (answer-last, no `# Answer` marker): the answer, if any, is
-    // whatever follows the last echoed heading/question line. Best remaining guess; a clean reply
-    // never reaches here (it has no such line).
-    let mut cut = 0usize;
-    let mut off = 0usize;
-    for line in body.split_inclusive('\n') {
-        if is_echo_line(line) {
-            cut = off + line.len();
-        }
-        off += line.len();
-    }
-    body[cut..].trim().to_string()
+    s.lines()
+        .filter(|line| {
+            let l = line.trim();
+            let bare = l.trim_start_matches('#').trim().trim_end_matches(':').trim();
+            // An injected section heading (with or without its leading `#`), a bare "Answer" label the
+            // model invents, or a line that exactly restates the question — all pure echo. Anything
+            // else (including an answer that merely *mentions* the topic) is kept.
+            let is_heading = heading::ALL.iter().any(|h| {
+                h.eq_ignore_ascii_case(l) || h.trim_start_matches('#').trim().eq_ignore_ascii_case(bare)
+            });
+            !(is_heading || bare.eq_ignore_ascii_case("answer") || (!q.is_empty() && l.to_lowercase() == q))
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string()
 }
 
 /// The section headings we inject into a prompt. Defined **once** so the assemblers and the
@@ -380,7 +345,12 @@ mod heading {
 /// strip an echoed prompt, and cap the length. The single seam for every small-model output tic, so a
 /// new tic is fixed here rather than sprinkled through `turn`.
 fn normalize_answer(content: &str, question: &str, max_chars: Option<usize>) -> String {
-    let cleaned = strip_echoed_prompt(&strip_wrapping_fence(content), question);
+    let unfenced = strip_wrapping_fence(content);
+    let stripped = strip_echoed_prompt(&unfenced, question);
+    // **Never let cleanup empty a real answer.** If stripping removed everything but the model *did*
+    // produce text, keep the unstripped text — a stray echo line is far better than the user seeing
+    // "(I couldn't get a usable answer from the model)". This is the guard the phone bug needed.
+    let cleaned = if stripped.trim().is_empty() { unfenced.trim().to_string() } else { stripped };
     crate::convo::cap_reply(&cleaned, max_chars)
 }
 
@@ -570,22 +540,30 @@ mod tests {
     }
 
     #[test]
-    fn an_echoed_prompt_is_reduced_to_the_answer_either_shape() {
+    fn strip_echoed_prompt_drops_only_echo_lines() {
         let q = "what is the capital of France?";
-        // Answer-last: the model parrots the prompt, then answers under an invented heading.
-        let echoed = "# Conversation so far\n- hi\n\n# Question\nwhat is the capital of France?\n\n# Answer\nThe capital of France is Paris.";
+        // Injected headings and an exact restatement of the question are dropped; the answer survives.
+        let echoed = "# Question\nwhat is the capital of France?\n\nThe capital of France is Paris.";
         assert_eq!(super::strip_echoed_prompt(echoed, q), "The capital of France is Paris.");
-        // Answer-first: the model answers, then trails an echo of the question/turns.
-        let trailing = "The capital of France is Paris.\n- The capital of France is Paris.\n- @agent what is the capital of France?\n\n#";
-        assert_eq!(super::strip_echoed_prompt(trailing, q), "The capital of France is Paris.\n- The capital of France is Paris.");
-        // Answer-first, trailing an echoed prompt section heading.
-        let heading_echo = "The capital of France is Paris.\n\n# Notes and search results\n## 01ABC";
+        // A heading without its leading '#' (as a small model often writes it) is still recognised.
+        let heading_echo = "The capital of France is Paris.\n\nNotes and search results";
         assert_eq!(super::strip_echoed_prompt(heading_echo, q), "The capital of France is Paris.");
-        // Echo that STARTS with a heading (answer-last, no `# Answer`): take what follows the last one.
-        let starts_heading = "# Conversation so far\n- hi\n# Notes and search results\nParis is the capital.";
-        assert_eq!(super::strip_echoed_prompt(starts_heading, q), "Paris is the capital.");
-        // A clean reply (no heading, no echoed question) is returned unchanged.
+        // A bare "Answer" label the model invents is dropped, the answer beneath it kept.
+        let labeled = "Answer:\nThe capital of France is Paris.";
+        assert_eq!(super::strip_echoed_prompt(labeled, q), "The capital of France is Paris.");
+        // A clean reply that merely *mentions* the topic (not the exact question line) is kept whole —
+        // the old substring match wrongly ate answers like this.
         assert_eq!(super::strip_echoed_prompt("Paris is the capital of France.", q), "Paris is the capital of France.");
+    }
+
+    #[test]
+    fn normalize_answer_never_empties_a_non_empty_reply() {
+        // The phone bug: the model produced text, cleanup removed all of it, the user saw the fallback.
+        // Even a reply that is *only* echo must return something, never an empty string.
+        assert!(!super::normalize_answer("# Answer", "what is 2+2?", None).is_empty());
+        assert!(!super::normalize_answer("# Question\nwhat is 2+2?", "what is 2+2?", None).is_empty());
+        // And a real answer is returned intact.
+        assert_eq!(super::normalize_answer("2 + 2 = 4.", "what is 2+2?", None), "2 + 2 = 4.");
     }
 
     #[test]
