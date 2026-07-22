@@ -70,9 +70,18 @@ impl FmServe {
         self.call("search", json!({ "query": query }))
     }
 
-    /// Post a message to a note's discussion.
+    /// Post a message to a note's discussion (unattributed — used to record a *user's* message).
     pub fn reply(&self, note: &str, body: &str) -> Result<Value, String> {
         self.call("reply", json!({ "id": note, "body": body }))
+    }
+
+    /// Post the agent's **own** message, attributed to its model identity `(name, email)`, so the
+    /// discussion shows who said it (the same git-author provenance a proposal already carries).
+    pub fn reply_as(&self, note: &str, body: &str, name: &str, email: &str) -> Result<Value, String> {
+        self.call(
+            "reply",
+            json!({ "id": note, "body": body, "authorName": name, "authorEmail": email }),
+        )
     }
 
     /// Create a proposal edit to `note`, attributed to the model `(name, email)`.

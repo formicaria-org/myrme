@@ -216,7 +216,8 @@ fn run() -> Result<(), String> {
                         // user and record the notice so it is not itself re-processed.
                         eprintln!("turn failed in {id}: {e}");
                         let notice = format!("⚠️ I couldn't finish that one — {e}. Try again, or simplify it.");
-                        if let Ok(meta) = agent.fm.reply(id, &notice) {
+                        let email = format!("{}@fm-agents.local", a.name);
+                        if let Ok(meta) = agent.fm.reply_as(id, &notice, &a.name, &email) {
                             posted += 1;
                             if let Some(rid) = meta["id"].as_str() {
                                 handled.insert(rid.to_string());

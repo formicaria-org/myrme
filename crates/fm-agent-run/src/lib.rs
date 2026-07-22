@@ -84,13 +84,14 @@ impl Agent {
         } else {
             reply
         };
+        let email = format!("{}@fm-agents.local", self.model);
         let mut reply_id = None;
         if turn.reply.is_some() {
-            let meta = self.fm.reply(note, &reply)?;
+            // Attributed to the model, so the discussion labels who said it.
+            let meta = self.fm.reply_as(note, &reply, &self.model, &email)?;
             reply_id = meta["id"].as_str().map(|s| s.to_string());
         }
         if let Some(body) = &turn.proposal {
-            let email = format!("{}@fm-agents.local", self.model);
             self.fm.create_proposal(note, body, &self.model, &email)?;
         }
         Ok((reply, reply_id))
