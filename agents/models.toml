@@ -2,40 +2,40 @@
 # and run. `fetch.sh` (or `pixi run fetch-model [name]`) reads this, downloads the runtime and the
 # chosen model into the gitignored `runtime/` and `models/` folders beside this file, and prints how
 # to serve it. Nothing here is huge, secret, or committed: only this manifest travels; the weights
-# and the binary stay local.
+# and the binary stay local. The mobile app embeds this file (include_str!) for its first run.
 #
-# Design stance (owner, 2026-07-22): **stay on the lightest model.** Quality comes from feeding it
-# good context (RAG: the user's own notes + clean web text), not from a bigger model. So the default
-# is the smallest that works; the larger entries exist only as deliberate, measured step-ups.
+# Design stance (owner, 2026-07-22): **one measured pick per device, nothing else.** Chosen by real
+# on-device benchmarks (docs/context/model-benchmarks-2026-07-22.md) and leaderboard evidence
+# (docs/context/model-selection-research-2026-07-22.md), weighted for instruction-following +
+# tool/search use (BFCL × IFEval), explicitly not code. The two devices differ, so the defaults differ.
 
-# The model fetched when no name is given.
-default = "lfm2.5-230m"
+# The default model — the LAPTOP research pick. `default_mobile` overrides it on the phone (a smaller
+# model that fits a phone's RAM and stays responsive).
+default = "qwen3-4b-2507"
+default_mobile = "lfm2.5-1.2b"
 
 # Prebuilt llama.cpp server (CPU), pinned for reproducibility. A newer build is a deliberate bump.
 runtime_url = "https://github.com/ggml-org/llama.cpp/releases/download/b10076/llama-b10076-bin-ubuntu-x64.tar.gz"
 
-# Default serve settings — small context bounds the KV cache; threads leave the machine responsive.
+# Serve settings. `threads` is the laptop value (8 physical cores); `threads_mobile` is the phone's —
+# 4 = the Dimensity 7300's big cores, which is *both* fastest and leaves the little cores for the UI
+# (measured). Small `ctx` bounds the KV cache.
 port = 8081
 ctx = 2048
-threads = 4
+threads = 8
+threads_mobile = 4
 
 # Each model: `name` (the key you pass to fetch), its Hugging Face `repo` and `file`, and a note.
 # Keep `name`, then `repo`, then `file` in that order — fetch.sh reads them positionally.
 
 [[models]]
-name = "lfm2.5-230m"
-repo = "LiquidAI/LFM2.5-230M-GGUF"
-file = "LFM2.5-230M-Q4_K_M.gguf"
-note = "the default — lightest phone-tier model (~150 MB, ~300 MB running). Proven on this laptop."
-
-[[models]]
-name = "lfm2.5-350m"
-repo = "LiquidAI/LFM2.5-350M-GGUF"
-file = "LFM2.5-350M-Q4_K_M.gguf"
-note = "a small step up if 230M's summaries prove too thin — still tiny."
+name = "qwen3-4b-2507"
+repo = "unsloth/Qwen3-4B-Instruct-2507-GGUF"
+file = "Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
+note = "LAPTOP pick — IFEval 83.4 / BFCL-v3 61.9 (best small-model tool-calling); ~2.4 GB, ~14 tok/s on the i7 CPU, fits the RTX 3050 4 GB for a future CUDA build. Non-thinking Instruct (not -Thinking, not -Coder)."
 
 [[models]]
 name = "lfm2.5-1.2b"
 repo = "LiquidAI/LFM2.5-1.2B-Instruct-GGUF"
 file = "LFM2.5-1.2B-Instruct-Q4_K_M.gguf"
-note = "the heaviest we'd consider; a measured, deliberate choice, not a default."
+note = "PHONE pick — IFEval 86.2 / BFCL-v3 49.1, top of its size tier; measured 15.9 tok/s, ~1.4 GB resident on the Dimensity 7300. Runs smoothly at 4 threads without blocking the UI."

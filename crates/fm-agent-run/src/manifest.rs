@@ -23,14 +23,20 @@ pub struct Model {
 
 /// The runtime defaults and the model list from `models.toml`.
 pub struct Manifest {
-    /// The model run when none is named.
+    /// The model run when none is named (the laptop/desktop default).
     pub default: String,
+    /// The phone's default model, when it differs (a phone can't hold the laptop model). Falls back
+    /// to [`default`](Self::default) — read it through [`mobile_default`](Self::mobile_default).
+    pub default_mobile: Option<String>,
     /// The model server port.
     pub port: u16,
     /// Context window (bounds the KV cache).
     pub ctx: u32,
-    /// Inference threads.
+    /// Inference threads (the laptop value).
     pub threads: u32,
+    /// The phone's thread count, when it differs (its big-core count). Falls back to
+    /// [`threads`](Self::threads) — read it through [`mobile_threads`](Self::mobile_threads).
+    pub threads_mobile: Option<u32>,
     /// Every catalogued model.
     models: Vec<Model>,
 }
@@ -47,6 +53,7 @@ impl Manifest {
     /// default, unknown keys are skipped. (Kept `pub` so the parse is unit-tested without a file.)
     pub fn parse(text: &str) -> Self {
         let (mut default, mut port, mut ctx, mut threads) = (String::new(), 8081u16, 2048u32, 4u32);
+        let (mut default_mobile, mut threads_mobile): (Option<String>, Option<u32>) = (None, None);
         let mut models: Vec<Model> = Vec::new();
         // The block currently being parsed. `Some` ⇒ we are inside a `[[models]]` block (so top-level
         // keys no longer apply); a block is committed on the next `[[models]]` or at EOF, when it has
@@ -85,15 +92,27 @@ impl Manifest {
                 // Top-level (before any [[models]]).
                 None => match key {
                     "default" => default = val.to_string(),
+                    "default_mobile" => default_mobile = Some(val.to_string()),
                     "port" => port = val.parse().unwrap_or(port),
                     "ctx" => ctx = val.parse().unwrap_or(ctx),
                     "threads" => threads = val.parse().unwrap_or(threads),
+                    "threads_mobile" => threads_mobile = val.parse().ok(),
                     _ => {}
                 },
             }
         }
         flush(&mut cur, &mut models); // the last block has no trailing [[models]] to flush it
-        Manifest { default, port, ctx, threads, models }
+        Manifest { default, default_mobile, port, ctx, threads, threads_mobile, models }
+    }
+
+    /// The phone's default model name — `default_mobile` if set, else the shared `default`.
+    pub fn mobile_default(&self) -> &str {
+        self.default_mobile.as_deref().unwrap_or(&self.default)
+    }
+
+    /// The phone's thread count — `threads_mobile` if set, else the shared `threads`.
+    pub fn mobile_threads(&self) -> u32 {
+        self.threads_mobile.unwrap_or(self.threads)
     }
 
     /// The gguf filename for `name`, or `None` if the catalogue has no such model.
@@ -171,6 +190,20 @@ mod tests {
             "[[models]]\nname = \"x\"\nrepo = \"r/x\"\nfile = \"x.gguf\"\nsha256 = \"abc123\"\n",
         );
         assert_eq!(m.model("x").unwrap().sha256.as_deref(), Some("abc123"));
+    }
+
+    #[test]
+    fn per_device_defaults_fall_back_to_the_shared_ones() {
+        let m = Manifest::parse(
+            "default = \"big\"\ndefault_mobile = \"small\"\nthreads = 8\nthreads_mobile = 4\n",
+        );
+        assert_eq!(m.default, "big");
+        assert_eq!(m.mobile_default(), "small");
+        assert_eq!((m.threads, m.mobile_threads()), (8, 4));
+        // Absent per-device fields fall back to the shared value.
+        let m2 = Manifest::parse("default = \"only\"\nthreads = 6\n");
+        assert_eq!(m2.mobile_default(), "only");
+        assert_eq!(m2.mobile_threads(), 6);
     }
 
     #[test]
