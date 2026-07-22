@@ -9,6 +9,8 @@
 pub mod fetch;
 pub mod fmserve;
 pub mod manifest;
+/// Locate the Android native-library dir (where the bundled model runtime lives) in pure Rust.
+pub mod nativelib;
 pub mod watch;
 
 use fm_agent::openai::OpenAiStep;
