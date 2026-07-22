@@ -8,7 +8,7 @@
 
 use clap::Parser;
 use fm_agent::convo;
-use fm_agent_run::fmserve::FmServe;
+use fm_agent_run::fmserve::{FmServe, VaultAccess};
 use fm_agent_run::Agent;
 use std::io::{BufRead, Write};
 

@@ -1,14 +1,55 @@
-//! A tiny client for a **running `fm-serve`** — the agent's one and only store. It POSTs
-//! `/api/<command>` (the exact JSON surface the browser uses), so **`fm-serve` stays the single vault
-//! writer** and the agent never opens a second `FileStore` — no double storage, safe alongside the
-//! live app. A non-browser client sends no `Origin` header, which passes `fm-serve`'s CSRF guard.
+//! The **vault-access seam** the agent runs on, and its desktop implementation.
 //!
-//! Hand-rolled over the shared `fm_agent::http` plumbing (no framework, no TLS — localhost only).
+//! [`VaultAccess`] is the whole surface the runner needs from a vault — read a note/thread, list
+//! discussions, search, post a reply, propose an edit, and report presence/activity. [`Agent`] is
+//! generic over it (`fm_agent::StudyAssistant` already did the same for the model and the web), so the
+//! *same* orchestrator runs against any implementation.
+//!
+//! [`FmServe`] is the **desktop** impl: it POSTs `/api/<command>` to a running `fm-serve` (the exact
+//! JSON surface the browser uses), so `fm-serve` stays the single vault writer — the agent never opens
+//! a second `FileStore`, no double storage, safe alongside the live app. A non-browser client sends no
+//! `Origin` header, which passes `fm-serve`'s CSRF guard. Hand-rolled over the shared `fm_agent::http`
+//! plumbing (no framework, no TLS — localhost only).
+//!
+//! A mobile impl (calling `fm_app::dispatch` in-process, where there is no localhost HTTP server) is a
+//! second implementor of this trait — that is the point of the seam, and the port to Android rides on
+//! it with no change to [`Agent`].
+//!
+//! [`Agent`]: crate::Agent
 
 use fm_agent::http;
 use serde_json::{json, Value};
 use std::time::Duration;
 
+/// Everything the runner needs from a vault. One trait so the same [`Agent`](crate::Agent) runs over
+/// HTTP on the desktop ([`FmServe`]) and in-process on a phone. Reads/writes return raw `Value` (the
+/// same JSON the command surface speaks); presence/activity are best-effort and cannot fail a turn.
+pub trait VaultAccess {
+    /// A note's full detail (has `body`, `title`).
+    fn get(&self, id: &str) -> Result<Value, String>;
+    /// A note's discussion — `{ root, count, messages: [{ id, body, ... }] }`.
+    fn thread(&self, note: &str) -> Result<Value, String>;
+    /// Every first-class discussion, newest-active first — `[{ id, title, count, ... }]`.
+    fn discussions(&self) -> Result<Value, String>;
+    /// Is the vault reachable? A cheap liveness probe.
+    fn alive(&self) -> bool;
+    /// Full-text search over the vault (RAG retrieval) — `[{ id, title, preview }]`.
+    fn search(&self, query: &str) -> Result<Value, String>;
+    /// Post a message to a note's discussion, unattributed — used to record a *user's* message.
+    fn reply(&self, note: &str, body: &str) -> Result<Value, String>;
+    /// Post the agent's **own** message, attributed to its model identity `(name, email)`.
+    fn reply_as(&self, note: &str, body: &str, name: &str, email: &str) -> Result<Value, String>;
+    /// Create a proposal edit to `note`, attributed to the model `(name, email)`.
+    fn create_proposal(&self, note: &str, body: &str, name: &str, email: &str) -> Result<Value, String>;
+    /// Report the current pipeline stage for a discussion (the live "working…" wheel). Best-effort.
+    fn activity(&self, disc: &str, stage: &str, question: &str);
+    /// Clear a discussion's status — the reply landed, or the turn errored/timed out. Best-effort.
+    fn activity_done(&self, disc: &str);
+    /// Heartbeat: "this agent is alive right now," by name. Best-effort.
+    fn present(&self, name: &str);
+}
+
+/// The desktop [`VaultAccess`]: a tiny HTTP client for a running `fm-serve`.
 pub struct FmServe {
     host: String,
     port: u16,
@@ -44,70 +85,56 @@ impl FmServe {
         serde_json::from_str(resp.trim())
             .map_err(|e| format!("fm-serve {cmd} response was not JSON: {e}"))
     }
+}
 
-    /// A note's full detail (has `body`, `title`).
-    pub fn get(&self, id: &str) -> Result<Value, String> {
+impl VaultAccess for FmServe {
+    fn get(&self, id: &str) -> Result<Value, String> {
         self.call("get", json!({ "id": id }))
     }
 
-    /// A note's discussion — `{ root, count, messages: [{ id, body, ... }] }`.
-    pub fn thread(&self, note: &str) -> Result<Value, String> {
+    fn thread(&self, note: &str) -> Result<Value, String> {
         self.call("thread", json!({ "id": note }))
     }
 
-    /// Every first-class discussion, newest-active first — `[{ id, title, ... }]`.
-    pub fn discussions(&self) -> Result<Value, String> {
+    fn discussions(&self) -> Result<Value, String> {
         self.call("discussions", json!({}))
     }
 
-    /// Is fm-serve answering? A cheap liveness probe (fm-serve shuts down with the app).
-    pub fn alive(&self) -> bool {
+    fn alive(&self) -> bool {
         self.call("alive", Value::Null).is_ok()
     }
 
-    /// Full-text search over the vault (RAG retrieval) — `[{ id, title, preview }]`.
-    pub fn search(&self, query: &str) -> Result<Value, String> {
+    fn search(&self, query: &str) -> Result<Value, String> {
         self.call("search", json!({ "query": query }))
     }
 
-    /// Post a message to a note's discussion (unattributed — used to record a *user's* message).
-    pub fn reply(&self, note: &str, body: &str) -> Result<Value, String> {
+    fn reply(&self, note: &str, body: &str) -> Result<Value, String> {
         self.call("reply", json!({ "id": note, "body": body }))
     }
 
-    /// Post the agent's **own** message, attributed to its model identity `(name, email)`, so the
-    /// discussion shows who said it (the same git-author provenance a proposal already carries).
-    pub fn reply_as(&self, note: &str, body: &str, name: &str, email: &str) -> Result<Value, String> {
+    fn reply_as(&self, note: &str, body: &str, name: &str, email: &str) -> Result<Value, String> {
         self.call(
             "reply",
             json!({ "id": note, "body": body, "authorName": name, "authorEmail": email }),
         )
     }
 
-    /// Create a proposal edit to `note`, attributed to the model `(name, email)`.
-    pub fn create_proposal(&self, note: &str, body: &str, name: &str, email: &str) -> Result<Value, String> {
+    fn create_proposal(&self, note: &str, body: &str, name: &str, email: &str) -> Result<Value, String> {
         self.call(
             "create_proposal",
             json!({ "id": note, "body": body, "authorName": name, "authorEmail": email }),
         )
     }
 
-    /// Report the current pipeline stage for a discussion, so the UI can show a live "working…" wheel
-    /// with what the agent is doing (`reading your notes`, `searching the web`, `thinking`).
-    /// Best-effort: a status update must never break or slow a real turn, so failures are ignored.
-    pub fn activity(&self, disc: &str, stage: &str, question: &str) {
+    fn activity(&self, disc: &str, stage: &str, question: &str) {
         let _ = self.call("agent_activity", json!({ "discussion": disc, "stage": stage, "question": question }));
     }
 
-    /// Clear a discussion's status — the reply landed, or the turn errored/timed out. Hides the wheel.
-    pub fn activity_done(&self, disc: &str) {
+    fn activity_done(&self, disc: &str) {
         let _ = self.call("agent_activity", json!({ "discussion": disc, "done": true }));
     }
 
-    /// Heartbeat: "this agent, by this name, is alive right now." fm-serve times these out, so the app
-    /// can list online agents (the @-picker) and warn instead of going silent when one is off.
-    /// Best-effort — a missed heartbeat only briefly shows the agent as offline.
-    pub fn present(&self, name: &str) {
+    fn present(&self, name: &str) {
         let _ = self.call("agent_present", json!({ "name": name }));
     }
 }

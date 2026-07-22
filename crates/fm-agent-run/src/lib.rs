@@ -8,11 +8,13 @@ pub mod fmserve;
 use fm_agent::openai::OpenAiStep;
 use fm_agent::search::SearxngSearch;
 use fm_agent::{convo, AgentError, InputDoc, SearchHit, StudyAssistant, WebSearch};
-use fmserve::FmServe;
+use fmserve::VaultAccess;
 
-/// A configured agent bound to a running fm-serve + a warm model (+ optional web-search proxy).
-pub struct Agent {
-    pub fm: FmServe,
+/// A configured agent bound to a vault (via any [`VaultAccess`]) + a warm model (+ optional
+/// web-search proxy). Generic over the vault seam so the same runner works over HTTP on the desktop
+/// and in-process on a phone.
+pub struct Agent<V: VaultAccess> {
+    pub fm: V,
     pub model_port: u16,
     /// The model/agent name — also what a user `@name`-mentions, and the git author of its proposals.
     pub model: String,
@@ -25,7 +27,7 @@ pub struct Agent {
     pub history_budget: usize,
 }
 
-impl Agent {
+impl<V: VaultAccess> Agent<V> {
     /// Handle one already-posted user message on `note`'s discussion end to end: gather context (host
     /// note + RAG + web when `/search`), summarize old history if it overflows, run the turn, and POST
     /// the agent's reply (and a proposal when `allow_propose` and `/propose`). Returns the reply text.
@@ -188,5 +190,68 @@ struct NoWeb;
 impl WebSearch for NoWeb {
     fn search(&self, _query: &str) -> Result<Vec<SearchHit>, AgentError> {
         Err(AgentError::new("unused"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::{json, Value};
+
+    /// A `VaultAccess` with no HTTP and no fm-serve — proof the runner is decoupled from the desktop
+    /// transport. The mobile in-process impl is just another one of these.
+    #[derive(Default)]
+    struct FakeVault {
+        thread: Value,
+    }
+    impl VaultAccess for FakeVault {
+        fn get(&self, _: &str) -> Result<Value, String> {
+            Ok(Value::Null)
+        }
+        fn thread(&self, _: &str) -> Result<Value, String> {
+            Ok(self.thread.clone())
+        }
+        fn discussions(&self) -> Result<Value, String> {
+            Ok(json!([]))
+        }
+        fn alive(&self) -> bool {
+            true
+        }
+        fn search(&self, _: &str) -> Result<Value, String> {
+            Ok(json!([]))
+        }
+        fn reply(&self, _: &str, _: &str) -> Result<Value, String> {
+            Ok(Value::Null)
+        }
+        fn reply_as(&self, _: &str, _: &str, _: &str, _: &str) -> Result<Value, String> {
+            Ok(Value::Null)
+        }
+        fn create_proposal(&self, _: &str, _: &str, _: &str, _: &str) -> Result<Value, String> {
+            Ok(Value::Null)
+        }
+        fn activity(&self, _: &str, _: &str, _: &str) {}
+        fn activity_done(&self, _: &str) {}
+        fn present(&self, _: &str) {}
+    }
+
+    fn agent(fm: FakeVault) -> Agent<FakeVault> {
+        Agent {
+            fm,
+            model_port: 0,
+            model: "test".into(),
+            searxng_port: None,
+            max_reply_chars: 600,
+            retrieve: 3,
+            history_budget: 4000,
+        }
+    }
+
+    #[test]
+    fn the_runner_reads_the_thread_through_the_vault_seam_not_fm_serve() {
+        // No fm-serve, no socket — Agent runs against a plain in-memory VaultAccess, which is exactly
+        // what makes the Android in-process impl a drop-in.
+        let fm = FakeVault { thread: json!({ "messages": [{ "body": "hi" }, { "body": "there" }] }) };
+        let history = agent(fm).history("note").unwrap();
+        assert!(history.contains("hi") && history.contains("there"), "got: {history:?}");
     }
 }

@@ -11,7 +11,7 @@ use fm_agent::convo;
 use fm_agent::launch::SupervisedModel;
 use fm_agent::preflight::Need;
 use fm_agent::watchdog::{Limits, SystemMonitor};
-use fm_agent_run::fmserve::FmServe;
+use fm_agent_run::fmserve::{FmServe, VaultAccess};
 use fm_agent_run::Agent;
 use serde_json::json;
 use std::cell::RefCell;
