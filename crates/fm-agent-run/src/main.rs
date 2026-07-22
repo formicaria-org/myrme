@@ -1,31 +1,34 @@
 //! The out-of-process study-assistant runner — **how a user invokes the agent.**
 //!
-//! It reads the vault, runs the deterministic pipeline against an already-running local model, and
-//! produces a **proposal**: a `proposal/<id>` branch plus a `proposes:` note, attributed to the
-//! model, which the user reviews in the app's Collaboration view and merges. The agent edits **only**
-//! the one host note and can never touch `main` — the same guardrailed write path a person uses.
+//! It runs the deterministic pipeline against an already-running local model and produces a
+//! **proposal**: a `proposal/<id>` branch plus a `proposes:` note, attributed to the model, which the
+//! user reviews in the app's Collaboration view and merges. The agent edits **only** the one host note
+//! and can never touch `main` — the same guardrailed write path a person uses.
 //!
-//! Typical use (after `pixi run fetch-model` and serving the model it prints):
+//! All vault I/O goes through a running `fm-serve` (the [`VaultAccess`] seam), never a second
+//! `FileStore` or the git binary directly: fm-serve stays the single writer (no SQLite race), and the
+//! path is identical to the resident agent's — the same code that will run in-process on Android.
+//!
+//! Typical use (formicaria running, after `pixi run fetch-model` and serving the model it prints):
 //!
 //! ```text
-//! pixi run agent-propose --vault . --note <ULID> --ask "Summarize and tidy this"
-//! pixi run agent-propose --vault . --note <ULID> --ask "Explain X" --input <ULID> --search "X basics"
+//! pixi run agent-propose --note <ULID> --ask "Summarize and tidy this"
+//! pixi run agent-propose --note <ULID> --ask "Explain X" --input <ULID> --search "X basics"
 //! ```
 
 use clap::Parser;
 use fm_agent::openai::OpenAiStep;
 use fm_agent::search::SearxngSearch;
 use fm_agent::{AgentError, InputDoc, ResearchRequest, SearchHit, StudyAssistant, WebSearch};
-use fm_core::{FileStore, Store};
-use std::path::PathBuf;
+use fm_agent_run::fmserve::{FmServe, VaultAccess};
 
 /// Ask the local study assistant to propose a change to one note.
 #[derive(Parser)]
 #[command(name = "fm-agent-run", about = "Propose a study-assistant edit to one note (never main).")]
 struct Args {
-    /// The vault: a git repo of notes.
-    #[arg(long)]
-    vault: PathBuf,
+    /// The running fm-serve to read/write through (start formicaria first).
+    #[arg(long, default_value_t = 8765)]
+    serve_port: u16,
     /// The note to improve. The proposal edits ONLY this note.
     #[arg(long)]
     note: String,
@@ -64,19 +67,26 @@ fn main() {
 }
 
 fn run(args: Args) -> Result<(), String> {
-    let mut store = FileStore::open(&args.vault).map_err(|e| e.to_string())?;
+    let fm = FmServe::local(args.serve_port);
+    if !fm.alive() {
+        return Err(format!(
+            "fm-serve is not answering on :{} — start formicaria first",
+            args.serve_port
+        ));
+    }
 
-    // Gather the explicitly-named inputs — the agent reads these and nothing else.
+    // Gather the explicitly-named inputs — the agent reads these and nothing else. Through the seam,
+    // so fm-serve resolves each note (across vaults) and stays the single reader/writer.
     let mut inputs = Vec::new();
     for id in &args.inputs {
-        let oid = id.parse().map_err(|_| format!("not a note id: {id}"))?;
-        let obj = store
-            .get(oid)
-            .map_err(|e| e.to_string())?
-            .ok_or_else(|| format!("no such input note: {id}"))?;
+        let v = fm.get(id)?;
+        let body = v["body"].as_str().unwrap_or_default();
+        if body.is_empty() {
+            return Err(format!("no such input note: {id}"));
+        }
         inputs.push(InputDoc {
-            label: obj.title.clone().unwrap_or_else(|| id.clone()),
-            text: obj.body.clone(),
+            label: v["title"].as_str().unwrap_or(id).to_string(),
+            text: body.to_string(),
         });
     }
 
@@ -96,31 +106,16 @@ fn run(args: Args) -> Result<(), String> {
     }
     .map_err(|e| e.to_string())?;
 
-    // Turn the draft into a guardrailed proposal, attributed to the model. The vault's own
-    // `vault.json` sets the size limits; a breach is refused, never truncated.
-    let limits = fm_core::descriptor::Descriptor::read(&args.vault)
-        .map_err(|e| e.to_string())?
-        .proposal_limits;
+    // The proposal is created through fm-serve — the *same* guardrailed write path the resident agent
+    // and a person use: the branch + `proposes:` note, attributed to the model, size-limited by the
+    // target vault's own `vault.json` (refused, never truncated), committed by the single writer.
     let email = format!("{}@fm-agents.local", args.model);
-    let prop = fm_app::commands::create_proposal(
-        &mut store,
-        &args.vault,
-        &draft.host_note,
-        &draft.new_body,
-        &limits,
-        Some((args.model.as_str(), email.as_str())),
-    )
-    .map_err(|e| e.to_string())?;
-
-    // Commit the proposal note so it lists in Collaboration after a restart (the branch is already
-    // its own commit). Best-effort, mirroring the app's own path.
-    if fm_core::git::available() {
-        let _ = fm_core::git::commit_all(&args.vault, "backup: proposal", &store.written());
-    }
+    let prop = fm.create_proposal(&draft.host_note, &draft.new_body, &args.model, &email)?;
+    let prop_id = prop["id"].as_str().unwrap_or("(unknown)");
 
     println!("Proposed change to note {}", draft.host_note);
-    println!("  proposal note: {}", prop.id);
-    println!("  branch:        proposal/{}", prop.id);
+    println!("  proposal note: {prop_id}");
+    println!("  branch:        proposal/{prop_id}");
     println!("  by:            {} <{}>", args.model, email);
     if !draft.sources.is_empty() {
         println!("  sources:       {}", draft.sources.join(", "));
