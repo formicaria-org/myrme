@@ -58,11 +58,12 @@ impl<V: VaultAccess> Agent<V> {
 
         on_stage("reading the conversation");
         let history = self.history(note)?;
-        // Just the note being discussed — no cross-note RAG. Pulling "related" notes fed a tiny model
-        // a pile of unrelated fragments it then parroted back verbatim (leaked `## <ULID>` headings and
-        // other discussions' messages). Minimal context is the owner's call; `/search` still adds the web.
+        // The note being discussed, plus the notes it explicitly **links** to (text only) — bounded,
+        // relevant context the user chose by linking, not a vault-wide search (that fed a tiny model a
+        // pile of unrelated fragments it parroted back). `/search` still adds the web.
         on_stage("reading this note");
         let mut context = self.host_note(note)?;
+        context.extend(self.linked_notes(note)?);
         // Web search is best-effort: if the proxy is unreachable, don't fail the whole turn — answer
         // from notes/memory and *tell the user* the answer isn't web-grounded (a wrong answer that
         // looks researched is worse than a flagged one).
@@ -160,6 +161,32 @@ impl<V: VaultAccess> Agent<V> {
         Ok(vec![InputDoc { label: format!("{title} (this note)"), text: body.chars().take(1200).collect() }])
     }
 
+    /// The notes the host note **links to** (`[..](note:<id>)` in its body) — their *text only*, as
+    /// context. Bounded (deduped, host excluded, capped) and deliberately shallow: only what the user
+    /// chose to link, one hop, no vault-wide search — the safe half of RAG the owner asked for.
+    fn linked_notes(&self, host: &str) -> Result<Vec<InputDoc>, String> {
+        let v = self.fm.get(host)?;
+        let body = v["body"].as_str().unwrap_or_default();
+        let mut docs = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for id in note_refs(body) {
+            if id == host || !seen.insert(id.clone()) {
+                continue;
+            }
+            let Ok(note) = self.fm.get(&id) else { continue };
+            let text = note["body"].as_str().unwrap_or_default();
+            if text.trim().is_empty() {
+                continue;
+            }
+            let title = note["title"].as_str().unwrap_or("linked note");
+            docs.push(InputDoc { label: format!("{title} (linked note)"), text: text.chars().take(1200).collect() });
+            if docs.len() >= 5 {
+                break; // a note with many links must not flood a tiny model
+            }
+        }
+        Ok(docs)
+    }
+
     /// Web search via the local proxy (text-only), as context. `None` proxy ⇒ no web.
     fn web(&self, ask: &str) -> Result<Vec<InputDoc>, String> {
         let Some(port) = self.searxng_port else { return Ok(Vec::new()) };
@@ -168,6 +195,33 @@ impl<V: VaultAccess> Agent<V> {
             .into_iter()
             .map(|h| InputDoc { label: format!("web: {} ({})", h.title, h.url), text: h.text })
             .collect())
+    }
+}
+
+/// The note ids linked in a body — every `note:<ULID>` (from `[..](note:id)` or a bare ref). A ULID is
+/// exactly 26 Crockford-base32 chars, so take the 26 after each `note:` and keep only alphanumeric
+/// runs; a shorter/malformed match is skipped. Order-preserving; duplicates handled by the caller.
+fn note_refs(body: &str) -> Vec<String> {
+    body.match_indices("note:")
+        .filter_map(|(i, _)| {
+            let id: String = body[i + 5..].chars().take(26).collect();
+            (id.len() == 26 && id.chars().all(|c| c.is_ascii_alphanumeric())).then_some(id)
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod ref_tests {
+    #[test]
+    fn note_refs_extracts_linked_note_ids() {
+        let body = "See [Bayes](note:01KY42HKAM9EZNFMGCS4A99V4C) and an embed \
+                    ![x](note:01KY3ZBV913R3AA06FW7DBWQB0). A bare note:tooShort is ignored.";
+        let ids = super::note_refs(body);
+        assert_eq!(ids, vec![
+            "01KY42HKAM9EZNFMGCS4A99V4C".to_string(),
+            "01KY3ZBV913R3AA06FW7DBWQB0".to_string(),
+        ]);
+        assert!(super::note_refs("no links here").is_empty());
     }
 }
 
