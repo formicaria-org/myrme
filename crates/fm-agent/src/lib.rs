@@ -51,7 +51,8 @@ keep it short. Output only the query, nothing else.";
 /// or forbid the model its own knowledge; any provided notes/search are offered, not mandated.
 pub const CHAT_INSTRUCTION: &str = "\
 You are a study assistant in a note's discussion. Reply to the latest message directly and concisely. \
-Use the conversation and any notes or search results provided; you may also draw on your own knowledge.";
+Use the conversation and any notes or search results provided; you may also draw on your own knowledge. \
+Write any math as KaTeX: $x$ inline and $$x$$ on its own line — never \\( \\) or \\[ \\].";
 
 /// The system prompt for compressing older conversation so it fits a tiny model's context window.
 pub const SUMMARY_INSTRUCTION: &str = "\
@@ -331,12 +332,22 @@ mod heading {
     pub const SEARCH: &str = "# Search results";
 }
 
-/// Post-process a chat answer with the **safety** step only: cap the length (the "never berserk"
-/// bound). The reply is otherwise the model's own text — the owner's call: minimal post-processing,
-/// let the user see the LLM as it is. (The earlier echo-stripping / fence-unwrapping was removed: it
-/// was cosmetic, not safety, and on a tiny model it cleaned real answers down to nothing.)
+/// Post-process a chat answer: normalise math delimiters to the note vocabulary, then cap the length
+/// (the "never berserk" bound). Both are *format-correctness* steps, not the cosmetic echo-stripping we
+/// removed — the reply is otherwise the model's own text. Models emit standard LaTeX (`\(..\)`, `\[..\]`)
+/// but formicaria renders KaTeX `$..$`/`$$..$$`, so unconverted math shows as literal source in the note.
 fn normalize_answer(content: &str, max_chars: Option<usize>) -> String {
-    crate::convo::cap_reply(content.trim(), max_chars)
+    crate::convo::cap_reply(&normalize_math(content.trim()), max_chars)
+}
+
+/// Convert the standard-LaTeX math delimiters models emit into the KaTeX delimiters the renderer reads:
+/// `\[ … \]` → `$$ … $$` (display) and `\( … \)` → `$ … $` (inline). Deterministic; leaves prose and
+/// already-`$` math untouched.
+fn normalize_math(s: &str) -> String {
+    s.replace("\\[", "$$")
+        .replace("\\]", "$$")
+        .replace("\\(", "$")
+        .replace("\\)", "$")
 }
 
 /// Assemble a conversational turn's context: the prior conversation, then the retrieved notes and
@@ -512,12 +523,16 @@ mod tests {
     }
 
     #[test]
-    fn normalize_answer_is_cap_only_and_passes_the_model_through() {
-        // Minimal post-processing: the reply is the model's own text, only length-capped. No
-        // echo-stripping — a reply that mentions the question, or has headings, is shown as-is.
+    fn normalize_answer_fixes_math_and_caps_only() {
+        // No echo-stripping — a reply that mentions the question, or has headings, is shown as-is.
         assert_eq!(super::normalize_answer("2 + 2 = 4.", None), "2 + 2 = 4.");
         assert_eq!(super::normalize_answer("# Answer\nParis.", None), "# Answer\nParis.");
-        // The one safety bound: length. cap_reply trims to the cap at a word boundary.
+        // Math delimiters are converted to the note's KaTeX vocabulary so they actually render.
+        assert_eq!(super::normalize_math("display \\[ a=b \\] and inline \\( x \\)"), "display $$ a=b $$ and inline $ x $");
+        assert_eq!(super::normalize_answer("Bayes: \\[ P(H|E) \\]", None), "Bayes: $$ P(H|E) $$");
+        // Already-$ math is untouched.
+        assert_eq!(super::normalize_math("$E=mc^2$ and $$x$$"), "$E=mc^2$ and $$x$$");
+        // The safety bound: length. cap_reply trims to the cap at a word boundary.
         let long = "word ".repeat(50);
         assert!(super::normalize_answer(&long, Some(20)).chars().count() <= 21);
     }

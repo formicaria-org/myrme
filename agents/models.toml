@@ -28,6 +28,9 @@ port = 8081
 ctx = 2048
 threads = 8
 threads_mobile = 4
+# The longest reply the agent posts, in characters (a "never berserk" bound + keeps a small model
+# concise). Raise it here for longer answers — a formula + explanation needs more than the old 600.
+max_reply_chars = 2000
 
 # GPU policy for the desktop runtime: "auto" (use the best GPU when one is present, else CPU), "on"
 # (always offload), or "off" (CPU only). Default is GPU-when-available.

@@ -46,8 +46,9 @@ struct Args {
     /// GPU layers to offload (`-ngl`); defaults from the manifest's `gpu` policy (99 unless `off`).
     #[arg(long)]
     ngl: Option<u32>,
-    #[arg(long, default_value_t = 600)]
-    max_reply_chars: usize,
+    /// Longest reply in characters; defaults from the manifest's `max_reply_chars`.
+    #[arg(long)]
+    max_reply_chars: Option<usize>,
     #[arg(long, default_value_t = 3)]
     retrieve: usize,
     #[arg(long, default_value_t = 4000)]
@@ -115,7 +116,7 @@ fn run() -> Result<(), String> {
         model_port,
         model: name.clone(),
         searxng_port: a.searxng_port,
-        max_reply_chars: a.max_reply_chars,
+        max_reply_chars: a.max_reply_chars.unwrap_or(manifest.max_reply_chars),
         retrieve: a.retrieve,
         history_budget: a.history_budget,
     };
