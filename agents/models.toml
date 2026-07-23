@@ -48,7 +48,11 @@ gpu = "auto"
 whisper_model = "ggml-base.en"
 whisper_model_repo = "ggerganov/whisper.cpp"
 whisper_model_file = "ggml-base.en.bin"
-whisper_runtime_url = ""
+# whisper.cpp DOES ship a prebuilt, CPU-only, portable Linux x64 server tarball (verified: it unpacks
+# `whisper-server` + `libwhisper.so` + `libggml-cpu-*` micro-arch variants, ~24 MB, no CUDA, links only
+# stock system libs). So `fetch-whisper` stages it automatically, exactly like the llama.cpp runtime —
+# no build-from-source. (The tarball also bundles a `parakeet-cli`, a possible future faster/edge leaf.)
+whisper_runtime_url = "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-bin-ubuntu-x64.tar.gz"
 
 # Each model: `name` (the key you pass to fetch), its Hugging Face `repo` and `file`, and a note.
 # Keep `name`, then `repo`, then `file` in that order — fetch.sh reads them positionally.
