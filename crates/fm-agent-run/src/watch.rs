@@ -134,7 +134,11 @@ pub fn serve_loop<V: VaultAccess>(
                     marks.borrow_mut().push((stage.to_string(), Instant::now()));
                     agent.fm.activity(id, stage, &question);
                 };
-                let result = agent.handle(id, &intent, false, &on_stage);
+                // Allow the user's EXPLICIT `/propose` / `/research` here: the discussion root is always
+                // a note, so a proposal to it is valid, and `handle` only acts on those commands when the
+                // user actually typed them (a plain mention still just chats). This is the path the
+                // frontend uses, so without it `/research` would silently degrade to a chat answer.
+                let result = agent.handle(id, &intent, true, &on_stage);
                 log_timing(runtime, id, &question, &marks.borrow(), Instant::now(), result.is_ok());
                 match result {
                     Ok((reply, reply_id)) => {

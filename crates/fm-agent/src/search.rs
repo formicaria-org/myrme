@@ -12,19 +12,35 @@
 use crate::{http, AgentError, SearchHit, WebSearch};
 use std::time::Duration;
 
+/// The conservative **default source engines** the research profile queries. Knowledge is not only text
+/// on the general web, so the default spans a reference encyclopedia (`wikipedia`), the general web
+/// (`duckduckgo`), code + its failures/successes (`github`), and papers (`arxiv`).
+///
+/// **Kept in sync by hand with `agents/search-proxy.py`'s `ENGINES` map** — the bundled proxy is a small
+/// hand-rolled multiplexer that implements *exactly these four* (each via its own API), not a full
+/// SearXNG. An engine name the proxy does not know is silently dropped, and if none is recognised it
+/// falls back to its own defaults — so pointing the profile at a real SearXNG with more engines needs a
+/// real SearXNG behind the loopback, not just a new name here. Change one, change the other.
+pub const DEFAULT_ENGINES: &[&str] = &["wikipedia", "duckduckgo", "github", "arxiv"];
+
 /// A single-shot search against a local SearXNG's JSON API (`/search?format=json`).
 pub struct SearxngSearch {
     host: String,
     port: u16,
     max_results: usize,
     timeout: Duration,
+    /// Which SearXNG engines to query, comma-joined (e.g. `"google,github,arxiv"`). `None` ⇒ SearXNG's
+    /// own defaults. This is the *only* thing that distinguishes web from GitHub from arXiv sources —
+    /// they all ride the same loopback JSON path and come back as uniform hits. A user's chosen sources
+    /// map straight onto this list (plus `site:` filters inside the query itself).
+    engines: Option<String>,
 }
 
 impl SearxngSearch {
     /// A SearXNG on `127.0.0.1:<port>`. Caps results (the orchestrator trims context anyway) and
     /// times out rather than hanging the pipeline.
     pub fn local(port: u16) -> Self {
-        Self { host: "127.0.0.1".into(), port, max_results: 6, timeout: Duration::from_secs(30) }
+        Self { host: "127.0.0.1".into(), port, max_results: 6, timeout: Duration::from_secs(30), engines: None }
     }
 
     pub fn with_host(mut self, host: impl Into<String>) -> Self {
@@ -41,12 +57,31 @@ impl SearxngSearch {
         self.timeout = timeout;
         self
     }
+
+    /// Restrict the query to specific SearXNG engines, e.g. `["google", "github", "arxiv"]`. Empty ⇒
+    /// leave SearXNG's defaults. The orchestrator passes the user's configured source engines here.
+    pub fn with_engines<I, S>(mut self, engines: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        let joined = engines.into_iter().map(Into::into).collect::<Vec<_>>().join(",");
+        self.engines = (!joined.is_empty()).then_some(joined);
+        self
+    }
 }
 
 impl WebSearch for SearxngSearch {
     fn search(&self, query: &str) -> Result<Vec<SearchHit>, AgentError> {
+        // `&engines=a,b,c` selects sources server-side; the comma is encoded so the request line is
+        // well-formed. Omitted entirely when no engines are configured.
+        let engines = self
+            .engines
+            .as_deref()
+            .map(|e| format!("&engines={}", http::encode(e)))
+            .unwrap_or_default();
         let request = format!(
-            "GET /search?q={q}&format=json HTTP/1.1\r\n\
+            "GET /search?q={q}&format=json{engines} HTTP/1.1\r\n\
              Host: {host}:{port}\r\n\
              Accept: application/json\r\n\
              Connection: close\r\n\r\n",
@@ -134,5 +169,35 @@ mod tests {
 
         let req = server.join().unwrap();
         assert!(req.starts_with("GET /search?q=mRNA%20vaccine&format=json"), "query not encoded: {req}");
+    }
+
+    /// Configured engines must reach SearXNG as `&engines=…` so web / wikipedia / github / arxiv sources
+    /// are actually queried; without engines, the param is absent (SearXNG's own defaults apply).
+    #[test]
+    fn it_sends_the_selected_engines_and_omits_them_when_unset() {
+        // With engines: the request carries the comma-joined list.
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut sock, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 2048];
+            let n = sock.read(&mut buf).unwrap();
+            let req = String::from_utf8_lossy(&buf[..n]).to_string();
+            let json = r#"{"results":[{"title":"T","url":"https://t","content":"c"}]}"#;
+            let resp = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                json.len(), json
+            );
+            sock.write_all(resp.as_bytes()).unwrap();
+            req
+        });
+        SearxngSearch::local(port).with_engines(super::DEFAULT_ENGINES.iter().copied()).search("q").unwrap();
+        let req = server.join().unwrap();
+        assert!(req.contains("&engines="), "engines param missing: {req}");
+        assert!(req.contains("wikipedia") && req.contains("github") && req.contains("arxiv"), "engines not sent: {req}");
+
+        // Empty engines list ⇒ no engines param at all.
+        let s = SearxngSearch::local(0).with_engines(Vec::<String>::new());
+        assert!(s.engines.is_none(), "an empty engines list must not set the param");
     }
 }

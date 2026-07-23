@@ -20,6 +20,7 @@
 //! plumbing in [`http`]. The orchestrator above never depends on them, so it stays testable with fakes.
 
 pub mod convo;
+pub mod grounding;
 pub mod http;
 pub mod launch;
 pub mod openai;
@@ -170,6 +171,16 @@ pub struct ProposalDraft {
     pub sources: Vec<String>,
 }
 
+/// The output of the **grounded research** pipeline: the [`ProposalDraft`] to turn into a proposal,
+/// plus the [`GroundedNote`](crate::grounding::GroundedNote) it was built from — so the caller can
+/// surface how much was verified vs. dropped ("2 unsupported claims were dropped") and log the
+/// deterministic grounding metric.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Research {
+    pub draft: ProposalDraft,
+    pub grounded: crate::grounding::GroundedNote,
+}
+
 /// The deterministic study-assistant agent. Generic over its two seams so the whole pipeline is
 /// exercised with fakes in tests and with real (model, network) implementations in production.
 pub struct StudyAssistant<L: LlmStep, S: WebSearch> {
@@ -223,6 +234,83 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
             new_body: strip_wrapping_fence(&resp.content),
             sources,
         })
+    }
+
+    /// Run the **grounded research** pipeline: refine → search → number the sources → one bounded
+    /// *quote-first* write → **deterministic substring-verify** ([`grounding::verify`]) that drops any
+    /// claim whose verbatim quote is not found in its cited source → a note whose `## Sources` list is
+    /// assembled by us from the *verified* set, so a source number or URL can never be hallucinated.
+    /// Every claim in the returned body is backed by a quote actually present in a real source; the
+    /// model never ships an unfounded claim. Same [`LlmStep`]/[`WebSearch`] seams as [`run`](Self::run),
+    /// so it is exercised entirely with fakes.
+    pub fn research(&self, req: &ResearchRequest) -> Result<Research, AgentError> {
+        if req.host_note.trim().is_empty() {
+            return Err(AgentError::new("a request must name its host note"));
+        }
+        // Grounded research is search-first — with no seed there is nothing external to ground on.
+        let hits = match req.search.as_deref().map(str::trim) {
+            Some(seed) if !seed.is_empty() => {
+                let query = self.refine_query(seed)?;
+                self.web.search(&query)?
+            }
+            _ => Vec::new(),
+        };
+        // Number every source uniformly: web/wikipedia/github/arxiv hits first, then the user's named
+        // inputs. The `id` is the `[n]` the model cites and the verifier checks — nothing else marks
+        // where a source came from.
+        let mut sources: Vec<crate::grounding::Source> = Vec::new();
+        for h in &hits {
+            sources.push(crate::grounding::Source {
+                id: sources.len() + 1,
+                title: h.title.clone(),
+                url: h.url.clone(),
+                text: h.text.clone(),
+            });
+        }
+        for d in &req.inputs {
+            sources.push(crate::grounding::Source {
+                id: sources.len() + 1,
+                title: d.label.clone(),
+                url: String::new(),
+                text: d.text.clone(),
+            });
+        }
+
+        // One grounded write under the quote-first contract, over a numbered pack that MUST fit the
+        // model's (small, local) context with room to finish the note. A tiny model favors a tight
+        // top-K anyway (research 2026-07-22), so cap the sources and truncate each; if a source-heavy
+        // query still overflows, retry once tighter rather than shipping — or refusing — a cut-off note.
+        let write = |max_src: usize, chars: usize| -> Result<(LlmResponse, Vec<crate::grounding::Source>), AgentError> {
+            let used: Vec<_> = sources.iter().take(max_src).cloned().collect();
+            let pack = crate::grounding::pack_sources(&used, chars);
+            let user = format!("{}\n{}\n\n# Numbered sources\n{}", heading::TASK, req.ask.trim(), pack);
+            Ok((self.llm.complete(crate::grounding::GROUNDED_WRITE_INSTRUCTION, &user)?, used))
+        };
+        let (resp, used) = {
+            let (r, u) = write(5, 700)?;
+            if r.truncated() {
+                write(3, 450)? // tighter second try: fewer, shorter sources leave more room to finish
+            } else {
+                (r, u)
+            }
+        };
+        if resp.truncated() {
+            return Err(AgentError::new(
+                "the note was still too long after trimming sources — try a narrower question",
+            ));
+        }
+
+        // Deterministic grounding: verify quotes, drop the unsupported, assemble the note + Sources.
+        let grounded = crate::grounding::verify(&resp.content, &used);
+        let draft = ProposalDraft {
+            host_note: req.host_note.clone(),
+            new_body: grounded.body.clone(),
+            sources: used
+                .iter()
+                .map(|s| if s.url.is_empty() { s.title.clone() } else { format!("{} — {}", s.title, s.url) })
+                .collect(),
+        };
+        Ok(Research { draft, grounded })
     }
 
     /// Compress a block of prior conversation into a short summary that fits a tiny model's context —
@@ -542,7 +630,7 @@ mod tests {
         use crate::convo::Intent;
         let web = FakeWeb { hits: vec![], seen: RefCell::new(Vec::new()) };
         let agent = StudyAssistant::new(FakeLlm::new(&["Here is the answer."]), web);
-        let intent = Intent { ask: "what does the note say?".into(), search: false, propose: false };
+        let intent = Intent { ask: "what does the note say?".into(), search: false, propose: false, research: false };
         let ctx = [InputDoc { label: "note".into(), text: "the note body".into() }];
         let turn = agent.turn("earlier: hi", &intent, &ctx, Some(200)).unwrap();
         assert_eq!(turn.reply.as_deref(), Some("Here is the answer."));
@@ -559,7 +647,7 @@ mod tests {
         let web = FakeWeb { hits: vec![], seen: RefCell::new(Vec::new()) };
         // Only one canned reply is needed — the proposal body; the acknowledgement is deterministic.
         let agent = StudyAssistant::new(FakeLlm::new(&["# Clean note\n\n- point"]), web);
-        let intent = Intent { ask: "tidy this".into(), search: false, propose: true };
+        let intent = Intent { ask: "tidy this".into(), search: false, propose: true, research: false };
         let turn = agent.turn("", &intent, &[], Some(200)).unwrap();
         assert_eq!(turn.proposal.as_deref(), Some("# Clean note\n\n- point"));
         assert_eq!(turn.reply.as_deref(), Some(super::PROPOSAL_ACK));
@@ -571,7 +659,7 @@ mod tests {
         use crate::convo::Intent;
         let web = FakeWeb { hits: vec![], seen: RefCell::new(Vec::new()) };
         let agent = StudyAssistant::new(FakeLlm::new(&["this reply is quite a bit too long for the cap"]), web);
-        let intent = Intent { ask: "hi".into(), search: false, propose: false };
+        let intent = Intent { ask: "hi".into(), search: false, propose: false, research: false };
         let turn = agent.turn("", &intent, &[], Some(12)).unwrap();
         assert!(turn.reply.unwrap().chars().count() <= 12);
     }
@@ -595,5 +683,72 @@ mod tests {
         assert!(agent.run(&r).is_err());
         assert!(agent.llm.seen.borrow().is_empty(), "must not call the model on a bad request");
         assert!(agent.web.seen.borrow().is_empty());
+    }
+
+    #[test]
+    fn research_grounds_the_note_verifies_quotes_and_drops_the_unsupported() {
+        // Two real-ish web sources; the model refines the query, then writes a quote-first draft with
+        // two supported claims and one fabricated. research() must keep the two, drop the fabrication,
+        // and build a Sources list of the real links from the verified set.
+        let web = FakeWeb {
+            hits: vec![
+                SearchHit {
+                    title: "Paris".into(),
+                    url: "https://en.wikipedia.org/wiki/Paris".into(),
+                    text: "Paris is the capital and most populous city of France.".into(),
+                },
+                SearchHit {
+                    title: "Eiffel Tower".into(),
+                    url: "https://en.wikipedia.org/wiki/Eiffel_Tower".into(),
+                    text: "The Eiffel Tower is a wrought-iron lattice tower on the Champ de Mars in Paris, France.".into(),
+                },
+            ],
+            seen: RefCell::new(Vec::new()),
+        };
+        let draft = "\
+- Paris is the capital of France [1]\n\
+> \"Paris is the capital and most populous city of France\"\n\
+- The Eiffel Tower stands in Paris [2]\n\
+> \"The Eiffel Tower is a wrought-iron lattice tower on the Champ de Mars in Paris\"\n\
+- The Eiffel Tower is made of solid gold [2]\n\
+> \"the Eiffel Tower is made of solid gold\"";
+        let agent = StudyAssistant::new(FakeLlm::new(&["capital of France Eiffel Tower", draft]), web);
+
+        let mut r = req(Some("whats the capitol of france and the famus tower"));
+        r.inputs = vec![]; // pure web grounding
+        let out = agent.research(&r).unwrap();
+
+        assert_eq!(out.grounded.verified.len(), 2, "the two supported facts survive");
+        assert_eq!(out.grounded.dropped.len(), 1, "the 'solid gold' fabrication is dropped");
+        assert!(out.draft.new_body.contains("Paris is the capital of France"));
+        assert!(out.draft.new_body.contains("The Eiffel Tower stands in Paris"));
+        // Every statement carries the inline link it came from (web-search mode).
+        assert!(out.draft.new_body.contains("[\\[1\\]](https://en.wikipedia.org/wiki/Paris)"));
+        assert!(out.draft.new_body.contains("[\\[2\\]](https://en.wikipedia.org/wiki/Eiffel_Tower)"));
+        assert!(!out.draft.new_body.contains("solid gold"), "a fabricated claim must never reach the note");
+        // We assemble the Sources section from the verified set — real, un-hallucinable links.
+        assert!(out.draft.new_body.contains("## Sources"));
+        assert!(out.draft.new_body.contains("https://en.wikipedia.org/wiki/Paris"));
+        assert!(out.draft.sources.iter().any(|s| s.contains("https://en.wikipedia.org/wiki/Eiffel_Tower")));
+        // The web was searched with the refined query; exactly two model calls: refine, then grounded write.
+        assert_eq!(agent.web.seen.borrow().as_slice(), &["capital of France Eiffel Tower".to_string()]);
+        let seen = agent.llm.seen.borrow();
+        assert_eq!(seen.len(), 2);
+        assert_eq!(seen[0].0, QUERY_REFINE_INSTRUCTION);
+        assert_eq!(seen[1].0, crate::grounding::GROUNDED_WRITE_INSTRUCTION);
+    }
+
+    #[test]
+    fn research_retries_tighter_then_refuses_a_note_that_still_will_not_fit() {
+        // A source-heavy query whose note keeps overflowing the small context: research retries with
+        // fewer/shorter sources, and only if it STILL won't fit does it refuse — with a clear, actionable
+        // message — rather than shipping a truncated note.
+        let web = FakeWeb {
+            hits: vec![SearchHit { title: "T".into(), url: "https://t".into(), text: "long source text".into() }],
+            seen: RefCell::new(Vec::new()),
+        };
+        let agent = StudyAssistant::new(TruncatingLlm, web);
+        let err = agent.research(&req(Some("some very broad topic"))).unwrap_err();
+        assert!(format!("{err}").contains("narrower question"), "got: {err}");
     }
 }

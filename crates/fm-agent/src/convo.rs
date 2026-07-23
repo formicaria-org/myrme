@@ -15,30 +15,35 @@ pub struct Intent {
     pub search: bool,
     /// `/propose` was present — produce a proposal edit to the host note.
     pub propose: bool,
+    /// `/research` was present — run the **grounded research** pipeline (search → quote-first write →
+    /// substring-verify) and propose the cited note. Implies search; the whole point is web grounding.
+    pub research: bool,
 }
 
 impl Intent {
     /// A plain conversation turn — no command, just talk.
     pub fn is_chat(&self) -> bool {
-        !self.search && !self.propose
+        !self.search && !self.propose && !self.research
     }
 }
 
-/// Parse a discussion message. `/search` and `/propose` are recognised only as **standalone**
-/// whitespace-separated tokens (so `/searching` or `path/proposed` are ordinary words); everything
-/// else joins the ask. Duplicate commands are idempotent.
+/// Parse a discussion message. `/search`, `/propose`, and `/research` are recognised only as
+/// **standalone** whitespace-separated tokens (so `/searching` or `path/proposed` are ordinary words);
+/// everything else joins the ask. Duplicate commands are idempotent.
 pub fn parse(message: &str) -> Intent {
     let mut search = false;
     let mut propose = false;
+    let mut research = false;
     let mut rest = Vec::new();
     for tok in message.split_whitespace() {
         match tok {
             "/search" => search = true,
             "/propose" => propose = true,
+            "/research" => research = true,
             other => rest.push(other),
         }
     }
-    Intent { ask: rest.join(" "), search, propose }
+    Intent { ask: rest.join(" "), search, propose, research }
 }
 
 /// Which agent, if any, a message addresses — so an agent responds **only when called by name**
@@ -122,6 +127,15 @@ mod tests {
         let i = parse("/search /search a query /propose /propose");
         assert!(i.search && i.propose);
         assert_eq!(i.ask, "a query");
+    }
+
+    #[test]
+    fn research_is_recognised_stripped_and_is_not_a_chat() {
+        let i = parse("/research how do mRNA vaccines work");
+        assert!(i.research && !i.is_chat());
+        assert_eq!(i.ask, "how do mRNA vaccines work");
+        // A look-alike embedded in a word is not the command.
+        assert!(parse("see the /researcher notes").is_chat());
     }
 
     #[test]

@@ -14,8 +14,8 @@ pub mod nativelib;
 pub mod watch;
 
 use fm_agent::openai::OpenAiStep;
-use fm_agent::search::SearxngSearch;
-use fm_agent::{convo, AgentError, InputDoc, SearchHit, StudyAssistant, WebSearch};
+use fm_agent::search::{SearxngSearch, DEFAULT_ENGINES};
+use fm_agent::{convo, AgentError, InputDoc, ResearchRequest, SearchHit, StudyAssistant, WebSearch};
 use fmserve::VaultAccess;
 
 /// A configured agent bound to a vault (via any [`VaultAccess`]) + a warm model (+ optional
@@ -56,8 +56,19 @@ impl<V: VaultAccess> Agent<V> {
         allow_propose: bool,
         on_stage: &dyn Fn(&str),
     ) -> Result<(String, Option<String>), String> {
-        // In a plain discussion there is nothing to propose an edit to, so propose is off there.
-        let intent = convo::Intent { propose: intent.propose && allow_propose, ..intent.clone() };
+        // In a plain discussion there is nothing to propose an edit to, so propose/research are off
+        // there (both land as a proposal to the host note).
+        let intent = convo::Intent {
+            propose: intent.propose && allow_propose,
+            research: intent.research && allow_propose,
+            ..intent.clone()
+        };
+
+        // Grounded research is a distinct pipeline: its only output is a cited proposal to the host
+        // note (insertion-only, human-merged), so it short-circuits the conversational turn.
+        if intent.research {
+            return self.research_turn(note, &intent, on_stage);
+        }
 
         on_stage("reading the conversation");
         let history = self.history(note)?;
@@ -117,6 +128,77 @@ impl<V: VaultAccess> Agent<V> {
             self.fm.create_proposal(note, body, &self.model, &email)?;
         }
         Ok((reply, reply_id))
+    }
+
+    /// The grounded **research** pipeline as a live turn: search the configured sources, write a
+    /// quote-first note, verify every claim's quote against its source (dropping the unsupported), and
+    /// **append** the cited note to the host note as a proposal a human reviews and merges. Additive by
+    /// design — it never rewrites away the note's existing content; the human sees the diff.
+    fn research_turn(
+        &self,
+        note: &str,
+        intent: &convo::Intent,
+        on_stage: &dyn Fn(&str),
+    ) -> Result<(String, Option<String>), String> {
+        let email = format!("{}@fm-agents.local", self.model);
+        // Grounded research needs the web; without the proxy, say so plainly rather than guessing.
+        let Some(port) = self.searxng_port else {
+            let msg = "_(Grounded research needs web search, but the search proxy is off — enable it to use /research.)_".to_string();
+            let meta = self.fm.reply_as(note, &msg, &self.model, &email)?;
+            return Ok((msg, meta["id"].as_str().map(|s| s.to_string())));
+        };
+
+        on_stage("reading this note");
+        // The host note and the notes it links to are offered as additional numbered sources, so the
+        // model can ground in the user's own material too — not only the web.
+        let mut inputs = self.host_note(note)?;
+        inputs.extend(self.linked_notes(note)?);
+        let req = ResearchRequest {
+            host_note: note.to_string(),
+            ask: intent.ask.clone(),
+            inputs,
+            search: Some(intent.ask.clone()),
+        };
+
+        on_stage("researching the web");
+        let agent =
+            StudyAssistant::new(self.llm(), SearxngSearch::local(port).with_engines(DEFAULT_ENGINES.iter().copied()));
+        let out = agent.research(&req).map_err(|e| e.to_string())?;
+
+        on_stage("writing a grounded proposal");
+        // Additive: append the cited note under the host note's existing body (the full body, not the
+        // context-truncated copy). Preserves what's there; the proposal diff shows exactly what's added.
+        let cur = self.fm.get(note)?;
+        let existing = cur["body"].as_str().unwrap_or_default().trim().to_string();
+        let body = if existing.is_empty() {
+            out.draft.new_body.clone()
+        } else {
+            format!("{existing}\n\n{}", out.draft.new_body)
+        };
+        self.fm.create_proposal(note, &body, &self.model, &email)?;
+
+        let dropped = if out.grounded.dropped.is_empty() {
+            String::new()
+        } else {
+            format!(" I dropped {} claim(s) the sources didn't support.", out.grounded.dropped.len())
+        };
+        let reply = if out.grounded.verified.is_empty() {
+            format!(
+                "I researched \u{201c}{}\u{201d} but the sources found didn't support a grounded answer, \
+                 so I proposed a note saying so.{dropped} Review it in Collaboration.",
+                intent.ask.trim()
+            )
+        } else {
+            format!(
+                "I researched \u{201c}{}\u{201d} and proposed a grounded note — {} claim(s), each backed by \
+                 a verbatim quote from {} source(s).{dropped} Review and merge it in Collaboration.",
+                intent.ask.trim(),
+                out.grounded.verified.len(),
+                out.draft.sources.len(),
+            )
+        };
+        let meta = self.fm.reply_as(note, &reply, &self.model, &email)?;
+        Ok((reply, meta["id"].as_str().map(|s| s.to_string())))
     }
 
     fn llm(&self) -> OpenAiStep {
@@ -392,5 +474,20 @@ mod tests {
         // `finished` stays false (the model itself is fine); only the missing vault should end the loop.
         crate::watch::serve_loop(&agent, "test", std::path::Path::new("/tmp"), 1, &|| false, &|| stopped.set(true));
         assert!(stopped.get(), "serve_loop must call stop_model when the vault (formicaria) is not alive");
+    }
+
+    #[test]
+    fn research_without_a_search_proxy_tells_the_user_and_proposes_nothing() {
+        // /research needs the web; with no proxy configured, the turn must short-circuit to a plain
+        // notice (no model call, no network, no proposal) — hermetically checkable.
+        let a = agent(FakeVault { alive: true, ..Default::default() });
+        let intent = convo::Intent {
+            ask: "how do mRNA vaccines work".into(),
+            search: false,
+            propose: false,
+            research: true,
+        };
+        let (reply, _id) = a.handle("note", &intent, true, &|_| {}).unwrap();
+        assert!(reply.contains("search proxy is off"), "should explain the web is off, got: {reply}");
     }
 }
