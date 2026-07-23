@@ -232,38 +232,64 @@ impl<V: VaultAccess> Agent<V> {
             Ok((msg, meta["id"].as_str().map(|s| s.to_string())))
         };
 
-        if reference.trim().is_empty() {
-            return say("_(To transcribe, tap **Transcribe** on an audio artifact — I need to know which audio to read.)_".into());
-        }
         // Laptop v1; the phone audio path is a later spike (Android admission gate + kill-consistency).
         let Some(port) = self.whisper_port else {
             return say("_(Audio transcription isn't available on this device yet — it runs in the desktop app.)_".into());
         };
 
         on_stage("reading the audio");
-        let (audio, mime) = self.fm.blob_bytes(reference)?;
-        if !mime.starts_with("audio/") {
-            return say(format!("_(That artifact is {mime}, not audio — I can only transcribe audio.)_"));
-        }
+        // The note's current, full body — both to find its embedded audio and to append onto (not a
+        // context-truncated copy), so the diff shows exactly what's added and a re-run supersedes in place.
+        let cur = self.fm.get(note)?;
+        let existing = cur["body"].as_str().unwrap_or_default().to_string();
+
+        // WHICH audio: an explicit reference (the UI's "Transcribe audio" fills it in), or — so nobody
+        // has to know a content hash — the first audio clip THIS note embeds, found by MIME. That is
+        // what lets a bare `@name /transcribe` just work. Bytes are read once, by value.
+        let asked = reference.trim();
+        let (reference, audio, mime) = match self.resolve_audio(asked, &existing)? {
+            Some(found) => found,
+            None if asked.is_empty() => {
+                return say("_(I don't see an audio clip in this note to transcribe — record or attach one first.)_".into());
+            }
+            None => return say("_(That doesn't look like audio I can transcribe — pick an audio clip.)_".into()),
+        };
 
         on_stage("transcribing");
         let whisper = fm_agent::transcribe::WhisperServer::local(port, self.whisper_model.clone());
         let prov = fm_agent::transcribe::Provenance {
             specialist: "whisper.cpp".into(),
             model: whisper.model().to_string(),
-            blob_hash: fm_agent::transcribe::hash_of(reference),
+            blob_hash: fm_agent::transcribe::hash_of(&reference),
         };
-
-        // Append onto the note's *current, full* body (not a context-truncated copy), so the diff shows
-        // exactly what's added and a re-run supersedes its own prior block in place.
-        let cur = self.fm.get(note)?;
-        let existing = cur["body"].as_str().unwrap_or_default().to_string();
         let new_body = fm_agent::transcribe::transcribe_into(&whisper, &existing, &audio, &mime, &prov)
             .map_err(|e| e.to_string())?;
 
         on_stage("proposing the transcript");
         self.fm.create_proposal(note, &new_body, &self.model, &email)?;
         say("I transcribed the audio and proposed it as an addition to this note — review and merge it in Collaboration.".into())
+    }
+
+    /// Resolve which audio to transcribe and read its bytes ONCE (read-only, by value — the specialist
+    /// never gets a path). An explicit `reference` (from the UI button), or — for a bare `/transcribe` —
+    /// the first audio asset the note `body` embeds, identified by its MIME so an image embed is
+    /// skipped. `None` when there is no audio to transcribe. Returns `(reference, bytes, mime)`.
+    fn resolve_audio(&self, reference: &str, body: &str) -> Result<Option<(String, Vec<u8>, String)>, String> {
+        let candidates =
+            if reference.is_empty() { audio_ref_candidates(body) } else { vec![reference.to_string()] };
+        for r in candidates {
+            let (bytes, mime) = match self.fm.blob_bytes(&r) {
+                Ok(v) => v,
+                // When scanning the note's own embeds, a missing/unreadable one just isn't the audio;
+                // an explicit reference that can't be read is a real error to surface.
+                Err(_) if reference.is_empty() => continue,
+                Err(e) => return Err(e),
+            };
+            if mime.starts_with("audio/") {
+                return Ok(Some((r, bytes, mime)));
+            }
+        }
+        Ok(None)
     }
 
     fn llm(&self) -> OpenAiStep {
@@ -376,6 +402,24 @@ impl<V: VaultAccess> Agent<V> {
 /// The note ids linked in a body — every `note:<ULID>` (from `[..](note:id)` or a bare ref). A ULID is
 /// exactly 26 Crockford-base32 chars, so take the 26 after each `note:` and keep only alphanumeric
 /// runs; a shorter/malformed match is skipped. Order-preserving; duplicates handled by the caller.
+/// The `sha256:<hash>` reference of every asset a note body embeds — both the body form
+/// (`asset:sha256-<hex>`) and the frontmatter form (`sha256:<hex>`) — in order, deduped. Used to find
+/// a note's own audio for a bare `/transcribe`, so the user never types a content hash.
+fn audio_ref_candidates(body: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for pat in ["asset:sha256-", "sha256:"] {
+        for (i, _) in body.match_indices(pat) {
+            let hex: String = body[i + pat.len()..].chars().take_while(char::is_ascii_hexdigit).collect();
+            // A sha-256 is 64 hex chars; be lenient but reject stray short runs.
+            if hex.len() >= 8 && seen.insert(hex.clone()) {
+                out.push(format!("sha256:{hex}"));
+            }
+        }
+    }
+    out
+}
+
 fn note_refs(body: &str) -> Vec<String> {
     body.match_indices("note:")
         .filter_map(|(i, _)| {
@@ -547,8 +591,7 @@ mod tests {
     }
 
     #[test]
-    fn transcribe_degrades_gracefully_without_an_asset_or_a_runtime() {
-        let a = agent(FakeVault { alive: true, ..Default::default() });
+    fn transcribe_reports_a_missing_runtime_and_a_missing_clip() {
         let intent = |src: &str| convo::Intent {
             ask: String::new(),
             search: false,
@@ -556,13 +599,16 @@ mod tests {
             research: false,
             transcribe: Some(src.to_string()),
         };
-        // No asset selected → prompt to pick one; nothing is fetched or proposed.
-        let (reply, _) = a.handle("note", &intent(""), true, &|_| {}).unwrap();
-        assert!(reply.contains("Transcribe"), "should prompt to select audio, got: {reply}");
-        // Asset given but no whisper runtime on this device → say so, propose nothing (FakeVault's
-        // blob_bytes would error, so reaching it at all would fail — the guard must short-circuit first).
-        let (reply, _) = a.handle("note", &intent("asset:sha256-abc"), true, &|_| {}).unwrap();
-        assert!(reply.contains("isn't available on this device"), "should degrade, got: {reply}");
+        // No whisper runtime on this device → say so, propose nothing (regardless of any asset).
+        let off = agent(FakeVault { alive: true, ..Default::default() }); // whisper_port None
+        let (reply, _) = off.handle("note", &intent(""), true, &|_| {}).unwrap();
+        assert!(reply.contains("isn't available on this device"), "no runtime: {reply}");
+        // Runtime on, but the note embeds no audio → asks to record/attach — and NEVER demands a hash.
+        // (whisper is never contacted: resolution fails first on the empty note body.)
+        let mut on = agent(FakeVault { alive: true, ..Default::default() });
+        on.whisper_port = Some(1);
+        let (reply, _) = on.handle("note", &intent(""), true, &|_| {}).unwrap();
+        assert!(reply.contains("don't see an audio clip"), "no audio in note: {reply}");
     }
 
     #[test]
@@ -593,7 +639,8 @@ mod tests {
         }
         impl VaultAccess for CapVault {
             fn get(&self, _: &str) -> Result<Value, String> {
-                Ok(json!({ "body": "existing note body" }))
+                // A regular note that embeds an audio clip — the bare-command resolver finds it by MIME.
+                Ok(json!({ "body": "existing note body\n\n![clip](asset:sha256-abc123)\n" }))
             }
             fn blob_bytes(&self, _: &str) -> Result<(Vec<u8>, String), String> {
                 Ok((b"RIFFaudiobytes".to_vec(), "audio/wav".into()))
