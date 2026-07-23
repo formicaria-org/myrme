@@ -26,6 +26,7 @@ pub mod launch;
 pub mod openai;
 pub mod preflight;
 pub mod search;
+pub mod transcribe;
 pub mod watchdog;
 
 /// The fixed **house-format instruction** given to the model as the system prompt for the writing
@@ -630,7 +631,7 @@ mod tests {
         use crate::convo::Intent;
         let web = FakeWeb { hits: vec![], seen: RefCell::new(Vec::new()) };
         let agent = StudyAssistant::new(FakeLlm::new(&["Here is the answer."]), web);
-        let intent = Intent { ask: "what does the note say?".into(), search: false, propose: false, research: false };
+        let intent = Intent { ask: "what does the note say?".into(), search: false, propose: false, research: false, transcribe: None };
         let ctx = [InputDoc { label: "note".into(), text: "the note body".into() }];
         let turn = agent.turn("earlier: hi", &intent, &ctx, Some(200)).unwrap();
         assert_eq!(turn.reply.as_deref(), Some("Here is the answer."));
@@ -647,7 +648,7 @@ mod tests {
         let web = FakeWeb { hits: vec![], seen: RefCell::new(Vec::new()) };
         // Only one canned reply is needed — the proposal body; the acknowledgement is deterministic.
         let agent = StudyAssistant::new(FakeLlm::new(&["# Clean note\n\n- point"]), web);
-        let intent = Intent { ask: "tidy this".into(), search: false, propose: true, research: false };
+        let intent = Intent { ask: "tidy this".into(), search: false, propose: true, research: false, transcribe: None };
         let turn = agent.turn("", &intent, &[], Some(200)).unwrap();
         assert_eq!(turn.proposal.as_deref(), Some("# Clean note\n\n- point"));
         assert_eq!(turn.reply.as_deref(), Some(super::PROPOSAL_ACK));
@@ -659,7 +660,7 @@ mod tests {
         use crate::convo::Intent;
         let web = FakeWeb { hits: vec![], seen: RefCell::new(Vec::new()) };
         let agent = StudyAssistant::new(FakeLlm::new(&["this reply is quite a bit too long for the cap"]), web);
-        let intent = Intent { ask: "hi".into(), search: false, propose: false, research: false };
+        let intent = Intent { ask: "hi".into(), search: false, propose: false, research: false, transcribe: None };
         let turn = agent.turn("", &intent, &[], Some(12)).unwrap();
         assert!(turn.reply.unwrap().chars().count() <= 12);
     }

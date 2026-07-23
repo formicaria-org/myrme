@@ -28,6 +28,12 @@ pub struct Agent<V: VaultAccess> {
     pub model: String,
     /// The local web-search proxy port, or `None` to run without the web.
     pub searxng_port: Option<u16>,
+    /// The local `whisper.cpp` server port for audio→transcript, or `None` where transcription is not
+    /// available (mobile v1 — the phone audio path is a later spike). `None` ⇒ `/transcribe` degrades
+    /// to a plain "not on this device" reply rather than failing.
+    pub whisper_port: Option<u16>,
+    /// The whisper model/weights label, used for transcript provenance (e.g. `"ggml-base.en"`).
+    pub whisper_model: String,
     pub max_reply_chars: usize,
     /// How many related notes to retrieve as RAG context.
     pub retrieve: usize,
@@ -61,6 +67,8 @@ impl<V: VaultAccess> Agent<V> {
         let intent = convo::Intent {
             propose: intent.propose && allow_propose,
             research: intent.research && allow_propose,
+            // Transcribe, like propose/research, only lands as a proposal to the host note.
+            transcribe: intent.transcribe.clone().filter(|_| allow_propose),
             ..intent.clone()
         };
 
@@ -68,6 +76,12 @@ impl<V: VaultAccess> Agent<V> {
         // note (insertion-only, human-merged), so it short-circuits the conversational turn.
         if intent.research {
             return self.research_turn(note, &intent, on_stage);
+        }
+
+        // Audio→transcript is likewise its own pipeline: read the selected audio blob's bytes, run the
+        // whisper specialist, and propose the provenance-marked transcript into the host note.
+        if let Some(reference) = intent.transcribe.clone() {
+            return self.transcribe_turn(note, &reference, on_stage);
         }
 
         on_stage("reading the conversation");
@@ -199,6 +213,57 @@ impl<V: VaultAccess> Agent<V> {
         };
         let meta = self.fm.reply_as(note, &reply, &self.model, &email)?;
         Ok((reply, meta["id"].as_str().map(|s| s.to_string())))
+    }
+
+    /// The **audio→transcript** pipeline as a live turn: read the selected audio blob **by value**,
+    /// hand only its bytes to the whisper specialist, and **append** the provenance-marked transcript
+    /// to the host note as a proposal a human reviews and merges. Insertion-only and blob-safe — it
+    /// never rewrites existing content, never touches or proposes deleting the audio; the human sees
+    /// the diff. Every failure mode degrades to a plain reply, never a crash.
+    fn transcribe_turn(
+        &self,
+        note: &str,
+        reference: &str,
+        on_stage: &dyn Fn(&str),
+    ) -> Result<(String, Option<String>), String> {
+        let email = format!("{}@fm-agents.local", self.model);
+        let say = |msg: String| -> Result<(String, Option<String>), String> {
+            let meta = self.fm.reply_as(note, &msg, &self.model, &email)?;
+            Ok((msg, meta["id"].as_str().map(|s| s.to_string())))
+        };
+
+        if reference.trim().is_empty() {
+            return say("_(To transcribe, tap **Transcribe** on an audio artifact — I need to know which audio to read.)_".into());
+        }
+        // Laptop v1; the phone audio path is a later spike (Android admission gate + kill-consistency).
+        let Some(port) = self.whisper_port else {
+            return say("_(Audio transcription isn't available on this device yet — it runs in the desktop app.)_".into());
+        };
+
+        on_stage("reading the audio");
+        let (audio, mime) = self.fm.blob_bytes(reference)?;
+        if !mime.starts_with("audio/") {
+            return say(format!("_(That artifact is {mime}, not audio — I can only transcribe audio.)_"));
+        }
+
+        on_stage("transcribing");
+        let whisper = fm_agent::transcribe::WhisperServer::local(port, self.whisper_model.clone());
+        let prov = fm_agent::transcribe::Provenance {
+            specialist: "whisper.cpp".into(),
+            model: whisper.model().to_string(),
+            blob_hash: fm_agent::transcribe::hash_of(reference),
+        };
+
+        // Append onto the note's *current, full* body (not a context-truncated copy), so the diff shows
+        // exactly what's added and a re-run supersedes its own prior block in place.
+        let cur = self.fm.get(note)?;
+        let existing = cur["body"].as_str().unwrap_or_default().to_string();
+        let new_body = fm_agent::transcribe::transcribe_into(&whisper, &existing, &audio, &mime, &prov)
+            .map_err(|e| e.to_string())?;
+
+        on_stage("proposing the transcript");
+        self.fm.create_proposal(note, &new_body, &self.model, &email)?;
+        say("I transcribed the audio and proposed it as an addition to this note — review and merge it in Collaboration.".into())
     }
 
     fn llm(&self) -> OpenAiStep {
@@ -381,6 +446,9 @@ mod tests {
         fn create_proposal(&self, _: &str, _: &str, _: &str, _: &str) -> Result<Value, String> {
             Ok(Value::Null)
         }
+        fn blob_bytes(&self, _: &str) -> Result<(Vec<u8>, String), String> {
+            Err("no blobs in the fake vault".into())
+        }
         fn activity(&self, _: &str, _: &str, _: &str) {}
         fn activity_done(&self, _: &str) {}
         fn present(&self, _: &str) {}
@@ -392,6 +460,8 @@ mod tests {
             model_port: 0,
             model: "test".into(),
             searxng_port: None,
+            whisper_port: None,
+            whisper_model: "ggml-base.en".into(),
             max_reply_chars: 600,
             retrieve: 3,
             history_budget: 4000,
@@ -477,6 +547,112 @@ mod tests {
     }
 
     #[test]
+    fn transcribe_degrades_gracefully_without_an_asset_or_a_runtime() {
+        let a = agent(FakeVault { alive: true, ..Default::default() });
+        let intent = |src: &str| convo::Intent {
+            ask: String::new(),
+            search: false,
+            propose: false,
+            research: false,
+            transcribe: Some(src.to_string()),
+        };
+        // No asset selected → prompt to pick one; nothing is fetched or proposed.
+        let (reply, _) = a.handle("note", &intent(""), true, &|_| {}).unwrap();
+        assert!(reply.contains("Transcribe"), "should prompt to select audio, got: {reply}");
+        // Asset given but no whisper runtime on this device → say so, propose nothing (FakeVault's
+        // blob_bytes would error, so reaching it at all would fail — the guard must short-circuit first).
+        let (reply, _) = a.handle("note", &intent("asset:sha256-abc"), true, &|_| {}).unwrap();
+        assert!(reply.contains("isn't available on this device"), "should degrade, got: {reply}");
+    }
+
+    #[test]
+    fn transcribe_reads_the_blob_and_proposes_a_provenance_marked_transcript() {
+        use std::cell::RefCell;
+        use std::io::{Read as _, Write as _};
+        use std::net::TcpListener;
+
+        // A fake whisper-server returning a fixed transcript.
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let (mut sock, _) = listener.accept().unwrap();
+            let mut buf = vec![0u8; 8192];
+            let _ = sock.read(&mut buf);
+            let json = r#"{"text":"the recorded lecture words"}"#;
+            let resp = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                json.len(),
+                json
+            );
+            let _ = sock.write_all(resp.as_bytes());
+        });
+
+        // A vault that hands back audio bytes and captures the proposed body.
+        struct CapVault {
+            proposed: RefCell<Option<String>>,
+        }
+        impl VaultAccess for CapVault {
+            fn get(&self, _: &str) -> Result<Value, String> {
+                Ok(json!({ "body": "existing note body" }))
+            }
+            fn blob_bytes(&self, _: &str) -> Result<(Vec<u8>, String), String> {
+                Ok((b"RIFFaudiobytes".to_vec(), "audio/wav".into()))
+            }
+            fn create_proposal(&self, _: &str, body: &str, _: &str, _: &str) -> Result<Value, String> {
+                *self.proposed.borrow_mut() = Some(body.to_string());
+                Ok(json!({ "id": "prop1" }))
+            }
+            fn reply_as(&self, _: &str, _: &str, _: &str, _: &str) -> Result<Value, String> {
+                Ok(json!({ "id": "r1" }))
+            }
+            fn thread(&self, _: &str) -> Result<Value, String> {
+                Ok(Value::Null)
+            }
+            fn discussions(&self) -> Result<Value, String> {
+                Ok(json!([]))
+            }
+            fn alive(&self) -> bool {
+                true
+            }
+            fn search(&self, _: &str) -> Result<Value, String> {
+                Ok(json!([]))
+            }
+            fn reply(&self, _: &str, _: &str) -> Result<Value, String> {
+                Ok(Value::Null)
+            }
+            fn activity(&self, _: &str, _: &str, _: &str) {}
+            fn activity_done(&self, _: &str) {}
+            fn present(&self, _: &str) {}
+        }
+
+        let a = Agent {
+            fm: CapVault { proposed: RefCell::new(None) },
+            model_port: 0,
+            model: "test".into(),
+            searxng_port: None,
+            whisper_port: Some(port),
+            whisper_model: "ggml-base.en".into(),
+            max_reply_chars: 600,
+            retrieve: 3,
+            history_budget: 4000,
+        };
+        let intent = convo::Intent {
+            ask: String::new(),
+            search: false,
+            propose: false,
+            research: false,
+            transcribe: Some("asset:sha256-abc123".into()),
+        };
+        let (reply, _) = a.handle("note", &intent, true, &|_| {}).unwrap();
+        assert!(reply.contains("transcribed"), "user is told, got: {reply}");
+        let body = a.fm.proposed.borrow().clone().expect("a proposal was created");
+        assert!(body.contains("existing note body"), "insertion-only: host body kept: {body}");
+        assert!(body.contains("the recorded lecture words"), "transcript inserted: {body}");
+        assert!(body.contains("asset:sha256-abc123"), "source referenced, not replaced: {body}");
+        assert!(body.contains("whisper.cpp"), "provenance present: {body}");
+    }
+
+    #[test]
     fn research_without_a_search_proxy_tells_the_user_and_proposes_nothing() {
         // /research needs the web; with no proxy configured, the turn must short-circuit to a plain
         // notice (no model call, no network, no proposal) — hermetically checkable.
@@ -486,6 +662,7 @@ mod tests {
             search: false,
             propose: false,
             research: true,
+            transcribe: None,
         };
         let (reply, _id) = a.handle("note", &intent, true, &|_| {}).unwrap();
         assert!(reply.contains("search proxy is off"), "should explain the web is off, got: {reply}");

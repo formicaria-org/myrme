@@ -36,6 +36,20 @@ max_reply_chars = 2000
 # (always offload), or "off" (CPU only). Default is GPU-when-available.
 gpu = "auto"
 
+# --- Audio→transcript runtime (whisper.cpp) — manual-only, LAPTOP v1. -------------------------------
+# Used by `agent-serve --whisper-port <p>` (enables the /transcribe command) and staged by
+# `pixi run fetch-whisper`. The transcript rides the same insertion-only proposal path as /research; the
+# specialist only ever receives audio bytes by value, never a blob path (the transcribe safety invariant).
+# The model is small and reliably hosted. The prebuilt `whisper-server` binary is not fetched
+# automatically (whisper.cpp doesn't publish a portable Linux server tarball the way llama.cpp does);
+# set `whisper_runtime_url` to a tarball that unpacks a `whisper-server`, or place the binary at
+# `agents/runtime/whisper-server` by hand (build it from whisper.cpp). `agent-serve` errors clearly if
+# it is missing, so nothing silently half-works.
+whisper_model = "ggml-base.en"
+whisper_model_repo = "ggerganov/whisper.cpp"
+whisper_model_file = "ggml-base.en.bin"
+whisper_runtime_url = ""
+
 # Each model: `name` (the key you pass to fetch), its Hugging Face `repo` and `file`, and a note.
 # Keep `name`, then `repo`, then `file` in that order — fetch.sh reads them positionally.
 

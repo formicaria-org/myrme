@@ -48,6 +48,9 @@ fn run() -> Result<(), String> {
         model_port: a.model_port,
         model: a.model.clone(),
         searxng_port: a.searxng_port,
+        // The chat REPL doesn't transcribe (no audio-artifact selection); leave the runtime off.
+        whisper_port: None,
+        whisper_model: "ggml-base.en".into(),
         max_reply_chars: a.max_reply_chars,
         retrieve: a.retrieve,
         history_budget: a.history_budget,

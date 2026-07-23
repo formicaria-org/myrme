@@ -34,6 +34,14 @@ struct Args {
     /// The local web-search proxy port (enables /search); omit to run without the web.
     #[arg(long)]
     searxng_port: Option<u16>,
+    /// The local `whisper.cpp` server port (enables **/transcribe** audio→transcript). Omit to run
+    /// without audio transcription. When set, a `whisper-server` is launched under the same watchdog
+    /// as the model, from `<agents_dir>/runtime/whisper-server` + `<agents_dir>/models/<whisper-model>.bin`.
+    #[arg(long)]
+    whisper_port: Option<u16>,
+    /// The whisper weights label — the file `models/<whisper-model>.bin` and the transcript provenance.
+    #[arg(long, default_value = "ggml-base.en")]
+    whisper_model: String,
     /// The name users address it by (`@name`) and the git author of its proposals; defaults to the model.
     #[arg(long)]
     name: Option<String>,
@@ -111,27 +119,72 @@ fn run() -> Result<(), String> {
     let model = SupervisedModel::launch(cmd, SystemMonitor, &Need::new(model_bytes, a.headroom), Limits::resident())?;
     fm_agent_run::watch::wait_ready(model_port);
 
+    // Optional audio→transcript runtime: a second supervised process (`whisper-server`), launched only
+    // when `--whisper-port` is given, killed on exit like the model. Laptop v1; the phone audio path is
+    // a later spike. If its binary/weights aren't staged, launch fails loudly rather than degrading.
+    let whisper = if let Some(wport) = a.whisper_port {
+        let wbin = runtime.join("whisper-server");
+        let wmodel = a.agents_dir.join("models").join(format!("{}.bin", a.whisper_model));
+        if !wbin.exists() || !wmodel.exists() {
+            return Err(format!(
+                "whisper is enabled (--whisper-port {wport}) but its runtime or weights are missing: \
+                 expected {} and {}. Run `pixi run fetch-whisper` first.",
+                wbin.display(),
+                wmodel.display()
+            ));
+        }
+        let mut wcmd = Command::new(&wbin);
+        wcmd.env("LD_LIBRARY_PATH", &runtime).args([
+            "--host", "127.0.0.1",
+            "--port", &wport.to_string(),
+            "-m", wmodel.to_str().unwrap_or_default(),
+            "-t", &threads.to_string(),
+        ]);
+        let wbytes = std::fs::metadata(&wmodel).map(|m| m.len()).unwrap_or(200_000_000);
+        let w = SupervisedModel::launch(wcmd, SystemMonitor, &Need::new(wbytes, a.headroom), Limits::resident())?;
+        // Wait for it to accept connections (it loads the model, then listens). Best-effort: the first
+        // /inference blocks until ready anyway.
+        for _ in 0..40 {
+            if std::net::TcpStream::connect(("127.0.0.1", wport)).is_ok() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+        Some(w)
+    } else {
+        None
+    };
+
     let agent = Agent {
         fm: FmServe::local(a.serve_port),
         model_port,
         model: name.clone(),
         searxng_port: a.searxng_port,
+        whisper_port: a.whisper_port,
+        whisper_model: a.whisper_model.clone(),
         max_reply_chars: a.max_reply_chars.unwrap_or(manifest.max_reply_chars),
         retrieve: a.retrieve,
         history_budget: a.history_budget,
     };
     println!(
-        "agent '@{}' listening — model warm on :{}, watching fm-serve :{}{}. Mention @{} in a discussion.",
+        "agent '@{}' listening — model warm on :{}, watching fm-serve :{}{}{}. Mention @{} in a discussion.",
         name,
         model_port,
         a.serve_port,
         if a.searxng_port.is_some() { ", web on" } else { "" },
+        if a.whisper_port.is_some() { ", audio on" } else { "" },
         name,
     );
 
     // The reusable watch loop — the same one the in-process mobile app runs, just with FmServe here.
     let stopper = model.stopper();
     fm_agent_run::watch::serve_loop(&agent, &name, &runtime, a.poll_secs, &|| model.finished(), &|| stopper.stop());
+
+    // Take the whisper runtime down with the agent — no orphaned second process holding its model.
+    if let Some(w) = whisper {
+        w.stopper().stop();
+        let _ = w.wait();
+    }
 
     let outcome = model.wait();
     println!("model stopped: {outcome:?}");

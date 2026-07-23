@@ -41,6 +41,11 @@ pub trait VaultAccess {
     fn reply_as(&self, note: &str, body: &str, name: &str, email: &str) -> Result<Value, String>;
     /// Create a proposal edit to `note`, attributed to the model `(name, email)`.
     fn create_proposal(&self, note: &str, body: &str, name: &str, email: &str) -> Result<Value, String>;
+    /// Read a blob's raw bytes and sniffed MIME, given an asset `reference` (`asset:sha256-<hash>` /
+    /// `sha256:<hash>`). This is how a modality specialist gets its input **by value** — the runner
+    /// reads the bytes here and hands *only* the bytes to the specialist, never a path into the blob
+    /// store, so a wedged specialist can never corrupt the vault's only copy (the transcribe invariant).
+    fn blob_bytes(&self, reference: &str) -> Result<(Vec<u8>, String), String>;
     /// Report the current pipeline stage for a discussion (the live "working…" wheel). Best-effort.
     fn activity(&self, disc: &str, stage: &str, question: &str);
     /// Clear a discussion's status — the reply landed, or the turn errored/timed out. Best-effort.
@@ -126,6 +131,35 @@ impl VaultAccess for FmServe {
             "create_proposal",
             json!({ "id": note, "body": body, "authorName": name, "authorEmail": email }),
         )
+    }
+
+    fn blob_bytes(&self, reference: &str) -> Result<(Vec<u8>, String), String> {
+        // `GET /api/blob/<ref>` streams the bytes with the sniffed Content-Type (no Range → whole
+        // file). This is binary, so we parse the response bytes directly rather than through the
+        // JSON `call` path, and split head/body on the raw `\r\n\r\n` so no byte is lossily decoded.
+        let request = format!(
+            "GET /api/blob/{r} HTTP/1.1\r\nHost: {host}:{port}\r\nConnection: close\r\n\r\n",
+            r = http::encode(reference),
+            host = self.host,
+            port = self.port,
+        );
+        let raw = http::send(&self.host, self.port, request.as_bytes(), self.timeout)
+            .map_err(|e| format!("cannot fetch blob from fm-serve: {e}"))?;
+        let sep = raw
+            .windows(4)
+            .position(|w| w == b"\r\n\r\n")
+            .ok_or("malformed blob response from fm-serve")?;
+        let head = String::from_utf8_lossy(&raw[..sep]);
+        let status = head.lines().next().unwrap_or("");
+        if !status.contains(" 200") {
+            return Err(format!("fm-serve blob {reference}: {}", status.trim()));
+        }
+        let mime = head
+            .lines()
+            .find_map(|l| l.strip_prefix("Content-Type:").or_else(|| l.strip_prefix("content-type:")))
+            .map(|v| v.trim().to_string())
+            .unwrap_or_else(|| "application/octet-stream".to_string());
+        Ok((raw[sep + 4..].to_vec(), mime))
     }
 
     fn activity(&self, disc: &str, stage: &str, question: &str) {

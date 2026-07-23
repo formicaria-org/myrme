@@ -18,12 +18,31 @@ pub struct Intent {
     /// `/research` was present — run the **grounded research** pipeline (search → quote-first write →
     /// substring-verify) and propose the cited note. Implies search; the whole point is web grounding.
     pub research: bool,
+    /// `/transcribe` was present — run the **audio→transcript** specialist on the referenced audio
+    /// asset and propose the transcript into the host note. `Some(reference)` carries the asset to
+    /// read (e.g. `asset:sha256-<hash>`); an empty string means the command was given with no asset,
+    /// which the runner reports back rather than guessing.
+    pub transcribe: Option<String>,
 }
 
 impl Intent {
     /// A plain conversation turn — no command, just talk.
     pub fn is_chat(&self) -> bool {
-        !self.search && !self.propose && !self.research
+        !self.search && !self.propose && !self.research && self.transcribe.is_none()
+    }
+}
+
+/// Recognise a blob/asset reference token, in any of the forms a note carries it (`asset:sha256-<hex>`
+/// in a body embed, `sha256:<hex>` in frontmatter, or a bare `sha256-<hex>`). Markdown wrappers a
+/// user might paste (`![x](asset:…)`) are trimmed. Returns the reference as-is (what `blob_path`
+/// parses), or `None` if the token is not an asset reference.
+pub fn asset_ref(tok: &str) -> Option<String> {
+    let t = tok.trim_matches(|c| matches!(c, '(' | ')' | '!' | '[' | ']' | '<' | '>'));
+    let t = t.rsplit(']').next().unwrap_or(t).trim_start_matches('(').trim_end_matches(')');
+    if t.starts_with("asset:sha256-") || t.starts_with("sha256:") || t.starts_with("sha256-") {
+        Some(t.to_string())
+    } else {
+        None
     }
 }
 
@@ -34,16 +53,29 @@ pub fn parse(message: &str) -> Intent {
     let mut search = false;
     let mut propose = false;
     let mut research = false;
+    let mut want_transcribe = false;
     let mut rest = Vec::new();
     for tok in message.split_whitespace() {
         match tok {
             "/search" => search = true,
             "/propose" => propose = true,
             "/research" => research = true,
+            "/transcribe" => want_transcribe = true,
             other => rest.push(other),
         }
     }
-    Intent { ask: rest.join(" "), search, propose, research }
+    // Only when `/transcribe` was given do we treat an asset reference as the target (and lift it out
+    // of the ask); otherwise a message that merely mentions a blob keeps its text intact. `/transcribe`
+    // with no asset still records the intent (empty source) so the runner can say "select an audio
+    // artifact" rather than silently treating it as chat.
+    let transcribe = want_transcribe.then(|| {
+        if let Some(pos) = rest.iter().position(|t| asset_ref(t).is_some()) {
+            asset_ref(&rest.remove(pos)).unwrap_or_default()
+        } else {
+            String::new()
+        }
+    });
+    Intent { ask: rest.join(" "), search, propose, research, transcribe }
 }
 
 /// Which agent, if any, a message addresses — so an agent responds **only when called by name**
@@ -136,6 +168,35 @@ mod tests {
         assert_eq!(i.ask, "how do mRNA vaccines work");
         // A look-alike embedded in a word is not the command.
         assert!(parse("see the /researcher notes").is_chat());
+    }
+
+    #[test]
+    fn transcribe_captures_the_asset_reference_and_strips_it_from_the_ask() {
+        let i = parse("@x /transcribe asset:sha256-deadbeef please clean it up");
+        assert_eq!(i.transcribe.as_deref(), Some("asset:sha256-deadbeef"));
+        assert!(!i.is_chat());
+        assert_eq!(i.ask, "@x please clean it up", "the asset ref is lifted out of the ask: {}", i.ask);
+        // Other reference forms are accepted too.
+        assert_eq!(parse("/transcribe sha256:abc123").transcribe.as_deref(), Some("sha256:abc123"));
+        // `/transcribe` with no asset ref records the intent with an empty source (runner will ask).
+        assert_eq!(parse("/transcribe").transcribe.as_deref(), Some(""));
+    }
+
+    #[test]
+    fn an_asset_reference_without_transcribe_is_left_in_the_message() {
+        // A plain chat that happens to mention a blob keeps its text — nothing is stripped.
+        let i = parse("what is in asset:sha256-deadbeef ?");
+        assert!(i.is_chat());
+        assert!(i.ask.contains("asset:sha256-deadbeef"), "asset ref wrongly stripped: {}", i.ask);
+    }
+
+    #[test]
+    fn asset_ref_recognises_the_forms_and_rejects_others() {
+        assert_eq!(asset_ref("asset:sha256-abc").as_deref(), Some("asset:sha256-abc"));
+        assert_eq!(asset_ref("sha256:abc").as_deref(), Some("sha256:abc"));
+        assert_eq!(asset_ref("![clip](asset:sha256-abc)").as_deref(), Some("asset:sha256-abc"));
+        assert!(asset_ref("ordinary").is_none());
+        assert!(asset_ref("note:01KY42HKAM9EZNFMGCS4A99V4C").is_none());
     }
 
     #[test]
