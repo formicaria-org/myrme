@@ -48,6 +48,10 @@ gpu = "auto"
 whisper_model = "ggml-base.en"
 whisper_model_repo = "ggerganov/whisper.cpp"
 whisper_model_file = "ggml-base.en.bin"
+# The PHONE whisper pick — a `[[models]]` name (below) fetched on demand by the mobile app when Audio
+# transcription is on. Smaller than the desktop's base.en so it fits in RAM *beside* the 1.4 GB llama
+# model; the mobile whisper-server runtime is cross-compiled + bundled (ci/android-stage-whisper.sh).
+whisper_mobile = "ggml-tiny.en"
 # whisper.cpp DOES ship a prebuilt, CPU-only, portable Linux x64 server tarball (verified: it unpacks
 # `whisper-server` + `libwhisper.so` + `libggml-cpu-*` micro-arch variants, ~24 MB, no CUDA, links only
 # stock system libs). So `fetch-whisper` stages it automatically, exactly like the llama.cpp runtime —
@@ -68,3 +72,9 @@ name = "lfm2.5-1.2b"
 repo = "LiquidAI/LFM2.5-1.2B-Instruct-GGUF"
 file = "LFM2.5-1.2B-Instruct-Q4_K_M.gguf"
 note = "PHONE pick — IFEval 86.2 / BFCL-v3 49.1, top of its size tier; measured 15.9 tok/s, ~1.4 GB resident on the Dimensity 7300. Runs smoothly at 4 threads without blocking the UI."
+
+[[models]]
+name = "ggml-tiny.en"
+repo = "ggerganov/whisper.cpp"
+file = "ggml-tiny.en.bin"
+note = "PHONE whisper — tiny English, ~75 MB, runs beside the phone's small llama model. Fetched on demand when Audio transcription is enabled; served by the bundled arm64 whisper-server."

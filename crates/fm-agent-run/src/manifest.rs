@@ -49,6 +49,9 @@ pub struct Manifest {
     /// The longest reply the agent posts, in characters — a "never berserk" bound and a brevity nudge
     /// for a small model. Configurable so a formula + explanation isn't clipped. Default 2000.
     pub max_reply_chars: usize,
+    /// The phone's whisper model name (a `[[models]]` entry), fetched on demand when Audio transcription
+    /// is on. `None` ⇒ no phone whisper. Read via [`mobile_whisper`](Self::mobile_whisper).
+    pub whisper_mobile: Option<String>,
     /// Every catalogued model.
     models: Vec<Model>,
 }
@@ -68,6 +71,7 @@ impl Manifest {
         let (mut default_mobile, mut threads_mobile): (Option<String>, Option<u32>) = (None, None);
         let mut gpu = String::from("auto");
         let mut max_reply_chars = 2000usize;
+        let mut whisper_mobile: Option<String> = None;
         let mut models: Vec<Model> = Vec::new();
         // The block currently being parsed. `Some` ⇒ we are inside a `[[models]]` block (so top-level
         // keys no longer apply); a block is committed on the next `[[models]]` or at EOF, when it has
@@ -115,12 +119,18 @@ impl Manifest {
                     "threads_mobile" => threads_mobile = val.parse().ok(),
                     "gpu" => gpu = val.to_string(),
                     "max_reply_chars" => max_reply_chars = val.parse().unwrap_or(max_reply_chars),
+                    "whisper_mobile" => whisper_mobile = Some(val.to_string()),
                     _ => {}
                 },
             }
         }
         flush(&mut cur, &mut models); // the last block has no trailing [[models]] to flush it
-        Manifest { default, default_mobile, port, ctx, threads, threads_mobile, gpu, max_reply_chars, models }
+        Manifest { default, default_mobile, port, ctx, threads, threads_mobile, gpu, max_reply_chars, whisper_mobile, models }
+    }
+
+    /// The phone's whisper model name — a `[[models]]` entry to fetch on demand, or `None`.
+    pub fn mobile_whisper(&self) -> Option<&str> {
+        self.whisper_mobile.as_deref()
     }
 
     /// The context window for `name` — the model's own `ctx` override, else the manifest default.
