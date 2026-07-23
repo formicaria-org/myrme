@@ -23,4 +23,17 @@ REPO="$(cd "$HERE/.." && pwd)"
 BIN="$REPO/target/release/agent-serve"
 if [ -x "$BIN" ]; then RUN=("$BIN"); else RUN=(cargo run -q -p fm-agent-run --bin agent-serve --); fi
 
-exec "${RUN[@]}" --agents-dir "$HERE" "${MODEL_ARGS[@]}" "$@"
+# Audio→transcript is a UI setting, like the assistant on/off: fm-serve exports FM_TRANSCRIBE=1 when
+# the "Audio transcription" toggle is on, and we enable whisper only then AND only if its runtime is
+# actually staged (`pixi run fetch-whisper`). So the toggle governs it from Settings, with no flag to
+# remember. A dev running `pixi run agent-serve` can set FM_TRANSCRIBE=1 or pass --whisper-port. Default
+# port 8082 (model 8081, searxng 8888 are the neighbours); an explicit --whisper-port always wins.
+WHISPER_ARGS=()
+if [ -n "${FM_TRANSCRIBE:-}" ] && [ -x "$HERE/runtime/whisper-server" ] && [ -f "$HERE/models/ggml-base.en.bin" ]; then
+  case " $* " in
+    *" --whisper-port "*) : ;; # caller set it explicitly — don't second-guess
+    *) WHISPER_ARGS=(--whisper-port 8082) ;;
+  esac
+fi
+
+exec "${RUN[@]}" --agents-dir "$HERE" "${MODEL_ARGS[@]}" "${WHISPER_ARGS[@]}" "$@"
