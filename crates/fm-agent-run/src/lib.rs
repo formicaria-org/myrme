@@ -243,53 +243,85 @@ impl<V: VaultAccess> Agent<V> {
         let cur = self.fm.get(note)?;
         let existing = cur["body"].as_str().unwrap_or_default().to_string();
 
-        // WHICH audio: an explicit reference (the UI's "Transcribe audio" fills it in), or — so nobody
-        // has to know a content hash — the first audio clip THIS note embeds, found by MIME. That is
-        // what lets a bare `@name /transcribe` just work. Bytes are read once, by value.
+        // WHICH audio: an explicit reference (typed), or — so nobody has to know a content hash — EVERY
+        // audio clip THIS note embeds that isn't already transcribed. One `/transcribe` thus does all the
+        // untranscribed clips at once and skips the accepted ones, so a note with several recordings needs
+        // one command, not one per clip. Bytes are read once each, by value.
         let asked = reference.trim();
-        let (reference, audio, mime) = match self.resolve_audio(asked, &existing)? {
-            Some(found) => found,
-            None if asked.is_empty() => {
+        let clips = match self.resolve_audio(asked, &existing)? {
+            AudioWork::Clips(c) => c,
+            AudioWork::AllDone => {
+                return say("_(Every audio clip in this note is already transcribed — nothing new to do.)_".into());
+            }
+            AudioWork::None if asked.is_empty() => {
                 return say("_(I don't see an audio clip in this note to transcribe — record or attach one first.)_".into());
             }
-            None => return say("_(That doesn't look like audio I can transcribe — pick an audio clip.)_".into()),
+            AudioWork::None => return say("_(That doesn't look like audio I can transcribe — pick an audio clip.)_".into()),
         };
 
         on_stage("transcribing");
         let whisper = fm_agent::transcribe::WhisperServer::local(port, self.whisper_model.clone());
-        let prov = fm_agent::transcribe::Provenance {
-            specialist: "whisper.cpp".into(),
-            model: whisper.model().to_string(),
-            blob_hash: fm_agent::transcribe::hash_of(&reference),
-        };
-        let new_body = fm_agent::transcribe::transcribe_into(&whisper, &existing, &audio, &mime, &prov)
-            .map_err(|e| e.to_string())?;
+        // Fold each clip's transcript into the growing body; each lands as its own provenance-marked
+        // block keyed to its source, so they never collide and a redo supersedes only its own.
+        let mut new_body = existing.clone();
+        for (reference, audio, mime) in &clips {
+            let prov = fm_agent::transcribe::Provenance {
+                specialist: "whisper.cpp".into(),
+                model: whisper.model().to_string(),
+                blob_hash: fm_agent::transcribe::hash_of(reference),
+            };
+            new_body = fm_agent::transcribe::transcribe_into(&whisper, &new_body, audio, mime, &prov)
+                .map_err(|e| e.to_string())?;
+        }
 
         on_stage("proposing the transcript");
         self.fm.create_proposal(note, &new_body, &self.model, &email)?;
-        say("I transcribed the audio and proposed it as an addition to this note — review and merge it in Collaboration.".into())
+        let n = clips.len();
+        say(format!(
+            "I transcribed {n} audio clip{} and proposed {} as an addition to this note — review and merge in Collaboration.",
+            if n == 1 { "" } else { "s" },
+            if n == 1 { "it" } else { "them" },
+        ))
     }
 
-    /// Resolve which audio to transcribe and read its bytes ONCE (read-only, by value — the specialist
-    /// never gets a path). An explicit `reference` (from the UI button), or — for a bare `/transcribe` —
-    /// the first audio asset the note `body` embeds, identified by its MIME so an image embed is
-    /// skipped. `None` when there is no audio to transcribe. Returns `(reference, bytes, mime)`.
-    fn resolve_audio(&self, reference: &str, body: &str) -> Result<Option<(String, Vec<u8>, String)>, String> {
-        let candidates =
-            if reference.is_empty() { audio_ref_candidates(body) } else { vec![reference.to_string()] };
-        for r in candidates {
-            let (bytes, mime) = match self.fm.blob_bytes(&r) {
-                Ok(v) => v,
-                // When scanning the note's own embeds, a missing/unreadable one just isn't the audio;
-                // an explicit reference that can't be read is a real error to surface.
-                Err(_) if reference.is_empty() => continue,
-                Err(e) => return Err(e),
-            };
-            if mime.starts_with("audio/") {
-                return Ok(Some((r, bytes, mime)));
-            }
+    /// Resolve which audio to transcribe and read each clip's bytes ONCE (read-only, by value — the
+    /// specialist never gets a path).
+    ///
+    /// An explicit `reference` returns exactly that clip (re-running is allowed — a redo supersedes its
+    /// own block). A bare `/transcribe` returns EVERY audio clip the note embeds that is **not already
+    /// transcribed**, in order, so one command does them all and never re-does or clobbers an accepted
+    /// transcript. [`AudioWork::AllDone`] distinguishes "every clip is transcribed" from "no audio here"
+    /// so the reply can say which.
+    fn resolve_audio(&self, reference: &str, body: &str) -> Result<AudioWork, String> {
+        if !reference.is_empty() {
+            let (bytes, mime) = self.fm.blob_bytes(reference)?;
+            return Ok(if mime.starts_with("audio/") {
+                AudioWork::Clips(vec![(reference.to_string(), bytes, mime)])
+            } else {
+                AudioWork::None
+            });
         }
-        Ok(None)
+        let mut clips = Vec::new();
+        let mut skipped_done = false;
+        for r in audio_ref_candidates(body) {
+            // A missing/unreadable embed just isn't audio — skip it, don't fail the turn.
+            let Ok((bytes, mime)) = self.fm.blob_bytes(&r) else { continue };
+            if !mime.starts_with("audio/") {
+                continue;
+            }
+            if already_transcribed(body, &r) {
+                skipped_done = true;
+                continue;
+            }
+            clips.push((r, bytes, mime));
+        }
+        Ok(if !clips.is_empty() {
+            AudioWork::Clips(clips)
+        } else if skipped_done {
+            AudioWork::AllDone
+        } else {
+            AudioWork::None
+        })
     }
 
     fn llm(&self) -> OpenAiStep {
@@ -402,6 +434,24 @@ impl<V: VaultAccess> Agent<V> {
 /// The note ids linked in a body — every `note:<ULID>` (from `[..](note:id)` or a bare ref). A ULID is
 /// exactly 26 Crockford-base32 chars, so take the 26 after each `note:` and keep only alphanumeric
 /// runs; a shorter/malformed match is skipped. Order-preserving; duplicates handled by the caller.
+/// The outcome of scanning a note for audio to transcribe.
+enum AudioWork {
+    /// Un-transcribed clips to do, each `(reference, bytes, mime)`.
+    Clips(Vec<(String, Vec<u8>, String)>),
+    /// The note has audio, but every clip is already transcribed — nothing new to do.
+    AllDone,
+    /// No audio in the note (or an explicit reference that isn't audio).
+    None,
+}
+
+/// Has this audio already been transcribed into `body`? True when a transcript block keyed to its hash
+/// is present — i.e. a prior transcription was accepted and merged — so a bare `/transcribe` skips it
+/// and moves to the next clip instead of re-doing or clobbering it.
+fn already_transcribed(body: &str, reference: &str) -> bool {
+    let hash = fm_agent::transcribe::hash_of(reference);
+    body.contains(&format!("fm:transcript key=\"{hash}|"))
+}
+
 /// The `sha256:<hash>` reference of every asset a note body embeds — both the body form
 /// (`asset:sha256-<hex>`) and the frontmatter form (`sha256:<hex>`) — in order, deduped. Used to find
 /// a note's own audio for a bare `/transcribe`, so the user never types a content hash.
@@ -697,6 +747,100 @@ mod tests {
         assert!(body.contains("the recorded lecture words"), "transcript inserted: {body}");
         assert!(body.contains("asset:sha256-abc123"), "source referenced, not replaced: {body}");
         assert!(body.contains("whisper.cpp"), "provenance present: {body}");
+    }
+
+    #[test]
+    fn transcribe_does_the_untranscribed_clips_and_skips_the_accepted_one() {
+        use std::cell::RefCell;
+        use std::io::{Read as _, Write as _};
+        use std::net::TcpListener;
+
+        // A fake whisper-server that answers every request (two clips ⇒ two connections).
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for _ in 0..8 {
+                let Ok((mut sock, _)) = listener.accept() else { break };
+                let mut buf = vec![0u8; 8192];
+                let _ = sock.read(&mut buf);
+                let json = r#"{"text":"fresh clip words"}"#;
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    json.len(),
+                    json
+                );
+                let _ = sock.write_all(resp.as_bytes());
+            }
+        });
+
+        // A note with TWO audio clips: `aaaaaaaa` already transcribed (its block is in the body), and
+        // `bbbbbbbb` not yet. One bare `/transcribe` must do only `bbbbbbbb` and leave A's block intact.
+        struct TwoClips {
+            proposed: RefCell<Option<String>>,
+        }
+        impl VaultAccess for TwoClips {
+            fn get(&self, _: &str) -> Result<Value, String> {
+                Ok(json!({ "body": "notes\n\n![a](asset:sha256-aaaaaaaa)\n\
+                    <!-- fm:transcript key=\"aaaaaaaa|whisper.cpp|ggml-base.en\" -->\n\
+                    > [!note] Transcript\n> OLD A TRANSCRIPT\n<!-- fm:transcript:end -->\n\n\
+                    ![b](asset:sha256-bbbbbbbb)\n" }))
+            }
+            fn blob_bytes(&self, _: &str) -> Result<(Vec<u8>, String), String> {
+                Ok((b"RIFFaudio".to_vec(), "audio/wav".into()))
+            }
+            fn create_proposal(&self, _: &str, body: &str, _: &str, _: &str) -> Result<Value, String> {
+                *self.proposed.borrow_mut() = Some(body.to_string());
+                Ok(json!({ "id": "p" }))
+            }
+            fn reply_as(&self, _: &str, _: &str, _: &str, _: &str) -> Result<Value, String> {
+                Ok(json!({ "id": "r" }))
+            }
+            fn thread(&self, _: &str) -> Result<Value, String> {
+                Ok(Value::Null)
+            }
+            fn discussions(&self) -> Result<Value, String> {
+                Ok(json!([]))
+            }
+            fn alive(&self) -> bool {
+                true
+            }
+            fn search(&self, _: &str) -> Result<Value, String> {
+                Ok(json!([]))
+            }
+            fn reply(&self, _: &str, _: &str) -> Result<Value, String> {
+                Ok(Value::Null)
+            }
+            fn activity(&self, _: &str, _: &str, _: &str) {}
+            fn activity_done(&self, _: &str) {}
+            fn present(&self, _: &str) {}
+        }
+
+        let a = Agent {
+            fm: TwoClips { proposed: RefCell::new(None) },
+            model_port: 0,
+            model: "test".into(),
+            searxng_port: None,
+            whisper_port: Some(port),
+            whisper_model: "ggml-base.en".into(),
+            max_reply_chars: 600,
+            retrieve: 3,
+            history_budget: 4000,
+        };
+        let intent = convo::Intent {
+            ask: String::new(),
+            search: false,
+            propose: false,
+            research: false,
+            transcribe: Some(String::new()), // bare /transcribe
+        };
+        let (reply, _) = a.handle("note", &intent, true, &|_| {}).unwrap();
+        assert!(reply.contains("1 audio clip"), "only the one untranscribed clip: {reply}");
+        let body = a.fm.proposed.borrow().clone().expect("a proposal was created");
+        assert!(body.contains("OLD A TRANSCRIPT"), "the accepted transcript is preserved: {body}");
+        assert!(body.contains("fresh clip words"), "the untranscribed clip is transcribed: {body}");
+        assert!(body.contains("asset:sha256-bbbbbbbb"), "the new block references clip B: {body}");
+        // Exactly two transcript blocks now: A's (kept) + B's (new).
+        assert_eq!(body.matches("fm:transcript:end").count(), 2, "expected A + B blocks: {body}");
     }
 
     #[test]
