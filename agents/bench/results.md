@@ -121,3 +121,139 @@ verbatim copy** of its source; the other two are hallucinated quote-shaped lines
 sources the model **fabricated a cited claim instead of abstaining.** So every pre-hardening "quotes"
 number in this file OVERSTATED grounding. Tool-call routing, by contrast, works well (calls when needed,
 declines when not). Re-run the shortlist under the hardened harness for the real grounding picture._
+
+---
+
+## 2026-07-24 — alternatives sweep: 3 laptop + 4 phone models vs the current defaults
+
+Ran the hardened harness (verbatim-quote + tool-call + abstain checks) over the Part-4 shortlist of
+`model-selection-research-2026-07-24-grounded.md`, one model at a time, memory-capped, arch-verified on
+load. Weights on ext4 (NOT tmpfs — a tmpfs download ate RAM mid-sweep and was moved). Phone runs via the
+staged arm64 `llama-server` b10081 on `/data/local/tmp/fmbench`, adb-forwarded, cleaned off after each.
+
+### Verdict summary (verified quality, not counts)
+
+**Laptop** (GPU `-ngl 99` unless noted; baseline Qwen3-4B-2507 = 39.8 t/s, 1/3 verbatim on its hardened CPU run):
+| model | t/s | grounding V/Q | search call/decline | junk sources | fit |
+|---|---|---|---|---|---|
+| Nemotron-3-Nano-4B | 35.4 GPU | 0/2 | ✓/✓ | fabricates | GPU ✓ |
+| **Qwen3-VL-4B** ⭐ | 40.1 GPU | **3/3** | ✗ missed / ✓ | **abstains** | GPU ✓ |
+| Gemma-4-E4B | 10.9 CPU | 1/5 | ✓/✓ | abstains | CPU only (4.7 GB > 4 GB VRAM) |
+
+**Phone** (CPU `-t 4 -ngl 0`; baseline LFM2.5-1.2B = 12.4 t/s, 0 verbatim quotes):
+| model | size | t/s | grounding | search call/decline | junk sources |
+|---|---|---|---|---|---|
+| Qwen3.5-2B (thinking-off) | 1.2 GB | 7.5 | 0 quotes (7 claims) | ✓/✓ | abstains |
+| MiniCPM5-1B | 0.66 GB | 13.5 | 0 claims | ✓/✗ over-searched | abstains |
+| Qwen3-VL-2B | 1.1 GB | 7.8 | 0/3 (3 hallucinated) | ✓/✓ | abstains |
+| LFM2.5-VL-1.6B | 0.7 GB | 11.8 | 0 quotes | ✓/✗ over-searched | **FABRICATES** |
+
+**Findings:** (1) **Laptop — Qwen3-VL-4B is the upgrade candidate:** baseline speed, best-measured
+grounding (3/3 verbatim), only fast model that abstains; the multimodal 2-for-1 preserves text as
+predicted. Nemotron slower + weaker; Gemma-4 GPU-excluded (4.7 GB). (2) **Phone — no alternative beats
+the incumbent:** NO ≤2B model produced a single verbatim quote (grounding is the sub-4B wall, exactly as
+the research warned). Qwen3.5-2B has the cleanest behaviour (correct routing + abstains) but is ~40%
+slower; MiniCPM5-1B is fastest but over-searches and skipped research; LFM2.5-VL-1.6B fabricates — the
+bolt-on VL regression, measured. (3) All new arches loaded in b10076/b10081 (nemotron_h, qwen3vl,
+gemma4, minicpm5, lfm2-vl). *(Grounding V/Q = verbatim/total quotes; caveat: absolute counts drift a
+little with the 256-token budget — the verbatim RATIO is the signal.)*
+
+### Raw harness blocks (newest first)
+
+### laptop · nemotron3-nano-4b · 2026-07-24  (thinking OFF (direct-answer))
+- model RSS 1773 MB / VmHWM 2933 MB · VRAM 2986 MB · MemAvailable during run: 5645 MB (before 6532 MB)
+
+| case | prompt_n | gen_n | decode tok/s | prompt tok/s | wall s | quality |
+|---|---|---|---|---|---|---|
+| chat | 163 | 61 | **29.9** | 19.4 | 10.46 | ok |
+| research | 385 | 256 | **35.4** | 51.1 | 15.01 | 3 claims / **0/2 verbatim** / 2 HALLUCINATED-quote |
+| write | 333 | 115 | **35.1** | 357.8 | 4.5 | ok |
+| toolcall-search | 372 | 36 | **35.8** | 57.5 | 7.67 | CALL ok |
+| toolcall-nosearch | 390 | 9 | **40.1** | 361.6 | 1.35 | ok (correctly did not call) |
+| abstain | 267 | 52 | **35.8** | 343.0 | 2.38 | FABRICATED (2 cites, 1 hallucinated-quotes on junk sources) |
+
+_mean decode: **35.4 tok/s** over 6 cases._
+
+### laptop · qwen3-vl-4b · 2026-07-24  (thinking OFF (direct-answer))
+- model RSS 791 MB / VmHWM 2594 MB · VRAM 2782 MB · MemAvailable during run: 4505 MB (before 4770 MB)
+
+| case | prompt_n | gen_n | decode tok/s | prompt tok/s | wall s | quality |
+|---|---|---|---|---|---|---|
+| chat | 160 | 99 | **40.5** | 514.8 | 2.77 | ok |
+| research | 374 | 196 | **39.7** | 702.3 | 5.5 | 3 claims / **3/3 verbatim** |
+| write | 324 | 99 | **39.7** | 641.9 | 3.05 | ok |
+| toolcall-search | 250 | 142 | **39.7** | 684.8 | 3.99 | NO CALL (should have searched) |
+| toolcall-nosearch | 266 | 25 | **41.0** | 646.6 | 1.03 | ok (correctly did not call) |
+| abstain | 257 | 58 | **40.0** | 638.9 | 1.88 | ok (abstained — no fabricated citations) |
+
+_mean decode: **40.1 tok/s** over 6 cases._
+
+### laptop · gemma-4-e4b · 2026-07-24  (thinking OFF (direct-answer))
+- model RSS 5363 MB / VmHWM 5363 MB · MemAvailable during run: 9953 MB (before 10110 MB)
+
+| case | prompt_n | gen_n | decode tok/s | prompt tok/s | wall s | quality |
+|---|---|---|---|---|---|---|
+| chat | 159 | 75 | **10.8** | 42.0 | 10.75 | ok |
+| research | 373 | 256 | **9.8** | 47.7 | 33.86 | 5 claims / **1/5 verbatim** / 4 HALLUCINATED-quote |
+| write | 328 | 256 | **10.1** | 98.5 | 28.64 | ok |
+| toolcall-search | 168 | 27 | **11.3** | 21.2 | 10.33 | CALL ok |
+| toolcall-nosearch | 183 | 8 | **12.5** | 26.3 | 7.61 | ok (correctly did not call) |
+| abstain | 254 | 26 | **10.9** | 53.5 | 7.14 | ok (abstained — no fabricated citations) |
+
+_mean decode: **10.9 tok/s** over 6 cases._
+
+### phone · qwen3.5-2b · 2026-07-24  (thinking OFF (direct-answer))
+- model RSS 2861 MB / VmHWM 2861 MB · MemAvailable during run: 2367 MB (before 2475 MB)
+
+| case | prompt_n | gen_n | decode tok/s | prompt tok/s | wall s | quality |
+|---|---|---|---|---|---|---|
+| chat | 167 | 68 | **9.1** | 62.6 | 10.19 | ok |
+| research | 381 | 204 | **7.8** | 50.9 | 33.63 | 7 claims / **0/0 verbatim** |
+| write | 332 | 256 | **8.6** | 50.8 | 36.3 | ok |
+| toolcall-search | 377 | 42 | **8.6** | 48.7 | 12.79 | CALL ok |
+| toolcall-nosearch | 393 | 49 | **4.4** | 35.5 | 22.31 | ok (correctly did not call) |
+| abstain | 262 | 92 | **6.3** | 30.1 | 23.35 | ok (abstained — no fabricated citations) |
+
+_mean decode: **7.5 tok/s** over 6 cases._
+
+### phone · minicpm5-1b · 2026-07-24  (thinking OFF (direct-answer))
+- model RSS 1213 MB / VmHWM 1266 MB · MemAvailable during run: 3242 MB (before 3475 MB)
+
+| case | prompt_n | gen_n | decode tok/s | prompt tok/s | wall s | quality |
+|---|---|---|---|---|---|---|
+| chat | 164 | 63 | **13.3** | 97.4 | 6.47 | ok |
+| research | 373 | 102 | **13.7** | 98.3 | 11.26 | 0 claims / **0/0 verbatim** |
+| write | 331 | 256 | **12.7** | 94.3 | 23.66 | ok |
+| toolcall-search | 316 | 52 | **14.3** | 99.2 | 6.88 | CALL ok |
+| toolcall-nosearch | 329 | 66 | **13.6** | 96.9 | 8.27 | WRONG: called ['web_search'] |
+| abstain | 262 | 108 | **13.5** | 96.5 | 10.74 | ok (abstained — no fabricated citations) |
+
+_mean decode: **13.5 tok/s** over 6 cases._
+
+### phone · qwen3-vl-2b · 2026-07-24  (thinking OFF (direct-answer))
+- model RSS 2611 MB / VmHWM 2611 MB · MemAvailable during run: 2474 MB (before 2786 MB)
+
+| case | prompt_n | gen_n | decode tok/s | prompt tok/s | wall s | quality |
+|---|---|---|---|---|---|---|
+| chat | 160 | 133 | **8.0** | 48.9 | 20.01 | ok |
+| research | 374 | 256 | **7.4** | 49.4 | 42.33 | 3 claims / **0/3 verbatim** / 3 HALLUCINATED-quote |
+| write | 324 | 234 | **7.4** | 47.6 | 38.47 | ok |
+| toolcall-search | 250 | 33 | **8.2** | 48.5 | 9.31 | CALL ok |
+| toolcall-nosearch | 266 | 13 | **7.8** | 49.2 | 7.12 | ok (correctly did not call) |
+| abstain | 257 | 69 | **7.7** | 48.1 | 14.38 | ok (abstained — no fabricated citations) |
+
+_mean decode: **7.8 tok/s** over 6 cases._
+
+### phone · lfm2.5-vl-1.6b · 2026-07-24  (thinking OFF (direct-answer))
+- model RSS 1518 MB / VmHWM 1520 MB · MemAvailable during run: 3188 MB (before 3274 MB)
+
+| case | prompt_n | gen_n | decode tok/s | prompt tok/s | wall s | quality |
+|---|---|---|---|---|---|---|
+| chat | 168 | 102 | **12.0** | 70.7 | 10.91 | ok |
+| research | 391 | 148 | **11.7** | 72.1 | 18.16 | 3 claims / **0/0 verbatim** |
+| write | 348 | 256 | **11.9** | 72.0 | 26.35 | ok |
+| toolcall-search | 187 | 24 | **11.9** | 70.3 | 4.72 | CALL ok |
+| toolcall-nosearch | 199 | 20 | **11.3** | 70.7 | 4.62 | WRONG: called ['web_search'] |
+| abstain | 271 | 104 | **11.8** | 70.9 | 12.64 | FABRICATED (2 cites, 0 hallucinated-quotes on junk sources) |
+
+_mean decode: **11.8 tok/s** over 6 cases._
