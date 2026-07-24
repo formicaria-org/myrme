@@ -5,13 +5,19 @@
 # and the binary stay local. The mobile app embeds this file (include_str!) for its first run.
 #
 # Design stance (owner, 2026-07-22): **one measured pick per device, nothing else.** Chosen by real
-# on-device benchmarks (docs/context/model-benchmarks-2026-07-22.md) and leaderboard evidence
-# (docs/context/model-selection-research-2026-07-22.md), weighted for instruction-following +
-# tool/search use (BFCL × IFEval), explicitly not code. The two devices differ, so the defaults differ.
+# on-device benchmarks and leaderboard evidence, weighted for instruction-following + tool/search use
+# (BFCL × IFEval), explicitly not code. The two devices differ, so the defaults differ.
+#
+# LAPTOP pick updated 2026-07-24 → **qwen3-vl-4b**, from a hardened-harness sweep of the alternatives
+# (docs/context/model-selection-research-2026-07-24-grounded.md § Part 5; raw in agents/bench/results.md):
+# same GPU speed as qwen3-4b (40.1 t/s), *best-measured* grounding (3/3 verbatim), and the only fast
+# model that abstains on junk sources instead of fabricating. Text-only here (mmproj not fetched); the
+# multimodal head is a future image-notes option. qwen3-4b-2507 kept below as the validated fallback.
+# PHONE pick unchanged: the same sweep found no ≤2B model beats lfm2.5-1.2b (nothing grounds below 4B).
 
 # The default model — the LAPTOP research pick. `default_mobile` overrides it on the phone (a smaller
 # model that fits a phone's RAM and stays responsive).
-default = "qwen3-4b-2507"
+default = "qwen3-vl-4b"
 default_mobile = "lfm2.5-1.2b"
 
 # Prebuilt llama.cpp server, pinned for reproducibility. `runtime_url` is the portable CPU build;
@@ -64,10 +70,16 @@ whisper_runtime_url = "https://github.com/ggml-org/whisper.cpp/releases/download
 # Keep `name`, then `repo`, then `file` in that order — fetch.sh reads them positionally.
 
 [[models]]
+name = "qwen3-vl-4b"
+repo = "Qwen/Qwen3-VL-4B-Instruct-GGUF"
+file = "Qwen3VL-4B-Instruct-Q4_K_M.gguf"
+note = "LAPTOP pick (2026-07-24) — measured on our case: 40.1 t/s on the RTX 3050 (Vulkan, 2.78 GB VRAM), 3/3 verbatim grounding (best of the sweep), abstains on junk sources. Served text-only via /v1/chat/completions (mmproj-Qwen3VL-4B-Instruct-F16.gguf only needed if we later add image-notes). Caveat: less eager to *initiate* a search — fine while /research is deterministically routed. Apache-2.0."
+
+[[models]]
 name = "qwen3-4b-2507"
 repo = "unsloth/Qwen3-4B-Instruct-2507-GGUF"
 file = "Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
-note = "LAPTOP pick — IFEval 83.4 / BFCL-v3 61.9 (best small-model tool-calling); ~2.4 GB, ~14 tok/s on the i7 CPU, fits the RTX 3050 4 GB for a future CUDA build. Non-thinking Instruct (not -Thinking, not -Coder)."
+note = "LAPTOP fallback (was the pick to 2026-07-24) — IFEval 83.4 / BFCL-v3 61.9; ~2.4 GB, 39.8 t/s GPU. Validated + fine; superseded by qwen3-vl-4b which grounds better at the same speed. Non-thinking Instruct."
 
 [[models]]
 name = "lfm2.5-1.2b"
