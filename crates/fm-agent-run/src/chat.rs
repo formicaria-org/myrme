@@ -48,6 +48,7 @@ fn run() -> Result<(), String> {
         model_port: a.model_port,
         model: a.model.clone(),
         searxng_port: a.searxng_port,
+        web_direct: false, // CLI/desktop uses the local proxy (--searxng-port), never in-process HTTPS
         // The chat REPL doesn't transcribe (no audio-artifact selection); leave the runtime off.
         whisper_port: None,
         whisper_model: "ggml-base.en".into(),

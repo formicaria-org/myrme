@@ -160,6 +160,7 @@ fn run() -> Result<(), String> {
         model_port,
         model: name.clone(),
         searxng_port: a.searxng_port,
+        web_direct: false, // desktop serve uses the local proxy (--searxng-port), never in-process HTTPS
         whisper_port: a.whisper_port,
         whisper_model: a.whisper_model.clone(),
         max_reply_chars: a.max_reply_chars.unwrap_or(manifest.max_reply_chars),

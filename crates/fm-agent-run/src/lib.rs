@@ -9,6 +9,10 @@
 pub mod fetch;
 pub mod fmserve;
 pub mod manifest;
+/// In-process HTTPS web search for the phone (no local SearXNG proxy). Needs the TLS client the
+/// `download` feature carries.
+#[cfg(feature = "download")]
+pub mod websearch;
 /// Locate the Android native-library dir (where the bundled model runtime lives) in pure Rust.
 pub mod nativelib;
 pub mod watch;
@@ -26,8 +30,13 @@ pub struct Agent<V: VaultAccess> {
     pub model_port: u16,
     /// The model/agent name — also what a user `@name`-mentions, and the git author of its proposals.
     pub model: String,
-    /// The local web-search proxy port, or `None` to run without the web.
+    /// The local web-search proxy port, or `None` to run without the web (desktop path).
     pub searxng_port: Option<u16>,
+    /// Use the **in-process** HTTPS multi-source search ([`crate::websearch::DirectSearch`]) instead
+    /// of a localhost proxy — the phone, which can run neither a Python proxy nor a local SearXNG.
+    /// Ignored when `searxng_port` is set (an explicit proxy wins) or when the `download` feature that
+    /// carries the HTTPS client is off.
+    pub web_direct: bool,
     /// The local `whisper.cpp` server port for audio→transcript, or `None` where transcription is not
     /// available (mobile v1 — the phone audio path is a later spike). `None` ⇒ `/transcribe` degrades
     /// to a plain "not on this device" reply rather than failing.
@@ -155,9 +164,9 @@ impl<V: VaultAccess> Agent<V> {
         on_stage: &dyn Fn(&str),
     ) -> Result<(String, Option<String>), String> {
         let email = format!("{}@fm-agents.local", self.model);
-        // Grounded research needs the web; without the proxy, say so plainly rather than guessing.
-        let Some(port) = self.searxng_port else {
-            let msg = "_(Grounded research needs web search, but the search proxy is off — enable it to use /research.)_".to_string();
+        // Grounded research needs the web; without a backend, say so plainly rather than guessing.
+        let Some(web) = self.web_backend() else {
+            let msg = "_(Grounded research needs web search, but it is off — enable it to use /research.)_".to_string();
             let meta = self.fm.reply_as(note, &msg, &self.model, &email)?;
             return Ok((msg, meta["id"].as_str().map(|s| s.to_string())));
         };
@@ -175,8 +184,7 @@ impl<V: VaultAccess> Agent<V> {
         };
 
         on_stage("researching the web");
-        let agent =
-            StudyAssistant::new(self.llm(), SearxngSearch::local(port).with_engines(DEFAULT_ENGINES.iter().copied()));
+        let agent = StudyAssistant::new(self.llm(), web);
         let out = agent.research(&req).map_err(|e| e.to_string())?;
 
         on_stage("writing a grounded proposal");
@@ -420,14 +428,31 @@ impl<V: VaultAccess> Agent<V> {
         Ok(docs)
     }
 
-    /// Web search via the local proxy (text-only), as context. `None` proxy ⇒ no web.
+    /// Web search (text-only), as context. No backend ⇒ no web.
     fn web(&self, ask: &str) -> Result<Vec<InputDoc>, String> {
-        let Some(port) = self.searxng_port else { return Ok(Vec::new()) };
-        let hits = SearxngSearch::local(port).search(ask).map_err(|e| e.to_string())?;
+        let Some(web) = self.web_backend() else { return Ok(Vec::new()) };
+        let hits = web.search(ask).map_err(|e| e.to_string())?;
         Ok(hits
             .into_iter()
             .map(|h| InputDoc { label: format!("web: {} ({})", h.title, h.url), text: h.text })
             .collect())
+    }
+
+    /// The web-search backend for this agent: an explicit **local SearXNG proxy** (desktop) wins;
+    /// otherwise the **in-process HTTPS** search when `web_direct` is set and the TLS client is
+    /// compiled in (the phone); otherwise `None` — no web. Boxed so the two call sites don't go
+    /// generic over the choice (see [`WebSearch for Box<dyn WebSearch>`](fm_agent::WebSearch)).
+    fn web_backend(&self) -> Option<Box<dyn WebSearch>> {
+        if let Some(port) = self.searxng_port {
+            return Some(Box::new(
+                SearxngSearch::local(port).with_engines(DEFAULT_ENGINES.iter().copied()),
+            ));
+        }
+        if self.web_direct {
+            #[cfg(feature = "download")]
+            return Some(Box::new(crate::websearch::DirectSearch::new()));
+        }
+        None
     }
 }
 
@@ -554,6 +579,7 @@ mod tests {
             model_port: 0,
             model: "test".into(),
             searxng_port: None,
+            web_direct: false,
             whisper_port: None,
             whisper_model: "ggml-base.en".into(),
             max_reply_chars: 600,
@@ -727,6 +753,7 @@ mod tests {
             model_port: 0,
             model: "test".into(),
             searxng_port: None,
+            web_direct: false,
             whisper_port: Some(port),
             whisper_model: "ggml-base.en".into(),
             max_reply_chars: 600,
@@ -820,6 +847,7 @@ mod tests {
             model_port: 0,
             model: "test".into(),
             searxng_port: None,
+            web_direct: false,
             whisper_port: Some(port),
             whisper_model: "ggml-base.en".into(),
             max_reply_chars: 600,
@@ -856,6 +884,9 @@ mod tests {
             transcribe: None,
         };
         let (reply, _id) = a.handle("note", &intent, true, &|_| {}).unwrap();
-        assert!(reply.contains("search proxy is off"), "should explain the web is off, got: {reply}");
+        assert!(
+            reply.contains("web search") && reply.contains("is off"),
+            "should explain the web is off, got: {reply}"
+        );
     }
 }

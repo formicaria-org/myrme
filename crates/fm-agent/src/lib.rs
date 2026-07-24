@@ -132,6 +132,15 @@ pub trait WebSearch {
     fn search(&self, query: &str) -> Result<Vec<SearchHit>, AgentError>;
 }
 
+/// So a caller can pick the backend at runtime (the desktop's SearXNG proxy vs. the phone's
+/// in-process HTTPS search) and hand `StudyAssistant::new` a `Box<dyn WebSearch>` without the whole
+/// runner going generic over the choice.
+impl WebSearch for Box<dyn WebSearch> {
+    fn search(&self, query: &str) -> Result<Vec<SearchHit>, AgentError> {
+        (**self).search(query)
+    }
+}
+
 /// One text-only web result. No binaries ever enter the pipeline (see the plan's text-only rule).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchHit {

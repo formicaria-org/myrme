@@ -24,6 +24,7 @@ fn it_transcribes_through_the_real_fmserve_and_whisper() {
         model_port: 0, // unused — transcribe never calls the LLM
         model: "whisper-test".into(),
         searxng_port: None,
+        web_direct: false,
         whisper_port: Some(whisper),
         whisper_model: "ggml-base.en".into(),
         max_reply_chars: 2000,
