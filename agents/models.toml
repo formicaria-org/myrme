@@ -49,9 +49,11 @@ whisper_model = "ggml-base.en"
 whisper_model_repo = "ggerganov/whisper.cpp"
 whisper_model_file = "ggml-base.en.bin"
 # The PHONE whisper pick — a `[[models]]` name (below) fetched on demand by the mobile app when Audio
-# transcription is on. Smaller than the desktop's base.en so it fits in RAM *beside* the 1.4 GB llama
-# model; the mobile whisper-server runtime is cross-compiled + bundled (ci/android-stage-whisper.sh).
-whisper_mobile = "ggml-tiny.en"
+# transcription is on. Moved tiny.en → base.en (2026-07-24): base is ~148 MB (vs tiny ~75 MB), still
+# tiny beside the 1.4 GB llama, and it matches the desktop for materially better accuracy on real
+# speech. The admission gate (model file + 300 MB headroom ≈ 450 MB) fits with room to spare on the
+# 7.4 GB phone. tiny.en stays defined below as the fall-back if RAM ever gets tight.
+whisper_mobile = "ggml-base.en"
 # whisper.cpp DOES ship a prebuilt, CPU-only, portable Linux x64 server tarball (verified: it unpacks
 # `whisper-server` + `libwhisper.so` + `libggml-cpu-*` micro-arch variants, ~24 MB, no CUDA, links only
 # stock system libs). So `fetch-whisper` stages it automatically, exactly like the llama.cpp runtime —
@@ -74,7 +76,13 @@ file = "LFM2.5-1.2B-Instruct-Q4_K_M.gguf"
 note = "PHONE pick — IFEval 86.2 / BFCL-v3 49.1, top of its size tier; measured 15.9 tok/s, ~1.4 GB resident on the Dimensity 7300. Runs smoothly at 4 threads without blocking the UI."
 
 [[models]]
+name = "ggml-base.en"
+repo = "ggerganov/whisper.cpp"
+file = "ggml-base.en.bin"
+note = "PHONE whisper (current) — base English, ~148 MB. Same weights as the desktop; better than tiny on accents/noise, still fits beside the 1.4 GB llama on an 8 GB phone. Fetched on demand when Audio transcription is enabled; served by the bundled arm64 whisper-server."
+
+[[models]]
 name = "ggml-tiny.en"
 repo = "ggerganov/whisper.cpp"
 file = "ggml-tiny.en.bin"
-note = "PHONE whisper — tiny English, ~75 MB, runs beside the phone's small llama model. Fetched on demand when Audio transcription is enabled; served by the bundled arm64 whisper-server."
+note = "PHONE whisper fall-back — tiny English, ~75 MB. Kept as the low-RAM option; set whisper_mobile back to this if base.en ever fails the admission gate on a smaller device."
