@@ -1,0 +1,24 @@
+{
+  "name": "toolcall-search",
+  "check": "toolcall",
+  "expect_tool": "web_search",
+  "note": "The 'decide whether to search' axis (BFCL-style). The answer needs a CURRENT external fact the note context does not contain → the model should emit a well-formed web_search call. Scored on the tool_call, not the prose. Measures agentic competence for a future auto-routing path (today's app routes /research deterministically).",
+  "system": "You are a study assistant with a web_search tool. When the user's question needs facts that are current or not present in the provided note, call web_search with a focused query. If the note already answers it, just answer.",
+  "user": "This note's body:\n\n# Reading list\n\n- Finish the borrow-checker chapter.\n\n---\n\nLatest message: What is the newest stable version of the Rust compiler released this year, and its headline feature?",
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "web_search",
+        "description": "Search the web for current or external information not present in the provided notes.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string", "description": "the search query" }
+          },
+          "required": ["query"]
+        }
+      }
+    }
+  ]
+}

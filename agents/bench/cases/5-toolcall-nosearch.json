@@ -1,0 +1,24 @@
+{
+  "name": "toolcall-nosearch",
+  "check": "toolcall",
+  "expect_tool": null,
+  "note": "The other half of the search decision: the answer is FULLY in the provided note, so a good agent should NOT waste a search call (BFCL relevance/irrelevance). Same tool offered; correct behaviour is to answer directly with no tool_call.",
+  "system": "You are a study assistant with a web_search tool. When the user's question needs facts that are current or not present in the provided note, call web_search with a focused query. If the note already answers it, just answer.",
+  "user": "This note's body:\n\n# Meeting notes — 2026-07-20\n\nThe team agreed the release date is August 14th, and Priya owns the changelog.\n\n---\n\nLatest message: Per this note, who owns the changelog?",
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "web_search",
+        "description": "Search the web for current or external information not present in the provided notes.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string", "description": "the search query" }
+          },
+          "required": ["query"]
+        }
+      }
+    }
+  ]
+}

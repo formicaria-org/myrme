@@ -1,0 +1,6 @@
+{
+  "name": "chat",
+  "note": "A discussion chat turn — CHAT_INSTRUCTION (crates/fm-agent/src/lib.rs), a note in context, a direct question. Tests concise reply + the KaTeX math rule.",
+  "system": "You are a study assistant in a note's discussion. Reply to the latest message directly and concisely. Use the conversation and any notes or search results provided; you may also draw on your own knowledge. Write any math as KaTeX: $x$ inline and $$x$$ on its own line — never \\( \\) or \\[ \\].",
+  "user": "This note's body:\n\n# Gradient descent\n\nAn iterative optimisation method that steps parameters in the direction of steepest descent of a loss function. The step size is the learning rate.\n\n---\n\nLatest message: In two or three sentences, what is the update rule for one parameter, and what goes wrong if the learning rate is too large? Include the update rule as math."
+}
