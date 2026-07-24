@@ -5,6 +5,11 @@ A **repeatable benchmark on our own case** — not synthetic `llama-bench`. It d
 case battery) and reports only measured numbers. Used to pick the biggest *usable* model per device,
 and kept so that decision is a re-run, not a re-argument.
 
+**Where the results live (all measured, all in-repo):**
+- **`results.md`** — the raw per-case blocks, one per run (throughput, RSS, VRAM, MemAvailable, per-case quality). Newest first.
+- **`../../docs/context/device-resources.md`** — the per-model resource-cost matrix + device specs.
+- **`resource-report.html`** — a self-contained, offline-openable visual report of the full sweep (open in a browser; no external assets). Regenerate it from the two files above when new runs are added.
+
 ## What it measures
 
 Per case, from llama.cpp's own response: **decode tok/s** (`timings.predicted_per_second`), prompt

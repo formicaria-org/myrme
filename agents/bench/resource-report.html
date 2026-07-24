@@ -1,0 +1,445 @@
+<style>
+  :root{
+    --ground:#f5f7f9; --panel:#ffffff; --panel-2:#fbfcfd;
+    --ink:#14181d; --muted:#5d6773; --faint:#8a94a1;
+    --hair:#e4e8ed; --hair-strong:#d3d9e0;
+    --accent:#0c7b88; --accent-soft:#e0f0f1; --accent-ink:#0a5e68;
+    --good:#15803d; --good-soft:#e5f4ea;
+    --warn:#b26a06; --warn-soft:#f7edda;
+    --crit:#c0384f; --crit-soft:#f8e4e7;
+    --bar:#7fc8cf; --bar-track:#eef1f4;
+    --shadow:0 1px 2px rgba(20,24,29,.04),0 4px 16px rgba(20,24,29,.05);
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --ground:#0c0f12; --panel:#151a20; --panel-2:#12161b;
+      --ink:#e8edf2; --muted:#94a0ad; --faint:#6b7783;
+      --hair:#242c34; --hair-strong:#333d47;
+      --accent:#39c3d0; --accent-soft:#102d33; --accent-ink:#7fdce6;
+      --good:#43cd83; --good-soft:#122a1d;
+      --warn:#e0a53a; --warn-soft:#2e2515;
+      --crit:#e8697a; --crit-soft:#2e161b;
+      --bar:#2f7f88; --bar-track:#1c242b;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"]{
+    --ground:#f5f7f9; --panel:#ffffff; --panel-2:#fbfcfd;
+    --ink:#14181d; --muted:#5d6773; --faint:#8a94a1;
+    --hair:#e4e8ed; --hair-strong:#d3d9e0;
+    --accent:#0c7b88; --accent-soft:#e0f0f1; --accent-ink:#0a5e68;
+    --good:#15803d; --good-soft:#e5f4ea; --warn:#b26a06; --warn-soft:#f7edda;
+    --crit:#c0384f; --crit-soft:#f8e4e7; --bar:#7fc8cf; --bar-track:#eef1f4;
+    --shadow:0 1px 2px rgba(20,24,29,.04),0 4px 16px rgba(20,24,29,.05);
+  }
+  :root[data-theme="dark"]{
+    --ground:#0c0f12; --panel:#151a20; --panel-2:#12161b;
+    --ink:#e8edf2; --muted:#94a0ad; --faint:#6b7783;
+    --hair:#242c34; --hair-strong:#333d47;
+    --accent:#39c3d0; --accent-soft:#102d33; --accent-ink:#7fdce6;
+    --good:#43cd83; --good-soft:#122a1d; --warn:#e0a53a; --warn-soft:#2e2515;
+    --crit:#e8697a; --crit-soft:#2e161b; --bar:#2f7f88; --bar-track:#1c242b;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.35);
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--ground); color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    line-height:1.5; -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Menlo,Consolas,monospace}
+  .wrap{max-width:1120px; margin:0 auto; padding:clamp(20px,4vw,52px) clamp(16px,4vw,40px) 80px}
+
+  /* header */
+  header.top{border-bottom:1px solid var(--hair); padding-bottom:26px; margin-bottom:34px}
+  .eyebrow{font-family:ui-monospace,monospace; text-transform:uppercase; letter-spacing:.14em;
+    font-size:11px; color:var(--accent-ink); font-weight:600}
+  h1{font-size:clamp(26px,4vw,38px); line-height:1.1; letter-spacing:-.02em; margin:.35em 0 .3em;
+    text-wrap:balance; font-weight:680}
+  .lede{color:var(--muted); font-size:16px; max-width:64ch; margin:0}
+  .meta-row{display:flex; flex-wrap:wrap; gap:8px 18px; margin-top:18px; font-size:12.5px; color:var(--faint)}
+  .meta-row b{color:var(--muted); font-weight:600}
+
+  /* device spec cards */
+  .devices{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; margin:0 0 40px}
+  .dev{background:var(--panel); border:1px solid var(--hair); border-radius:14px; padding:20px 22px;
+    box-shadow:var(--shadow); position:relative; overflow:hidden}
+  .dev::before{content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--accent)}
+  .dev h3{margin:0 0 2px; font-size:17px; letter-spacing:-.01em; display:flex; align-items:center; gap:8px}
+  .dev .sub{color:var(--muted); font-size:12.5px; margin:0 0 14px}
+  .spec{display:grid; grid-template-columns:auto 1fr; gap:6px 16px; font-size:13px}
+  .spec dt{color:var(--faint)}
+  .spec dd{margin:0; text-align:right; font-family:ui-monospace,monospace; font-variant-numeric:tabular-nums}
+  .spec dd em{font-style:normal; color:var(--accent-ink); font-weight:600}
+
+  /* section */
+  section{margin-bottom:44px}
+  .sec-head{display:flex; align-items:baseline; gap:12px; margin:0 0 4px}
+  .sec-head h2{font-size:20px; letter-spacing:-.01em; margin:0; font-weight:660}
+  .sec-head .tag{font-family:ui-monospace,monospace; font-size:11px; color:var(--muted);
+    background:var(--panel); border:1px solid var(--hair); border-radius:20px; padding:2px 10px}
+  .sec-note{color:var(--muted); font-size:13.5px; margin:.4em 0 16px; max-width:78ch}
+
+  /* tables */
+  .tbl-scroll{overflow-x:auto; border:1px solid var(--hair); border-radius:12px; background:var(--panel);
+    box-shadow:var(--shadow)}
+  table{border-collapse:collapse; width:100%; font-size:13px}
+  caption{caption-side:top; text-align:left; font-family:ui-monospace,monospace; text-transform:uppercase;
+    letter-spacing:.1em; font-size:10.5px; color:var(--faint); padding:12px 14px 8px}
+  th,td{padding:8px 12px; text-align:right; white-space:nowrap; border-bottom:1px solid var(--hair)}
+  thead th{position:sticky; top:0; background:var(--panel-2); color:var(--muted); font-weight:600;
+    font-size:11px; text-transform:uppercase; letter-spacing:.04em; border-bottom:1px solid var(--hair-strong);
+    z-index:2}
+  th.l,td.l{text-align:left}
+  tbody td.num{font-family:ui-monospace,monospace; font-variant-numeric:tabular-nums}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover td{background:var(--panel-2)}
+  td.model{font-weight:600; font-family:ui-monospace,monospace; font-size:12.5px}
+  .pin{position:sticky; left:0; background:var(--panel); z-index:1}
+  thead .pin{z-index:3; background:var(--panel-2)}
+  tbody tr:hover .pin{background:var(--panel-2)}
+  .default-row td{background:var(--accent-soft)!important}
+  .default-row td.model{color:var(--accent-ink)}
+  .grp-first td{border-top:2px solid var(--hair-strong)}
+
+  /* mini bar in decode cell */
+  .barcell{display:flex; align-items:center; gap:8px; justify-content:flex-end}
+  .bar{height:6px; border-radius:3px; background:var(--bar-track); width:64px; overflow:hidden; flex:none}
+  .bar > i{display:block; height:100%; background:var(--bar); border-radius:3px}
+  .barcell b{font-family:ui-monospace,monospace; font-variant-numeric:tabular-nums; min-width:42px; text-align:right}
+
+  /* chips */
+  .chip{display:inline-block; font-family:ui-monospace,monospace; font-size:11px; font-weight:600;
+    padding:1px 8px; border-radius:20px; letter-spacing:.01em; line-height:1.6; white-space:nowrap}
+  .c-good{background:var(--good-soft); color:var(--good)}
+  .c-warn{background:var(--warn-soft); color:var(--warn)}
+  .c-crit{background:var(--crit-soft); color:var(--crit)}
+  .c-mute{background:var(--panel-2); color:var(--faint); border:1px solid var(--hair)}
+  .badge{font-family:ui-monospace,monospace; font-size:10px; text-transform:uppercase; letter-spacing:.06em;
+    padding:1px 6px; border-radius:5px; margin-left:6px; vertical-align:middle}
+  .b-gpu{background:var(--accent-soft); color:var(--accent-ink)}
+  .b-cpu{background:var(--panel-2); color:var(--muted); border:1px solid var(--hair)}
+  .b-new{background:var(--good-soft); color:var(--good)}
+
+  /* legend / notes */
+  .legend{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px 24px;
+    background:var(--panel); border:1px solid var(--hair); border-radius:12px; padding:20px 22px; box-shadow:var(--shadow)}
+  .legend h4{grid-column:1/-1; margin:0 0 2px; font-size:12px; text-transform:uppercase; letter-spacing:.08em;
+    color:var(--faint); font-family:ui-monospace,monospace}
+  .legend div{font-size:12.5px; color:var(--muted)}
+  .legend b{color:var(--ink); font-weight:600}
+  .notes{font-size:12.5px; color:var(--muted); margin-top:20px; line-height:1.65}
+  .notes code{font-family:ui-monospace,monospace; background:var(--panel-2); border:1px solid var(--hair);
+    padding:.5px 5px; border-radius:5px; font-size:11.5px}
+  footer{margin-top:44px; padding-top:20px; border-top:1px solid var(--hair); color:var(--faint); font-size:12px}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow">formicaria · on-device model benchmark</div>
+    <h1>What each model costs — measured on the real devices</h1>
+    <p class="lede">Nine models run through our own study-assistant workload (not synthetic
+      <span class="mono">llama-bench</span>): real system prompts, temperature 0, thinking off,
+      <span class="mono">ctx 2048</span>. Every figure below is sampled live — nothing estimated.</p>
+    <div class="meta-row">
+      <span><b>Harness:</b> agents/bench (hardened)</span>
+      <span><b>Measured:</b> 2026-07-24</span>
+      <span><b>Quant:</b> Q4_K_M throughout</span>
+      <span><b>Runs:</b> one model at a time, memory-capped</span>
+    </div>
+  </header>
+
+  <div class="devices">
+    <div class="dev">
+      <h3>📱 Phone <span class="badge b-cpu">CPU only</span></h3>
+      <p class="sub">Redmi · MediaTek Dimensity 7300</p>
+      <dl class="spec">
+        <dt>CPU</dt><dd>8 core (4 big + 4 little)</dd>
+        <dt>RAM total</dt><dd>7.4 GB</dd>
+        <dt>RAM free (typ.)</dt><dd>~2.9–3.4 GB</dd>
+        <dt>GPU</dt><dd>none</dd>
+        <dt>Threads</dt><dd><em>-t 4</em> (big cores)</dd>
+        <dt>Runtime</dt><dd>llama.cpp b10081</dd>
+      </dl>
+    </div>
+    <div class="dev">
+      <h3>💻 Laptop <span class="badge b-gpu">GPU + CPU</span></h3>
+      <p class="sub">Intel i7-11800H · RTX 3050 Laptop</p>
+      <dl class="spec">
+        <dt>CPU</dt><dd>8C / 16T @ 2.30 GHz</dd>
+        <dt>RAM total</dt><dd>14.9 GB</dd>
+        <dt>GPU</dt><dd><em>RTX 3050, 4 GB</em> (Vulkan)</dd>
+        <dt>VRAM ceiling</dt><dd>~4 GB → caps ≈4B</dd>
+        <dt>Threads</dt><dd><em>-t 8</em> / <em>-ngl 99</em></dd>
+        <dt>Runtime</dt><dd>llama.cpp b10076</dd>
+      </dl>
+    </div>
+  </div>
+
+  <!-- ============ LAPTOP ============ -->
+  <section>
+    <div class="sec-head"><h2>💻 Laptop</h2><span class="tag">GPU holds weights in VRAM · CPU rows for comparison</span></div>
+    <p class="sec-note">On the GPU the model's <b>system-RAM footprint stays under 800 MB</b> — the weights live in
+      VRAM. The 4 GB card is the ceiling: Gemma-4-E4B's 4.7 GB won't fit, so it drops to CPU at a quarter of the speed.</p>
+
+    <div class="tbl-scroll">
+      <table>
+        <caption>Summary — footprint &amp; mean throughput</caption>
+        <thead>
+          <tr>
+            <th class="l pin">Model</th><th>Back-end</th><th>GGUF</th>
+            <th>Decode t/s (mean)</th><th>Peak RSS</th><th>VmHWM</th><th>VRAM</th>
+            <th>MemAvail min</th><th class="l">Grounding</th><th class="l">Search call / decline</th><th class="l">Junk source</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="default-row">
+            <td class="l model pin">qwen3-vl-4b <span class="badge b-new">new default</span></td>
+            <td class="num">GPU</td><td class="num">2.4 GB</td>
+            <td><div class="barcell"><b>40.1</b><span class="bar"><i style="width:95%"></i></span></div></td>
+            <td class="num">791 MB</td><td class="num">2594 MB</td><td class="num">2782 MB</td><td class="num">4505 MB</td>
+            <td class="l"><span class="chip c-good">3 / 3 verbatim</span></td>
+            <td class="l"><span class="chip c-warn">missed</span> <span class="chip c-good">declines</span></td>
+            <td class="l"><span class="chip c-good">abstains</span></td>
+          </tr>
+          <tr>
+            <td class="l model pin">qwen3-4b-2507 <span class="badge b-cpu">fallback</span></td>
+            <td class="num">GPU</td><td class="num">2.4 GB</td>
+            <td><div class="barcell"><b>39.8</b><span class="bar"><i style="width:95%"></i></span></div></td>
+            <td class="num">511 MB</td><td class="num">2578 MB</td><td class="num">2769 MB</td><td class="num">9757 MB</td>
+            <td class="l"><span class="chip c-warn">1 / 3 verbatim</span></td>
+            <td class="l"><span class="chip c-good">calls</span> <span class="chip c-good">declines</span></td>
+            <td class="l"><span class="chip c-crit">fabricates</span></td>
+          </tr>
+          <tr>
+            <td class="l model pin">qwen3-4b-2507</td>
+            <td class="num">CPU</td><td class="num">2.4 GB</td>
+            <td><div class="barcell"><b>13.0</b><span class="bar"><i style="width:31%"></i></span></div></td>
+            <td class="num">3181 MB</td><td class="num">3181 MB</td><td class="num">—</td><td class="num">9281 MB</td>
+            <td class="l"><span class="chip c-warn">1 / 3 verbatim</span></td>
+            <td class="l"><span class="chip c-good">calls</span> <span class="chip c-good">declines</span></td>
+            <td class="l"><span class="chip c-crit">fabricates</span></td>
+          </tr>
+          <tr>
+            <td class="l model pin">nemotron-3-nano-4b</td>
+            <td class="num">GPU</td><td class="num">2.7 GB</td>
+            <td><div class="barcell"><b>35.4</b><span class="bar"><i style="width:84%"></i></span></div></td>
+            <td class="num">1773 MB</td><td class="num">2933 MB</td><td class="num">2986 MB</td><td class="num">5645 MB</td>
+            <td class="l"><span class="chip c-crit">0 / 2 verbatim</span></td>
+            <td class="l"><span class="chip c-good">calls</span> <span class="chip c-good">declines</span></td>
+            <td class="l"><span class="chip c-crit">fabricates</span></td>
+          </tr>
+          <tr>
+            <td class="l model pin">gemma-4-e4b</td>
+            <td class="num">CPU¹</td><td class="num">4.7 GB</td>
+            <td><div class="barcell"><b>10.9</b><span class="bar"><i style="width:26%"></i></span></div></td>
+            <td class="num">5363 MB</td><td class="num">5363 MB</td><td class="num">—</td><td class="num">9953 MB</td>
+            <td class="l"><span class="chip c-warn">1 / 5 verbatim</span></td>
+            <td class="l"><span class="chip c-good">calls</span> <span class="chip c-good">declines</span></td>
+            <td class="l"><span class="chip c-good">abstains</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="notes">¹ Gemma-4-E4B's 4.7 GB Q4 exceeds the 4 GB VRAM, so it cannot GPU-offload on this card — CPU-bound at ~11 t/s.</p>
+
+    <div class="tbl-scroll" style="margin-top:20px">
+      <table>
+        <caption>Per-case detail — every request the harness sent</caption>
+        <thead>
+          <tr><th class="l pin">Model</th><th class="l">Case</th><th>Prompt tok</th><th>Gen tok</th>
+            <th>Decode t/s</th><th>Prompt t/s</th><th>Wall s</th><th class="l">Result</th></tr>
+        </thead>
+        <tbody>
+          <tr class="grp-first"><td class="l model pin" rowspan="6">qwen3-vl-4b</td><td class="l">chat</td><td class="num">160</td><td class="num">99</td><td class="num">40.5</td><td class="num">514.8</td><td class="num">2.77</td><td class="l"><span class="chip c-good">ok</span></td></tr>
+          <tr><td class="l">research</td><td class="num">374</td><td class="num">196</td><td class="num">39.7</td><td class="num">702.3</td><td class="num">5.50</td><td class="l"><span class="chip c-good">3/3 verbatim</span></td></tr>
+          <tr><td class="l">write</td><td class="num">324</td><td class="num">99</td><td class="num">39.7</td><td class="num">641.9</td><td class="num">3.05</td><td class="l"><span class="chip c-good">ok</span></td></tr>
+          <tr><td class="l">toolcall-search</td><td class="num">250</td><td class="num">142</td><td class="num">39.7</td><td class="num">684.8</td><td class="num">3.99</td><td class="l"><span class="chip c-warn">no call (miss)</span></td></tr>
+          <tr><td class="l">toolcall-nosearch</td><td class="num">266</td><td class="num">25</td><td class="num">41.0</td><td class="num">646.6</td><td class="num">1.03</td><td class="l"><span class="chip c-good">declined ✓</span></td></tr>
+          <tr><td class="l">abstain</td><td class="num">257</td><td class="num">58</td><td class="num">40.0</td><td class="num">638.9</td><td class="num">1.88</td><td class="l"><span class="chip c-good">abstained ✓</span></td></tr>
+
+          <tr class="grp-first"><td class="l model pin" rowspan="3">qwen3-4b-2507 <span class="badge b-gpu">gpu</span></td><td class="l">chat</td><td class="num">160</td><td class="num">95</td><td class="num">40.4</td><td class="num">263.1</td><td class="num">3.10</td><td class="l"><span class="chip c-good">ok</span></td></tr>
+          <tr><td class="l">research</td><td class="num">374</td><td class="num">200</td><td class="num">39.7</td><td class="num">675.1</td><td class="num">5.73</td><td class="l"><span class="chip c-mute">2/2 (unverified²)</span></td></tr>
+          <tr><td class="l">write</td><td class="num">324</td><td class="num">200</td><td class="num">39.3</td><td class="num">617.0</td><td class="num">5.73</td><td class="l"><span class="chip c-good">ok</span></td></tr>
+
+          <tr class="grp-first"><td class="l model pin" rowspan="6">qwen3-4b-2507 <span class="badge b-cpu">cpu</span></td><td class="l">chat</td><td class="num">160</td><td class="num">104</td><td class="num">12.4</td><td class="num">68.3</td><td class="num">10.74</td><td class="l"><span class="chip c-good">ok</span></td></tr>
+          <tr><td class="l">research</td><td class="num">374</td><td class="num">256</td><td class="num">12.1</td><td class="num">223.8</td><td class="num">22.91</td><td class="l"><span class="chip c-warn">1/3 verbatim</span></td></tr>
+          <tr><td class="l">write</td><td class="num">324</td><td class="num">256</td><td class="num">12.6</td><td class="num">192.7</td><td class="num">22.05</td><td class="l"><span class="chip c-good">ok</span></td></tr>
+          <tr><td class="l">toolcall-search</td><td class="num">250</td><td class="num">33</td><td class="num">13.3</td><td class="num">131.7</td><td class="num">4.43</td><td class="l"><span class="chip c-good">called ✓</span></td></tr>
+          <tr><td class="l">toolcall-nosearch</td><td class="num">266</td><td class="num">8</td><td class="num">14.5</td><td class="num">178.9</td><td class="num">2.05</td><td class="l"><span class="chip c-good">declined ✓</span></td></tr>
+          <tr><td class="l">abstain</td><td class="num">257</td><td class="num">46</td><td class="num">13.1</td><td class="num">339.7</td><td class="num">4.29</td><td class="l"><span class="chip c-crit">fabricated</span></td></tr>
+
+          <tr class="grp-first"><td class="l model pin" rowspan="6">nemotron-3-nano-4b</td><td class="l">chat</td><td class="num">163</td><td class="num">61</td><td class="num">29.9</td><td class="num">19.4</td><td class="num">10.46</td><td class="l"><span class="chip c-good">ok</span></td></tr>
+          <tr><td class="l">research</td><td class="num">385</td><td class="num">256</td><td class="num">35.4</td><td class="num">51.1</td><td class="num">15.01</td><td class="l"><span class="chip c-crit">0/2 · 2 hallucinated</span></td></tr>
+          <tr><td class="l">write</td><td class="num">333</td><td class="num">115</td><td class="num">35.1</td><td class="num">357.8</td><td class="num">4.50</td><td class="l"><span class="chip c-good">ok</span></td></tr>
+          <tr><td class="l">toolcall-search</td><td class="num">372</td><td class="num">36</td><td class="num">35.8</td><td class="num">57.5</td><td class="num">7.67</td><td class="l"><span class="chip c-good">called ✓</span></td></tr>
+          <tr><td class="l">toolcall-nosearch</td><td class="num">390</td><td class="num">9</td><td class="num">40.1</td><td class="num">361.6</td><td class="num">1.35</td><td class="l"><span class="chip c-good">declined ✓</span></td></tr>
+          <tr><td class="l">abstain</td><td class="num">267</td><td class="num">52</td><td class="num">35.8</td><td class="num">343.0</td><td class="num">2.38</td><td class="l"><span class="chip c-crit">fabricated</span></td></tr>
+
+          <tr class="grp-first"><td class="l model pin" rowspan="6">gemma-4-e4b <span class="badge b-cpu">cpu</span></td><td class="l">chat</td><td class="num">159</td><td class="num">75</td><td class="num">10.8</td><td class="num">42.0</td><td class="num">10.75</td><td class="l"><span class="chip c-good">ok</span></td></tr>
+          <tr><td class="l">research</td><td class="num">373</td><td class="num">256</td><td class="num">9.8</td><td class="num">47.7</td><td class="num">33.86</td><td class="l"><span class="chip c-warn">1/5 · 4 hallucinated</span></td></tr>
+          <tr><td class="l">write</td><td class="num">328</td><td class="num">256</td><td class="num">10.1</td><td class="num">98.5</td><td class="num">28.64</td><td class="l"><span class="chip c-good">ok</span></td></tr>
+          <tr><td class="l">toolcall-search</td><td class="num">168</td><td class="num">27</td><td class="num">11.3</td><td class="num">21.2</td><td class="num">10.33</td><td class="l"><span class="chip c-good">called ✓</span></td></tr>
+          <tr><td class="l">toolcall-nosearch</td><td class="num">183</td><td class="num">8</td><td class="num">12.5</td><td class="num">26.3</td><td class="num">7.61</td><td class="l"><span class="chip c-good">declined ✓</span></td></tr>
+          <tr><td class="l">abstain</td><td class="num">254</td><td class="num">26</td><td class="num">10.9</td><td class="num">53.5</td><td class="num">7.14</td><td class="l"><span class="chip c-good">abstained ✓</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="notes">² The GPU baseline predates the harness hardening — its quotes were <em>counted</em>, not verified as verbatim.
+      Its verified grounding (1/3) is the CPU row.</p>
+  </section>
+
+  <!-- ============ PHONE ============ -->
+  <section>
+    <div class="sec-head"><h2>📱 Phone</h2><span class="tag">CPU -t 4 -ngl 0 · all fit, none refused</span></div>
+    <p class="sec-note">Every candidate <b>fit</b> — <span class="mono">MemAvailable</span> never dropped below ~2.3 GB, so the
+      admission gate never refused. The wall is <b>CPU throughput, not RAM</b>: the 1–1.2B models hold 12–13.5 t/s; the 2B
+      models fall to ~7.5–8. And <b>no ≤2B model grounded a single verbatim quote</b> — so the fast, well-behaved default stays.</p>
+
+    <div class="tbl-scroll">
+      <table>
+        <caption>Summary — footprint &amp; mean throughput</caption>
+        <thead>
+          <tr>
+            <th class="l pin">Model</th><th>GGUF</th>
+            <th>Decode t/s (mean)</th><th>Peak RSS</th><th>VmHWM</th>
+            <th>MemAvail min</th><th class="l">Grounding</th><th class="l">Search call / decline</th><th class="l">Junk source</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="default-row">
+            <td class="l model pin">lfm2.5-1.2b <span class="badge b-new">default · stands</span></td>
+            <td class="num">695 MB</td>
+            <td><div class="barcell"><b>12.4</b><span class="bar"><i style="width:83%"></i></span></div></td>
+            <td class="num">1503 MB</td><td class="num">1503 MB</td><td class="num">2950 MB</td>
+            <td class="l"><span class="chip c-warn">0 quotes³</span></td>
+            <td class="l"><span class="chip c-mute">not re-run</span></td>
+            <td class="l"><span class="chip c-mute">not re-run</span></td>
+          </tr>
+          <tr>
+            <td class="l model pin">minicpm5-1b</td>
+            <td class="num">657 MB</td>
+            <td><div class="barcell"><b>13.5</b><span class="bar"><i style="width:90%"></i></span></div></td>
+            <td class="num">1213 MB</td><td class="num">1266 MB</td><td class="num">3242 MB</td>
+            <td class="l"><span class="chip c-crit">0 claims</span></td>
+            <td class="l"><span class="chip c-good">calls</span> <span class="chip c-crit">over-searches</span></td>
+            <td class="l"><span class="chip c-good">abstains</span></td>
+          </tr>
+          <tr>
+            <td class="l model pin">lfm2.5-vl-1.6b</td>
+            <td class="num">698 MB</td>
+            <td><div class="barcell"><b>11.8</b><span class="bar"><i style="width:79%"></i></span></div></td>
+            <td class="num">1518 MB</td><td class="num">1520 MB</td><td class="num">3188 MB</td>
+            <td class="l"><span class="chip c-warn">0 quotes</span></td>
+            <td class="l"><span class="chip c-good">calls</span> <span class="chip c-crit">over-searches</span></td>
+            <td class="l"><span class="chip c-crit">fabricates</span></td>
+          </tr>
+          <tr>
+            <td class="l model pin">qwen3-vl-2b</td>
+            <td class="num">1.1 GB</td>
+            <td><div class="barcell"><b>7.8</b><span class="bar"><i style="width:52%"></i></span></div></td>
+            <td class="num">2611 MB</td><td class="num">2611 MB</td><td class="num">2474 MB</td>
+            <td class="l"><span class="chip c-crit">0 / 3 · 3 hallucinated</span></td>
+            <td class="l"><span class="chip c-good">calls</span> <span class="chip c-good">declines</span></td>
+            <td class="l"><span class="chip c-good">abstains</span></td>
+          </tr>
+          <tr>
+            <td class="l model pin">qwen3.5-2b</td>
+            <td class="num">1.2 GB</td>
+            <td><div class="barcell"><b>7.5</b><span class="bar"><i style="width:50%"></i></span></div></td>
+            <td class="num">2861 MB</td><td class="num">2861 MB</td><td class="num">2367 MB</td>
+            <td class="l"><span class="chip c-warn">0 quotes (7 claims)</span></td>
+            <td class="l"><span class="chip c-good">calls</span> <span class="chip c-good">declines</span></td>
+            <td class="l"><span class="chip c-good">abstains</span></td>
+          </tr>
+          <tr>
+            <td class="l model pin">qwen3-1.7b <span class="badge b-cpu">earlier</span></td>
+            <td class="num">1.1 GB</td>
+            <td><div class="barcell"><b>8.9</b><span class="bar"><i style="width:59%"></i></span></div></td>
+            <td class="num">2432 MB</td><td class="num">2432 MB</td><td class="num">~2500 MB</td>
+            <td class="l"><span class="chip c-warn">1 quote</span></td>
+            <td class="l"><span class="chip c-mute">n/a</span></td>
+            <td class="l"><span class="chip c-mute">n/a</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="notes">³ The 1–1.2B tier can't follow the quote-first grounding contract — its research answers carry no verbatim quotes.</p>
+
+    <div class="tbl-scroll" style="margin-top:20px">
+      <table>
+        <caption>Per-case detail</caption>
+        <thead>
+          <tr><th class="l pin">Model</th><th class="l">Case</th><th>Prompt tok</th><th>Gen tok</th>
+            <th>Decode t/s</th><th>Prompt t/s</th><th>Wall s</th><th class="l">Result</th></tr>
+        </thead>
+        <tbody>
+          <tr class="grp-first"><td class="l model pin" rowspan="3">lfm2.5-1.2b</td><td class="l">chat</td><td class="num">168</td><td class="num">44</td><td class="num">12.7</td><td class="num">100.6</td><td class="num">5.17</td><td class="l"><span class="chip c-good">ok</span></td></tr>
+          <tr><td class="l">research</td><td class="num">391</td><td class="num">51</td><td class="num">12.2</td><td class="num">105.0</td><td class="num">7.95</td><td class="l"><span class="chip c-warn">0 quotes</span></td></tr>
+          <tr><td class="l">write</td><td class="num">348</td><td class="num">189</td><td class="num">12.2</td><td class="num">105.6</td><td class="num">18.79</td><td class="l"><span class="chip c-good">ok</span></td></tr>
+
+          <tr class="grp-first"><td class="l model pin" rowspan="6">minicpm5-1b</td><td class="l">chat</td><td class="num">164</td><td class="num">63</td><td class="num">13.3</td><td class="num">97.4</td><td class="num">6.47</td><td class="l"><span class="chip c-good">ok</span></td></tr>
+          <tr><td class="l">research</td><td class="num">373</td><td class="num">102</td><td class="num">13.7</td><td class="num">98.3</td><td class="num">11.26</td><td class="l"><span class="chip c-crit">0 claims</span></td></tr>
+          <tr><td class="l">write</td><td class="num">331</td><td class="num">256</td><td class="num">12.7</td><td class="num">94.3</td><td class="num">23.66</td><td class="l"><span class="chip c-good">ok</span></td></tr>
+          <tr><td class="l">toolcall-search</td><td class="num">316</td><td class="num">52</td><td class="num">14.3</td><td class="num">99.2</td><td class="num">6.88</td><td class="l"><span class="chip c-good">called ✓</span></td></tr>
+          <tr><td class="l">toolcall-nosearch</td><td class="num">329</td><td class="num">66</td><td class="num">13.6</td><td class="num">96.9</td><td class="num">8.27</td><td class="l"><span class="chip c-crit">over-searched</span></td></tr>
+          <tr><td class="l">abstain</td><td class="num">262</td><td class="num">108</td><td class="num">13.5</td><td class="num">96.5</td><td class="num">10.74</td><td class="l"><span class="chip c-good">abstained ✓</span></td></tr>
+
+          <tr class="grp-first"><td class="l model pin" rowspan="6">lfm2.5-vl-1.6b</td><td class="l">chat</td><td class="num">168</td><td class="num">102</td><td class="num">12.0</td><td class="num">70.7</td><td class="num">10.91</td><td class="l"><span class="chip c-good">ok</span></td></tr>
+          <tr><td class="l">research</td><td class="num">391</td><td class="num">148</td><td class="num">11.7</td><td class="num">72.1</td><td class="num">18.16</td><td class="l"><span class="chip c-warn">0 quotes</span></td></tr>
+          <tr><td class="l">write</td><td class="num">348</td><td class="num">256</td><td class="num">11.9</td><td class="num">72.0</td><td class="num">26.35</td><td class="l"><span class="chip c-good">ok</span></td></tr>
+          <tr><td class="l">toolcall-search</td><td class="num">187</td><td class="num">24</td><td class="num">11.9</td><td class="num">70.3</td><td class="num">4.72</td><td class="l"><span class="chip c-good">called ✓</span></td></tr>
+          <tr><td class="l">toolcall-nosearch</td><td class="num">199</td><td class="num">20</td><td class="num">11.3</td><td class="num">70.7</td><td class="num">4.62</td><td class="l"><span class="chip c-crit">over-searched</span></td></tr>
+          <tr><td class="l">abstain</td><td class="num">271</td><td class="num">104</td><td class="num">11.8</td><td class="num">70.9</td><td class="num">12.64</td><td class="l"><span class="chip c-crit">fabricated</span></td></tr>
+
+          <tr class="grp-first"><td class="l model pin" rowspan="6">qwen3-vl-2b</td><td class="l">chat</td><td class="num">160</td><td class="num">133</td><td class="num">8.0</td><td class="num">48.9</td><td class="num">20.01</td><td class="l"><span class="chip c-good">ok</span></td></tr>
+          <tr><td class="l">research</td><td class="num">374</td><td class="num">256</td><td class="num">7.4</td><td class="num">49.4</td><td class="num">42.33</td><td class="l"><span class="chip c-crit">0/3 · 3 hallucinated</span></td></tr>
+          <tr><td class="l">write</td><td class="num">324</td><td class="num">234</td><td class="num">7.4</td><td class="num">47.6</td><td class="num">38.47</td><td class="l"><span class="chip c-good">ok</span></td></tr>
+          <tr><td class="l">toolcall-search</td><td class="num">250</td><td class="num">33</td><td class="num">8.2</td><td class="num">48.5</td><td class="num">9.31</td><td class="l"><span class="chip c-good">called ✓</span></td></tr>
+          <tr><td class="l">toolcall-nosearch</td><td class="num">266</td><td class="num">13</td><td class="num">7.8</td><td class="num">49.2</td><td class="num">7.12</td><td class="l"><span class="chip c-good">declined ✓</span></td></tr>
+          <tr><td class="l">abstain</td><td class="num">257</td><td class="num">69</td><td class="num">7.7</td><td class="num">48.1</td><td class="num">14.38</td><td class="l"><span class="chip c-good">abstained ✓</span></td></tr>
+
+          <tr class="grp-first"><td class="l model pin" rowspan="6">qwen3.5-2b</td><td class="l">chat</td><td class="num">167</td><td class="num">68</td><td class="num">9.1</td><td class="num">62.6</td><td class="num">10.19</td><td class="l"><span class="chip c-good">ok</span></td></tr>
+          <tr><td class="l">research</td><td class="num">381</td><td class="num">204</td><td class="num">7.8</td><td class="num">50.9</td><td class="num">33.63</td><td class="l"><span class="chip c-warn">0 quotes (7 claims)</span></td></tr>
+          <tr><td class="l">write</td><td class="num">332</td><td class="num">256</td><td class="num">8.6</td><td class="num">50.8</td><td class="num">36.30</td><td class="l"><span class="chip c-good">ok</span></td></tr>
+          <tr><td class="l">toolcall-search</td><td class="num">377</td><td class="num">42</td><td class="num">8.6</td><td class="num">48.7</td><td class="num">12.79</td><td class="l"><span class="chip c-good">called ✓</span></td></tr>
+          <tr><td class="l">toolcall-nosearch</td><td class="num">393</td><td class="num">49</td><td class="num">4.4</td><td class="num">35.5</td><td class="num">22.31</td><td class="l"><span class="chip c-good">declined ✓</span></td></tr>
+          <tr><td class="l">abstain</td><td class="num">262</td><td class="num">92</td><td class="num">6.3</td><td class="num">30.1</td><td class="num">23.35</td><td class="l"><span class="chip c-good">abstained ✓</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ LEGEND ============ -->
+  <section>
+    <div class="sec-head"><h2>How to read it</h2></div>
+    <div class="legend">
+      <h4>Throughput</h4>
+      <div><b>Decode t/s</b> — generation speed. Reading pace ≈ 5–10 t/s, so anything above streams smoothly.</div>
+      <div><b>Prompt t/s</b> — how fast the model ingests context before it starts writing (noisy; varies with prompt length).</div>
+      <div><b>Wall s</b> — end-to-end seconds for that single request.</div>
+      <h4>Memory</h4>
+      <div><b>Peak RSS / VmHWM</b> — the model process's own resident / high-water RAM. Runs ~1.7–2.4× the file size (KV-cache + buffers).</div>
+      <div><b>VRAM</b> — GPU memory held (laptop GPU rows only).</div>
+      <div><b>MemAvail min</b> — lowest system free RAM during the run — the headroom that proves it fit.</div>
+      <h4>Quality verdicts</h4>
+      <div><b>Grounding</b> — verbatim quotes / total quotes in the research answer. Each quote is checked as a literal substring of its cited source.</div>
+      <div><b>Search call / decline</b> — did it call web_search when it should, and stay quiet when the note already answered?</div>
+      <div><b>Junk source</b> — given sources that don't answer the question, does it abstain or invent a cited claim?</div>
+    </div>
+    <p class="notes">
+      <span class="chip c-good">green</span> good &nbsp;
+      <span class="chip c-warn">amber</span> weak but not harmful &nbsp;
+      <span class="chip c-crit">red</span> wrong / unsafe &nbsp;
+      <span class="chip c-mute">grey</span> not measured. &nbsp;
+      Grounding counts drift a little with the 256-token budget — the verbatim <em>ratio</em> is the signal, not the raw count.
+      Source data: <code>agents/bench/results.md</code> · methodology: <code>model-selection-research-2026-07-24-grounded.md</code>.
+    </p>
+  </section>
+
+  <footer>
+    formicaria on-device model benchmark · measured 2026-07-24 on the real phone (Dimensity 7300) and laptop (RTX 3050) ·
+    every figure sampled from <span class="mono">llama.cpp timings</span>, <span class="mono">/proc</span>, and <span class="mono">nvidia-smi</span>.
+  </footer>
+</div>
