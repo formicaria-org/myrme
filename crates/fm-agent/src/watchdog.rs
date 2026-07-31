@@ -235,6 +235,17 @@ fn proc_sample() -> Result<Resources, WatchdogError> {
     // phone anyway; memory is (see `Limits::resident`). So an unreadable loadavg is tolerated as "load
     // unknown", and only unreadable MEMORY fails closed — that is what actually prevents an OOM/crash.
     // On the desktop loadavg is always readable, so nothing changes there.
+    //
+    // **On Android we do not even attempt the read**, which is not the same as tolerating its
+    // failure: the kernel audits every *denied* open, so a tolerated read at the poll interval —
+    // two models × one sample each, every 2 s — wrote ~1 `avc: denied` line per second into logcat
+    // forever. Measured on the owner's phone 2026-07-31: the app's own log buffer was ~90 %
+    // `name="loadavg"` denials, which is both noise in the one diagnostic channel a phone has and a
+    // syscall per poll that can never succeed. A denial you have decided to live with should not be
+    // re-provoked on a timer.
+    #[cfg(target_os = "android")]
+    let loadavg = String::new();
+    #[cfg(not(target_os = "android"))]
     let loadavg = std::fs::read_to_string("/proc/loadavg").unwrap_or_default();
     parse_proc(&meminfo, &loadavg, proc_cores())
 }
