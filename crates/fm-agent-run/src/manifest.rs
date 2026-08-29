@@ -19,6 +19,14 @@ pub struct Model {
     pub repo: String,
     /// Optional SHA-256 (hex) to verify a download against. `None` ⇒ fetch without verification.
     pub sha256: Option<String>,
+    /// The exact Hugging Face commit the [`sha256`](Self::sha256) was taken from. Unset ⇒ `main`.
+    ///
+    /// **A checksum without one of these is a bomb on a timer.** `resolve/main` is a moving pointer:
+    /// the day the repo re-quantises or fixes a template, every download starts failing its checksum
+    /// — permanently, on every device, with no way for the user to fix it and no way for us to reach
+    /// an already-shipped release. Pinning the commit makes the URL name the same bytes forever, so
+    /// the checksum can only ever fail on a *corrupt transfer*, which is what it is for.
+    pub revision: Option<String>,
     /// Per-model context-window override; falls back to the manifest's `ctx` when unset.
     pub ctx: Option<u32>,
     /// Per-model thread-count override; falls back to the manifest's `threads` when unset.
@@ -92,7 +100,7 @@ impl Manifest {
             }
             if line == "[[models]]" {
                 flush(&mut cur, &mut models);
-                cur = Some(Model { name: String::new(), file: String::new(), repo: String::new(), sha256: None, ctx: None, threads: None });
+                cur = Some(Model { name: String::new(), file: String::new(), repo: String::new(), sha256: None, revision: None, ctx: None, threads: None });
                 continue;
             }
             let Some((key, val)) = line.split_once('=') else { continue };
@@ -105,6 +113,7 @@ impl Manifest {
                     "file" => m.file = val.to_string(),
                     "repo" => m.repo = val.to_string(),
                     "sha256" => m.sha256 = Some(val.to_string()),
+                    "revision" => m.revision = Some(val.to_string()),
                     "ctx" => m.ctx = val.parse().ok(),
                     "threads" => m.threads = val.parse().ok(),
                     _ => {}
@@ -182,7 +191,10 @@ impl Manifest {
         if m.repo.is_empty() {
             return None;
         }
-        Some(format!("https://huggingface.co/{}/resolve/main/{}", m.repo, m.file))
+        // The pinned commit when there is one — see `Model::revision`. `main` only for an entry that
+        // pins no checksum either, where a moving target is the stated intent rather than an accident.
+        let rev = m.revision.as_deref().unwrap_or("main");
+        Some(format!("https://huggingface.co/{}/resolve/{rev}/{}", m.repo, m.file))
     }
 }
 
@@ -231,6 +243,19 @@ mod tests {
             Some("https://huggingface.co/LiquidAI/LFM2.5-230M-GGUF/resolve/main/LFM2.5-230M-Q4_K_M.gguf"),
         );
         assert_eq!(m.download_url("nope"), None);
+    }
+
+    /// A pinned checksum against a moving `main` is a permanent, unfixable mismatch the day the repo
+    /// changes the file. The revision is what makes the URL name the same bytes forever.
+    #[test]
+    fn a_pinned_revision_is_what_the_url_resolves() {
+        let m = Manifest::parse(
+            "[[models]]\nname = \"x\"\nrepo = \"r/x\"\nfile = \"x.gguf\"\nrevision = \"deadbeef\"\n",
+        );
+        assert_eq!(
+            m.download_url("x").as_deref(),
+            Some("https://huggingface.co/r/x/resolve/deadbeef/x.gguf"),
+        );
     }
 
     #[test]

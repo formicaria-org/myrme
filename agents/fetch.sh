@@ -26,21 +26,33 @@ conf_get() {
   ' "$CONF"
 }
 
-# The (repo, file) for a model name, read positionally from its [[models]] block.
+# The (repo, file, revision, sha256) for a model name, from its [[models]] block. Emitted at the end
+# of the block rather than on the `file` line, so the fields may appear in any order — the old version
+# printed as soon as it saw `file`, which made `revision`/`sha256` unreadable by construction.
 model_fields() {
   awk -v want="$1" '
-    /^\[\[models\]\]/ { name=""; repo=""; file="" }
-    /^name *=/ { v=$0; sub(/^name *= *"?/,"",v); sub(/"? *$/,"",v); name=v }
-    /^repo *=/ { v=$0; sub(/^repo *= *"?/,"",v); sub(/"? *$/,"",v); repo=v }
-    /^file *=/ { v=$0; sub(/^file *= *"?/,"",v); sub(/"? *$/,"",v); file=v;
-                 if (name==want) { print repo "\t" file; exit } }
+    function emit() { if (name==want && !done) { print repo "\t" file "\t" rev "\t" sha; done=1 } }
+    /^\[\[models\]\]/ { emit(); name=""; repo=""; file=""; rev=""; sha="" }
+    /^name *=/     { v=$0; sub(/^name *= *"?/,"",v);     sub(/"? *$/,"",v); name=v }
+    /^repo *=/     { v=$0; sub(/^repo *= *"?/,"",v);     sub(/"? *$/,"",v); repo=v }
+    /^file *=/     { v=$0; sub(/^file *= *"?/,"",v);     sub(/"? *$/,"",v); file=v }
+    /^revision *=/ { v=$0; sub(/^revision *= *"?/,"",v); sub(/"? *$/,"",v); rev=v }
+    /^sha256 *=/   { v=$0; sub(/^sha256 *= *"?/,"",v);   sub(/"? *$/,"",v); sha=v }
+    END { emit() }
   ' "$CONF"
+}
+
+# SHA-256 of a file, whichever tool this machine spells it with.
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d" " -f1
+  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d" " -f1
+  else echo ""; fi
 }
 
 MODEL="${1:-$(conf_get default)}"
 [ -n "$MODEL" ] || { echo "no model given and no default in models.toml" >&2; exit 1; }
 
-IFS=$'\t' read -r REPO FILE < <(model_fields "$MODEL")
+IFS=$'\t' read -r REPO FILE REV SHA < <(model_fields "$MODEL")
 if [ -z "${REPO:-}" ] || [ -z "${FILE:-}" ]; then
   echo "unknown model '$MODEL' — not in models.toml" >&2
   echo "known models:" >&2
@@ -80,8 +92,25 @@ DEST="$MODELS_DIR/$FILE"
 if [ -f "$DEST" ]; then
   echo "model already present: $DEST"
 else
-  echo "fetching $MODEL  ($REPO/$FILE)…"
-  curl -fL --retry 2 -o "$DEST.part" "https://huggingface.co/$REPO/resolve/main/$FILE"
+  # **The pinned commit, not `main`.** `main` is a moving pointer: it can hand you different bytes
+  # tomorrow than the ones this project measured, and the checksum below would then be right to
+  # refuse them. The pair only works together — see the note above the [[models]] blocks.
+  echo "fetching $MODEL  ($REPO/$FILE @ ${REV:-main})…"
+  curl -fL --retry 2 -o "$DEST.part" "https://huggingface.co/$REPO/resolve/${REV:-main}/$FILE"
+  if [ -n "${SHA:-}" ]; then
+    GOT="$(sha256_of "$DEST.part")"
+    if [ -z "$GOT" ]; then
+      rm -f "$DEST.part"
+      echo "no sha256sum/shasum on this machine, and $MODEL pins a checksum — refusing to install unverified weights" >&2
+      exit 1
+    fi
+    if [ "$GOT" != "$SHA" ]; then
+      rm -f "$DEST.part"
+      echo "checksum mismatch for $MODEL: got $GOT, expected $SHA — deleted the partial download" >&2
+      exit 1
+    fi
+    echo "checksum ok"
+  fi
   mv "$DEST.part" "$DEST"
   echo "model → $DEST"
 fi

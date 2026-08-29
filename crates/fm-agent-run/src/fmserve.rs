@@ -54,6 +54,19 @@ pub trait VaultAccess {
     fn present(&self, name: &str);
 }
 
+/// The header every request from this process carries: **"I am the assistant, not a person."**
+///
+/// `fm-serve` exits when nobody has been in touch for 90 s, so that closing the browser tab closes
+/// the app. It learned "somebody is here" from any authenticated request — and this process polls
+/// the vault every 1–5 s for as long as it runs, so while the assistant was on that window could
+/// never close. The app kept itself alive by asking whether it was alive, and a multi-GB
+/// `llama-server` stayed resident with it until the machine was rebooted.
+///
+/// The agent is a child of that server: it watches this port and stops itself when we stop
+/// answering. So it must never be the reason the server lives. Sent on **every** request, not just
+/// the liveness probe, because every request refreshed that timer.
+pub const AGENT_HEADER: &str = "X-Formicaria-Agent: 1\r\n";
+
 /// The desktop [`VaultAccess`]: a tiny HTTP client for a running `fm-serve`.
 pub struct FmServe {
     host: String,
@@ -70,7 +83,7 @@ impl FmServe {
     fn call(&self, cmd: &str, args: Value) -> Result<Value, String> {
         let body = args.to_string();
         let request = format!(
-            "POST /api/{cmd} HTTP/1.1\r\nHost: {host}:{port}\r\n\
+            "POST /api/{cmd} HTTP/1.1\r\nHost: {host}:{port}\r\n{AGENT_HEADER}\
              Content-Type: application/json\r\nContent-Length: {len}\r\nConnection: close\r\n\r\n{body}",
             host = self.host,
             port = self.port,
@@ -138,7 +151,7 @@ impl VaultAccess for FmServe {
         // file). This is binary, so we parse the response bytes directly rather than through the
         // JSON `call` path, and split head/body on the raw `\r\n\r\n` so no byte is lossily decoded.
         let request = format!(
-            "GET /api/blob/{r} HTTP/1.1\r\nHost: {host}:{port}\r\nConnection: close\r\n\r\n",
+            "GET /api/blob/{r} HTTP/1.1\r\nHost: {host}:{port}\r\n{AGENT_HEADER}Connection: close\r\n\r\n",
             r = http::encode(reference),
             host = self.host,
             port = self.port,
