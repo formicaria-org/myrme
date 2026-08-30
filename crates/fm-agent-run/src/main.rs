@@ -20,7 +20,7 @@ use clap::Parser;
 use fm_agent::openai::OpenAiStep;
 use fm_agent::search::SearxngSearch;
 use fm_agent::{AgentError, InputDoc, ResearchRequest, SearchHit, StudyAssistant, WebSearch};
-use fm_agent_run::fmserve::{FmServe, VaultAccess};
+use fm_agent_run::fmserve::{FmServe, Origin, VaultAccess};
 
 /// Ask the local study assistant to propose a change to one note.
 #[derive(Parser)]
@@ -110,7 +110,13 @@ fn run(args: Args) -> Result<(), String> {
     // and a person use: the branch + `proposes:` note, attributed to the model, size-limited by the
     // target vault's own `vault.json` (refused, never truncated), committed by the single writer.
     let email = format!("{}@fm-agents.local", args.model);
-    let prop = fm.create_proposal(&draft.host_note, &draft.new_body, &args.model, &email)?;
+    let origin = Origin {
+        tool: "propose",
+        query: Some(args.ask.clone()),
+        sources: draft.sources.clone(),
+    };
+    let prop =
+        fm.create_proposal(&draft.host_note, &draft.new_body, &args.model, &email, &origin)?;
     let prop_id = prop["id"].as_str().unwrap_or("(unknown)");
 
     println!("Proposed change to note {}", draft.host_note);

@@ -20,7 +20,7 @@ pub mod watch;
 use fm_agent::openai::OpenAiStep;
 use fm_agent::search::{SearxngSearch, DEFAULT_ENGINES};
 use fm_agent::{convo, AgentError, InputDoc, ResearchRequest, SearchHit, StudyAssistant, WebSearch};
-use fmserve::VaultAccess;
+use fmserve::{Origin, VaultAccess};
 
 /// A configured agent bound to a vault (via any [`VaultAccess`]) + a warm model (+ optional
 /// web-search proxy). Generic over the vault seam so the same runner works over HTTP on the desktop
@@ -148,7 +148,12 @@ impl<V: VaultAccess> Agent<V> {
             reply_id = meta["id"].as_str().map(|s| s.to_string());
         }
         if let Some(body) = &turn.proposal {
-            self.fm.create_proposal(note, body, &self.model, &email)?;
+            let origin = Origin {
+                tool: "propose",
+                query: Some(intent.ask.clone()),
+                sources: Vec::new(),
+            };
+            self.fm.create_proposal(note, body, &self.model, &email, &origin)?;
         }
         Ok((reply, reply_id))
     }
@@ -197,7 +202,12 @@ impl<V: VaultAccess> Agent<V> {
         } else {
             format!("{existing}\n\n{}", out.draft.new_body)
         };
-        self.fm.create_proposal(note, &body, &self.model, &email)?;
+        let origin = Origin {
+            tool: "research",
+            query: Some(intent.ask.clone()),
+            sources: out.draft.sources.clone(),
+        };
+        self.fm.create_proposal(note, &body, &self.model, &email, &origin)?;
 
         let dropped = if out.grounded.dropped.is_empty() {
             String::new()
@@ -283,7 +293,12 @@ impl<V: VaultAccess> Agent<V> {
         }
 
         on_stage("proposing the transcript");
-        self.fm.create_proposal(note, &new_body, &self.model, &email)?;
+        let origin = Origin {
+            tool: "transcribe",
+            query: None,
+            sources: clips.iter().map(|(reference, _, _)| reference.to_string()).collect(),
+        };
+        self.fm.create_proposal(note, &new_body, &self.model, &email, &origin)?;
         let n = clips.len();
         say(format!(
             "I transcribed {n} audio clip{} and proposed {} as an addition to this note — review and merge in Collaboration.",
@@ -562,7 +577,14 @@ mod tests {
         fn reply_as(&self, _: &str, _: &str, _: &str, _: &str) -> Result<Value, String> {
             Ok(Value::Null)
         }
-        fn create_proposal(&self, _: &str, _: &str, _: &str, _: &str) -> Result<Value, String> {
+        fn create_proposal(
+            &self,
+            _: &str,
+            _: &str,
+            _: &str,
+            _: &str,
+            _: &Origin,
+        ) -> Result<Value, String> {
             Ok(Value::Null)
         }
         fn blob_bytes(&self, _: &str) -> Result<(Vec<u8>, String), String> {
@@ -721,7 +743,14 @@ mod tests {
             fn blob_bytes(&self, _: &str) -> Result<(Vec<u8>, String), String> {
                 Ok((b"RIFFaudiobytes".to_vec(), "audio/wav".into()))
             }
-            fn create_proposal(&self, _: &str, body: &str, _: &str, _: &str) -> Result<Value, String> {
+            fn create_proposal(
+                &self,
+                _: &str,
+                body: &str,
+                _: &str,
+                _: &str,
+                _: &Origin,
+            ) -> Result<Value, String> {
                 *self.proposed.borrow_mut() = Some(body.to_string());
                 Ok(json!({ "id": "prop1" }))
             }
@@ -815,7 +844,14 @@ mod tests {
             fn blob_bytes(&self, _: &str) -> Result<(Vec<u8>, String), String> {
                 Ok((b"RIFFaudio".to_vec(), "audio/wav".into()))
             }
-            fn create_proposal(&self, _: &str, body: &str, _: &str, _: &str) -> Result<Value, String> {
+            fn create_proposal(
+                &self,
+                _: &str,
+                body: &str,
+                _: &str,
+                _: &str,
+                _: &Origin,
+            ) -> Result<Value, String> {
                 *self.proposed.borrow_mut() = Some(body.to_string());
                 Ok(json!({ "id": "p" }))
             }

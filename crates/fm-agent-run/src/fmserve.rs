@@ -21,6 +21,26 @@ use fm_agent::http;
 use serde_json::{json, Value};
 use std::time::Duration;
 
+/// What produced a proposal — the **input** half of a supervision record.
+///
+/// A proposal on its own is an answer with no question: the model's output survives in git forever,
+/// while what it was asked and what it was given are recorded nowhere. That makes the pair unusable
+/// as an instruction example, and it bites `/research` hardest, because the sources it cites are a
+/// live web that will not exist by the time anyone trains on this.
+///
+/// Every field is cheap here and **impossible to reconstruct later**, which is the whole argument
+/// for capturing it at the moment the proposal is made.
+#[derive(Default, Clone, Debug)]
+pub struct Origin {
+    /// The deterministic tool that produced the output — the task label. This app has no
+    /// tool-calling abstraction, so every AI output already belongs to exactly one named pipeline.
+    pub tool: &'static str,
+    /// What was actually asked, verbatim.
+    pub query: Option<String>,
+    /// What the model was given: URLs for research, `asset:` references for a transcript.
+    pub sources: Vec<String>,
+}
+
 /// Everything the runner needs from a vault. One trait so the same [`Agent`](crate::Agent) runs over
 /// HTTP on the desktop ([`FmServe`]) and in-process on a phone. Reads/writes return raw `Value` (the
 /// same JSON the command surface speaks); presence/activity are best-effort and cannot fail a turn.
@@ -40,7 +60,14 @@ pub trait VaultAccess {
     /// Post the agent's **own** message, attributed to its model identity `(name, email)`.
     fn reply_as(&self, note: &str, body: &str, name: &str, email: &str) -> Result<Value, String>;
     /// Create a proposal edit to `note`, attributed to the model `(name, email)`.
-    fn create_proposal(&self, note: &str, body: &str, name: &str, email: &str) -> Result<Value, String>;
+    fn create_proposal(
+        &self,
+        note: &str,
+        body: &str,
+        name: &str,
+        email: &str,
+        origin: &Origin,
+    ) -> Result<Value, String>;
     /// Read a blob's raw bytes and sniffed MIME, given an asset `reference` (`asset:sha256-<hash>` /
     /// `sha256:<hash>`). This is how a modality specialist gets its input **by value** — the runner
     /// reads the bytes here and hands *only* the bytes to the specialist, never a path into the blob
@@ -139,10 +166,25 @@ impl VaultAccess for FmServe {
         )
     }
 
-    fn create_proposal(&self, note: &str, body: &str, name: &str, email: &str) -> Result<Value, String> {
+    fn create_proposal(
+        &self,
+        note: &str,
+        body: &str,
+        name: &str,
+        email: &str,
+        origin: &Origin,
+    ) -> Result<Value, String> {
         self.call(
             "create_proposal",
-            json!({ "id": note, "body": body, "authorName": name, "authorEmail": email }),
+            json!({
+                "id": note,
+                "body": body,
+                "authorName": name,
+                "authorEmail": email,
+                "tool": origin.tool,
+                "query": origin.query,
+                "sources": origin.sources,
+            }),
         )
     }
 

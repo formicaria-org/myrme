@@ -24,6 +24,7 @@ pub mod grounding;
 pub mod http;
 pub mod launch;
 pub mod openai;
+pub mod preference;
 pub mod preflight;
 pub mod search;
 pub mod transcribe;
