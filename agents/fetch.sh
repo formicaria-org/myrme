@@ -31,13 +31,14 @@ conf_get() {
 # printed as soon as it saw `file`, which made `revision`/`sha256` unreadable by construction.
 model_fields() {
   awk -v want="$1" '
-    function emit() { if (name==want && !done) { print repo "\t" file "\t" rev "\t" sha; done=1 } }
-    /^\[\[models\]\]/ { emit(); name=""; repo=""; file=""; rev=""; sha="" }
+    function emit() { if (name==want && !done) { print repo "\t" file "\t" rev "\t" sha "\t" mmproj; done=1 } }
+    /^\[\[models\]\]/ { emit(); name=""; repo=""; file=""; rev=""; sha=""; mmproj="" }
     /^name *=/     { v=$0; sub(/^name *= *"?/,"",v);     sub(/"? *$/,"",v); name=v }
     /^repo *=/     { v=$0; sub(/^repo *= *"?/,"",v);     sub(/"? *$/,"",v); repo=v }
     /^file *=/     { v=$0; sub(/^file *= *"?/,"",v);     sub(/"? *$/,"",v); file=v }
     /^revision *=/ { v=$0; sub(/^revision *= *"?/,"",v); sub(/"? *$/,"",v); rev=v }
     /^sha256 *=/   { v=$0; sub(/^sha256 *= *"?/,"",v);   sub(/"? *$/,"",v); sha=v }
+    /^mmproj *=/   { v=$0; sub(/^mmproj *= *"?/,"",v);   sub(/"? *$/,"",v); mmproj=v }
     END { emit() }
   ' "$CONF"
 }
@@ -52,7 +53,7 @@ sha256_of() {
 MODEL="${1:-$(conf_get default)}"
 [ -n "$MODEL" ] || { echo "no model given and no default in models.toml" >&2; exit 1; }
 
-IFS=$'\t' read -r REPO FILE REV SHA < <(model_fields "$MODEL")
+IFS=$'\t' read -r REPO FILE REV SHA MMPROJ < <(model_fields "$MODEL")
 if [ -z "${REPO:-}" ] || [ -z "${FILE:-}" ]; then
   echo "unknown model '$MODEL' — not in models.toml" >&2
   echo "known models:" >&2
@@ -115,13 +116,36 @@ else
   echo "model → $DEST"
 fi
 
+# --- the multimodal projector, when this model has one --------------------------------------------
+# Optional and additive: without it the same weights serve text-only, exactly as before, and the
+# agent says `/describe` is unavailable rather than asking a blind model to read a picture. Fetched
+# from the same pinned commit as the weights, for the same reason.
+if [ -n "${MMPROJ:-}" ]; then
+  PROJ="$MODELS_DIR/$MMPROJ"
+  if [ -f "$PROJ" ]; then
+    echo "projector already present: $PROJ"
+  else
+    echo "fetching projector ($REPO/$MMPROJ @ ${REV:-main})…"
+    if curl -fL --retry 2 -o "$PROJ.part" "https://huggingface.co/$REPO/resolve/${REV:-main}/$MMPROJ"; then
+      mv "$PROJ.part" "$PROJ"
+      echo "projector → $PROJ   (images: /describe)"
+    else
+      # A missing projector is a missing *capability*, not a broken install: the model still serves
+      # text. Say so and carry on rather than failing a fetch that otherwise succeeded.
+      rm -f "$PROJ.part"
+      echo "could not fetch the projector — the model will serve text-only and /describe will say so" >&2
+    fi
+  fi
+fi
+
 PORT="$(conf_get port)"; CTX="$(conf_get ctx)"; THREADS="$(conf_get threads)"
 cat <<EOF
 
 Ready. Serve it (bounded, localhost-only) with:
 
   LD_LIBRARY_PATH="$RUNTIME_DIR" "$RUNTIME_BIN" \\
-    -m "$DEST" --host 127.0.0.1 --port ${PORT:-8081} -c ${CTX:-2048} -t ${THREADS:-4}
+    -m "$DEST"${MMPROJ:+ --mmproj "$MODELS_DIR/$MMPROJ"} \\
+    --host 127.0.0.1 --port ${PORT:-8081} -c ${CTX:-2048} -t ${THREADS:-4}
 
 Then point the agent at it: OpenAiStep::local(${PORT:-8081}, "$MODEL").
 EOF

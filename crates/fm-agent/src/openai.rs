@@ -102,6 +102,78 @@ impl LlmStep for OpenAiStep {
     }
 }
 
+/// The largest image this will send. A refusal with a reason, never a silent downscale or a
+/// truncation — the same stance as the ingest ceiling, and for the same reason: a picture that
+/// quietly became unreadable is worse than one that was declined out loud.
+///
+/// Base64 inflates by 4/3, so this is roughly an 11 MB request body. Beyond that the failure is not
+/// the transport but the model's context window, and the error should say something a person can act
+/// on rather than surfacing a stalled request.
+pub const MAX_IMAGE_BYTES: usize = 8 * 1024 * 1024;
+
+impl crate::imagetext::ReadImage for OpenAiStep {
+    /// A transcription turn: the instruction plus the image as a `data:` URL, in the OpenAI-compatible
+    /// multipart-content shape that `llama-server` serves **when an mmproj (the multimodal
+    /// projector) is loaded beside the weights**.
+    ///
+    /// Without that projector the same server answers text-only and will either ignore the image
+    /// part or reject the request — so a deployment that forgets it does not silently describe
+    /// nothing, it fails. That is the intended behaviour; the alternative is a note full of
+    /// confident readings of an image the model never saw.
+    fn read_image(&self, image: &[u8], mime: &str) -> Result<String, AgentError> {
+        if image.len() > MAX_IMAGE_BYTES {
+            return Err(AgentError::new(format!(
+                "image is {} MB, over the {} MB limit for a single reading — crop or shrink it",
+                image.len() / 1_048_576,
+                MAX_IMAGE_BYTES / 1_048_576,
+            )));
+        }
+        // A sniffed non-image would produce a `data:` URL the server cannot decode, and the answer
+        // would be a fluent description of nothing.
+        if !mime.starts_with("image/") {
+            return Err(AgentError::new(format!("{mime} is not an image")));
+        }
+        let url = format!("data:{mime};base64,{}", crate::imagetext::base64(image));
+        let body = serde_json::json!({
+            "model": self.model,
+            "temperature": self.temperature,
+            "seed": self.seed,
+            "max_tokens": self.max_tokens,
+            "stream": false,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    { "type": "text", "text": crate::imagetext::INSTRUCTION },
+                    { "type": "image_url", "image_url": { "url": url } },
+                ],
+            }],
+        })
+        .to_string();
+        let request = format!(
+            "POST /v1/chat/completions HTTP/1.1\r\n\
+             Host: {host}:{port}\r\n\
+             Content-Type: application/json\r\n\
+             Content-Length: {len}\r\n\
+             Connection: close\r\n\r\n{body}",
+            host = self.host,
+            port = self.port,
+            len = body.len(),
+        );
+        let raw = http::send(&self.host, self.port, request.as_bytes(), self.timeout)?;
+        let reply = parse_completion(&http::body(&raw)?)?;
+        // Truncation is a hard failure here, as it is on every other path in this crate. A reading
+        // cut off at the token cap is a *partial transcription presented as a whole one* — and it
+        // would land in a note, fenced and attributed, looking exactly as authoritative as a
+        // complete one.
+        if reply.finish_reason.as_deref() == Some("length") {
+            return Err(AgentError::new(
+                "the reading was cut off at the token limit — crop the image or raise max_tokens",
+            ));
+        }
+        Ok(reply.content)
+    }
+}
+
 impl crate::preference::Embed for OpenAiStep {
     /// `POST /v1/embeddings`, the OpenAI-compatible shape `llama-server` also serves.
     ///

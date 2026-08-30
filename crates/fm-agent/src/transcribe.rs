@@ -38,112 +38,32 @@ pub trait Transcribe {
     fn transcribe(&self, audio: &[u8], mime: &str) -> Result<String, AgentError>;
 }
 
-/// Provenance for one machine insertion: which specialist, which model version, which source blob.
-/// Carried into the note so the reader (and FTS5) can tell a machine adjunct from authored text, and
-/// so a re-run can find its own prior output.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Provenance {
-    /// The specialist that produced the text, e.g. `"whisper.cpp"`.
-    pub specialist: String,
-    /// The model/weights version, e.g. `"ggml-base.en"` — part of the idempotency key so a better
-    /// model adds a fresh adjunct rather than silently overwriting an older, human-reviewed one.
-    pub model: String,
-    /// The lowercase-hex SHA-256 of the *source* audio blob this transcript came from.
-    pub blob_hash: String,
-}
+/// Re-exported from [`crate::adjunct`], where the shared specialist substrate now lives — the
+/// audio path was the first specialist and the image path is the second, so the provenance shape and
+/// the insertion-only splice belong to neither of them alone.
+pub use crate::adjunct::{hash_of, Provenance};
 
-impl Provenance {
-    /// The **idempotency key** — `(blob-hash, specialist, model-version)`. Stable and collision-free
-    /// across the three fields (they are `|`-joined and none may contain `|` in practice: a hash is
-    /// hex, and the specialist/model names are our own constants), so a prior insertion is found and
-    /// superseded exactly when all three match.
-    pub fn key(&self) -> String {
-        format!("{}|{}|{}", self.blob_hash, self.specialist, self.model)
-    }
-}
+/// This specialist's fence tag. Every specialist owns one, so two never supersede each other.
+const TAG: &str = "fm:transcript";
 
-/// Extract the bare content hash from an asset reference — `asset:sha256-<hex>` / `sha256:<hex>` /
-/// `sha256-<hex>` all yield `<hex>`. Used to key provenance/idempotency and to build the adjunct's
-/// `asset:sha256-<hash>` back-reference to the source.
-pub fn hash_of(reference: &str) -> String {
-    reference
-        .trim()
-        .trim_start_matches("asset:")
-        .trim_start_matches("sha256:")
-        .trim_start_matches("sha256-")
-        .to_string()
-}
-
-/// The literal used to defang forged fence markers inside an (untrusted) transcript, and to detect our
-/// own block. A transcript is *speech*, so this is belt-and-suspenders, but a transcript that happened
-/// to contain `fm:transcript` must never be able to forge or truncate the fence when the note is
-/// re-parsed for supersede.
-const MARK_TAG: &str = "fm:transcript";
-/// The closing fence of a transcript adjunct.
-const MARK_END: &str = "<!-- fm:transcript:end -->";
-
-/// The opening fence for a given idempotency `key` — an HTML comment (invisible when rendered) that
-/// lets a re-run locate and replace exactly its own prior block.
-fn mark_open(key: &str) -> String {
-    format!("<!-- fm:transcript key=\"{key}\" -->")
-}
-
-/// Build the adjunct block to insert. It is a rendered **callout** (vocabulary the renderers already
-/// understand) that *references* the source audio and carries provenance, fenced by HTML-comment
-/// markers so a same-key re-run can supersede it in place.
-///
-/// The transcript is untrusted text: any `fm:transcript` marker inside it is defanged so it cannot
-/// forge the fence, and every line is block-quoted so it stays inside the callout.
+/// The transcript adjunct: a rendered callout that *references* the source audio and carries
+/// provenance, fenced so a same-key re-run supersedes it in place. See [`crate::adjunct`] for the
+/// four properties this inherits.
 pub fn transcript_block(transcript: &str, prov: &Provenance) -> String {
-    let safe = transcript.replace(MARK_TAG, "fm-transcript");
-    let quoted: String = if safe.trim().is_empty() {
-        "> _(no speech detected)_\n".to_string()
-    } else {
-        safe.lines().map(|l| format!("> {l}\n")).collect()
-    };
-    format!(
-        "{open}\n\
-         > [!note] Transcript — {spec} · {model}\n\
-         > Source: [audio](asset:sha256-{hash})\n\
-         >\n\
-         {quoted}{end}\n",
-        open = mark_open(&prov.key()),
-        spec = prov.specialist,
-        model = prov.model,
-        hash = prov.blob_hash,
-        quoted = quoted,
-        end = MARK_END,
+    crate::adjunct::block(
+        TAG,
+        prov,
+        &format!("Transcript — {} · {}", prov.specialist, prov.model),
+        "audio",
+        transcript,
+        "(no speech detected)",
     )
 }
 
-/// Splice `block` into `host_body`: **supersede** an existing block with the same `key` in place, or
-/// **append** if there is none. Never deletes or reorders any other content — that is the
-/// insertion-only guarantee, expressed as a pure string transform.
+/// Splice a transcript block into `host_body` — supersede this specialist's own prior block for the
+/// same key, or append. Insertion-only; see [`crate::adjunct::insert_or_supersede`].
 pub fn insert_or_supersede(host_body: &str, block: &str, key: &str) -> String {
-    let open = mark_open(key);
-    if let Some(start) = host_body.find(&open) {
-        // Replace from our open fence through the matching end fence (inclusive). If the note was
-        // hand-edited and the end fence is gone, fall through to append rather than eat the tail.
-        if let Some(rel_end) = host_body[start..].find(MARK_END) {
-            let mut end = start + rel_end + MARK_END.len();
-            if host_body[end..].starts_with('\n') {
-                end += 1; // swallow the fence's own trailing newline so we don't accumulate blanks
-            }
-            let mut out = String::with_capacity(host_body.len() + block.len());
-            out.push_str(&host_body[..start]);
-            out.push_str(block.trim_end_matches('\n'));
-            out.push('\n');
-            out.push_str(&host_body[end..]);
-            return out;
-        }
-    }
-    let mut out = host_body.trim_end_matches('\n').to_string();
-    if !out.is_empty() {
-        out.push_str("\n\n");
-    }
-    out.push_str(block.trim_end_matches('\n'));
-    out.push('\n');
-    out
+    crate::adjunct::insert_or_supersede(host_body, block, TAG, key)
 }
 
 /// The whole audio→transcript flow, as a **pure orchestration over the seam**: transcribe the bytes,
@@ -279,7 +199,7 @@ mod tests {
         assert!(b.contains("> hello world"), "transcript not block-quoted into the callout: {b}");
         // Fenced by the idempotency markers.
         assert!(b.contains("key=\"abc123|whisper.cpp|ggml-base.en\""), "idempotency key missing: {b}");
-        assert!(b.contains(MARK_END), "end fence missing: {b}");
+        assert!(b.contains(&crate::adjunct::end_mark(TAG)), "end fence missing: {b}");
     }
 
     #[test]
@@ -303,7 +223,7 @@ mod tests {
         assert!(second.contains("corrected pass"), "supersede did not apply the new text: {second}");
         assert!(!second.contains("first pass"), "old transcript not superseded: {second}");
         // Exactly one block for this key — no duplicate, no racing second adjunct.
-        assert_eq!(second.matches(MARK_END).count(), 1, "duplicate blocks: {second}");
+        assert_eq!(second.matches(&crate::adjunct::end_mark(TAG)).count(), 1, "duplicate blocks: {second}");
         assert!(second.starts_with("notes"), "host content disturbed: {second}");
     }
 
@@ -315,7 +235,7 @@ mod tests {
         // Both survive — the older, possibly-human-reviewed adjunct is not silently overwritten.
         assert!(b.contains("base transcript"), "earlier model's adjunct lost: {b}");
         assert!(b.contains("large-v3 transcript"), "new model's adjunct missing: {b}");
-        assert_eq!(b.matches(MARK_END).count(), 2, "expected two distinct adjuncts: {b}");
+        assert_eq!(b.matches(&crate::adjunct::end_mark(TAG)).count(), 2, "expected two distinct adjuncts: {b}");
     }
 
     /// A transcript that forges the fence markers must not be able to truncate or escape its block.
@@ -326,7 +246,7 @@ mod tests {
         let out = transcribe_into(&Canned(evil), host, b"a", "audio/wav", &prov("h1", "m1")).unwrap();
         assert!(out.contains("keep me"), "host lost to a forged fence: {out}");
         // The forged marker was defanged, so there is exactly ONE real end fence (ours).
-        assert_eq!(out.matches(MARK_END).count(), 1, "forged end fence survived: {out}");
+        assert_eq!(out.matches(&crate::adjunct::end_mark(TAG)).count(), 1, "forged end fence survived: {out}");
         assert!(out.contains("everything after should stay quoted"), "content dropped: {out}");
     }
 

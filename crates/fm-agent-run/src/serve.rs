@@ -100,6 +100,15 @@ fn run() -> Result<(), String> {
 
     // Launch the model under the watchdog (preflight → resource caps → guaranteed kill). Its
     // stdout/stderr are inherited (not nulled) so a crash is visible in the agent log.
+    // The multimodal projector, when this model has one and it has actually been fetched. Present ⇒
+    // the same server also answers vision turns (`/describe`); absent ⇒ it serves text-only, exactly
+    // as it always has, and the agent says so rather than asking a blind model to read a picture.
+    let mmproj = manifest
+        .model(&model_name)
+        .and_then(|m| m.mmproj.clone())
+        .map(|f| a.agents_dir.join("models").join(f))
+        .filter(|p| p.exists());
+
     let bin = runtime.join("llama-server");
     let mut cmd = Command::new(&bin);
     cmd.env("LD_LIBRARY_PATH", &runtime)
@@ -113,6 +122,9 @@ fn run() -> Result<(), String> {
             "-ngl", &ngl.to_string(),
             "--no-warmup",
         ]);
+    if let Some(proj) = &mmproj {
+        cmd.arg("--mmproj").arg(proj);
+    }
     let model_bytes = std::fs::metadata(&model_gguf).map(|m| m.len()).unwrap_or(500_000_000);
     // Resident, not one-shot: no wall-clock cliff (a per-turn cap is already on the model call), so it
     // stays warm for the whole session instead of being SIGKILLed after 5 minutes.
@@ -162,6 +174,9 @@ fn run() -> Result<(), String> {
         searxng_port: a.searxng_port,
         web_direct: false, // desktop serve uses the local proxy (--searxng-port), never in-process HTTPS
         whisper_port: a.whisper_port,
+        // Vision is a property of the *weights loaded*, not a second server — so it is simply
+        // whether the projector made it onto the command line above.
+        vision: mmproj.is_some(),
         whisper_model: a.whisper_model.clone(),
         max_reply_chars: a.max_reply_chars.unwrap_or(manifest.max_reply_chars),
         retrieve: a.retrieve,

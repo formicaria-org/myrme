@@ -52,6 +52,7 @@ fn run() -> Result<(), String> {
         // The chat REPL doesn't transcribe (no audio-artifact selection); leave the runtime off.
         whisper_port: None,
         whisper_model: "ggml-base.en".into(),
+        vision: false,
         max_reply_chars: a.max_reply_chars,
         retrieve: a.retrieve,
         history_budget: a.history_budget,

@@ -27,6 +27,13 @@ pub struct Model {
     /// an already-shipped release. Pinning the commit makes the URL name the same bytes forever, so
     /// the checksum can only ever fail on a *corrupt transfer*, which is what it is for.
     pub revision: Option<String>,
+    /// The **multimodal projector** filename, for a vision-language model. `None` — the default —
+    /// means text-only, which is what every model here was until images arrived.
+    ///
+    /// A separate file from the weights, in the same repo, and genuinely optional: the same GGUF
+    /// serves text-only without it. That is why it is a field rather than a second model entry —
+    /// it is a *capability* of one model, not a model.
+    pub mmproj: Option<String>,
     /// Per-model context-window override; falls back to the manifest's `ctx` when unset.
     pub ctx: Option<u32>,
     /// Per-model thread-count override; falls back to the manifest's `threads` when unset.
@@ -100,10 +107,21 @@ impl Manifest {
             }
             if line == "[[models]]" {
                 flush(&mut cur, &mut models);
-                cur = Some(Model { name: String::new(), file: String::new(), repo: String::new(), sha256: None, revision: None, ctx: None, threads: None });
+                cur = Some(Model {
+                    name: String::new(),
+                    file: String::new(),
+                    repo: String::new(),
+                    sha256: None,
+                    revision: None,
+                    mmproj: None,
+                    ctx: None,
+                    threads: None,
+                });
                 continue;
             }
-            let Some((key, val)) = line.split_once('=') else { continue };
+            let Some((key, val)) = line.split_once('=') else {
+                continue;
+            };
             let key = key.trim();
             let val = val.trim().trim_matches('"').trim();
             match cur.as_mut() {
@@ -114,6 +132,7 @@ impl Manifest {
                     "repo" => m.repo = val.to_string(),
                     "sha256" => m.sha256 = Some(val.to_string()),
                     "revision" => m.revision = Some(val.to_string()),
+                    "mmproj" => m.mmproj = Some(val.to_string()),
                     "ctx" => m.ctx = val.parse().ok(),
                     "threads" => m.threads = val.parse().ok(),
                     _ => {}
@@ -134,7 +153,18 @@ impl Manifest {
             }
         }
         flush(&mut cur, &mut models); // the last block has no trailing [[models]] to flush it
-        Manifest { default, default_mobile, port, ctx, threads, threads_mobile, gpu, max_reply_chars, whisper_mobile, models }
+        Manifest {
+            default,
+            default_mobile,
+            port,
+            ctx,
+            threads,
+            threads_mobile,
+            gpu,
+            max_reply_chars,
+            whisper_mobile,
+            models,
+        }
     }
 
     /// The phone's whisper model name — a `[[models]]` entry to fetch on demand, or `None`.
@@ -149,7 +179,9 @@ impl Manifest {
 
     /// The thread count for `name` — the model's own `threads` override, else the manifest default.
     pub fn model_threads(&self, name: &str) -> u32 {
-        self.model(name).and_then(|m| m.threads).unwrap_or(self.threads)
+        self.model(name)
+            .and_then(|m| m.threads)
+            .unwrap_or(self.threads)
     }
 
     /// How many layers to offload to a GPU (`-ngl`) under the current `gpu` policy. `"off"` ⇒ 0 (CPU
@@ -194,7 +226,10 @@ impl Manifest {
         // The pinned commit when there is one — see `Model::revision`. `main` only for an entry that
         // pins no checksum either, where a moving target is the stated intent rather than an accident.
         let rev = m.revision.as_deref().unwrap_or("main");
-        Some(format!("https://huggingface.co/{}/resolve/{rev}/{}", m.repo, m.file))
+        Some(format!(
+            "https://huggingface.co/{}/resolve/{rev}/{}",
+            m.repo, m.file
+        ))
     }
 }
 
@@ -227,11 +262,17 @@ mod tests {
         assert_eq!(m.default, "lfm2.5-230m");
         assert_eq!((m.port, m.ctx, m.threads), (8081, 2048, 4));
         assert_eq!(m.file("lfm2.5-230m"), Some("LFM2.5-230M-Q4_K_M.gguf"));
-        assert_eq!(m.file("lfm2.5-1.2b"), Some("LFM2.5-1.2B-Instruct-Q4_K_M.gguf"));
+        assert_eq!(
+            m.file("lfm2.5-1.2b"),
+            Some("LFM2.5-1.2B-Instruct-Q4_K_M.gguf")
+        );
         assert_eq!(m.file("nope"), None);
         // repo is captured even though it appears before `file` in the first block and after it
         // in the second — key order within a block must not matter.
-        assert_eq!(m.model("lfm2.5-230m").unwrap().repo, "LiquidAI/LFM2.5-230M-GGUF");
+        assert_eq!(
+            m.model("lfm2.5-230m").unwrap().repo,
+            "LiquidAI/LFM2.5-230M-GGUF"
+        );
         assert!(m.model("lfm2.5-230m").unwrap().sha256.is_none());
     }
 
@@ -290,7 +331,7 @@ mod tests {
         assert_eq!(m.gpu_layers(), 99);
         assert_eq!(Manifest::parse("gpu = \"off\"").gpu_layers(), 0);
         assert_eq!(Manifest::parse("").gpu_layers(), 99); // default is GPU-when-available
-        // per-model ctx overrides the global; threads falls back to the global.
+                                                          // per-model ctx overrides the global; threads falls back to the global.
         assert_eq!(m.model_ctx("a"), 4096);
         assert_eq!(m.model_threads("a"), 8);
         assert_eq!(m.model_ctx("nope"), 2048); // unknown model → global default
