@@ -231,6 +231,15 @@ impl Manifest {
         self.models.iter().map(|m| m.name.clone()).collect()
     }
 
+    /// Every platform suffix that has a verified runtime archive.
+    ///
+    /// Exists so the pin check can walk **what the catalogue actually holds** rather than a list
+    /// written beside it: the first version of that test hardcoded six keys, and a seventh pin
+    /// added the same day went unverified without anything failing.
+    pub fn runtime_keys(&self) -> Vec<String> {
+        self.runtimes.keys().cloned().collect()
+    }
+
     /// The runtime archive for a platform suffix, e.g. `linux_x64` or `whisper_linux_x64`.
     ///
     /// `None` means this build has no verified archive for that platform — which the caller must
@@ -269,6 +278,14 @@ impl Manifest {
     /// The phone's whisper model name — a `[[models]]` entry to fetch on demand, or `None`.
     pub fn mobile_whisper(&self) -> Option<&str> {
         self.whisper_mobile.as_deref()
+    }
+
+    /// The desktop's speech-to-text weights — a `[[models]]` entry name, fetched on demand when
+    /// audio transcription is switched on. Falls back to the phone's pick, then to `ggml-base.en`,
+    /// so a catalogue that names neither still resolves to the entry both platforms have used.
+    pub fn whisper_desktop(&self) -> Option<String> {
+        let name = self.whisper_mobile.clone().unwrap_or_else(|| "ggml-base.en".to_string());
+        self.model(&name).map(|_| name)
     }
 
     /// The context window for `name` — the model's own `ctx` override, else the manifest default.

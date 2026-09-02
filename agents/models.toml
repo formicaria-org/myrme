@@ -85,6 +85,13 @@ whisper_mobile = "ggml-base.en"
 # no build-from-source. (The tarball also bundles a `parakeet-cli`, a possible future faster/edge leaf.)
 runtime_url_whisper_linux_x64 = "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-bin-ubuntu-x64.tar.gz"
 runtime_sha256_whisper_linux_x64 = "f3bf3b4369a99b54665b0f19b88483b30de27f25963b0414235dea03198515c5"
+# Windows ships a `.zip` holding `Release/whisper-server.exe` and its DLLs — flattened on extraction
+# like every other runtime here. **There is no macOS build upstream at v1.9.1**, which is why macOS
+# has no entry: the app then says the runtime does not exist for that platform yet, rather than
+# implying something is missing from the machine. Unlike the llama archives this one carries no
+# LICENSE file, so whisper.cpp's MIT notice travels via `ci/third-party.sh`'s runtime section only.
+runtime_url_whisper_windows_x64 = "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-bin-x64.zip"
+runtime_sha256_whisper_windows_x64 = "7d8be46ecd31828e1eb7a2ecdd0d6b314feafd82163038ab6092594b0a063539"
 
 # Each model: `name` (the key you pass to fetch), its Hugging Face `repo` and `file`, and a note.
 # Keep `name`, then `repo`, then `file` in that order — fetch.sh reads them positionally.

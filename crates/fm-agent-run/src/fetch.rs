@@ -999,14 +999,10 @@ mod tests {
         let dir = scratch("pins");
         fs::create_dir_all(&dir).unwrap();
         let mut checked = 0;
-        for key in [
-            "linux_x64",
-            "linux_x64_gpu",
-            "whisper_linux_x64",
-            "macos_arm64",
-            "windows_x64",
-            "windows_x64_gpu",
-        ] {
+        // Walk the catalogue, never a list beside it: a pin the list forgot is a pin nobody checks.
+        let keys = manifest.runtime_keys();
+        assert!(!keys.is_empty(), "the catalogue pins no runtimes at all");
+        for key in &keys {
             let Some(rt) = manifest.runtime(key) else { continue };
             let dest = dir.join(key);
             let dl = Download { url: &rt.url, dest: &dest, sha256: Some(&rt.sha256) };
@@ -1021,7 +1017,7 @@ mod tests {
             }
             let _ = fs::remove_file(&dest);
         }
-        eprintln!("verified {checked} pinned runtime archive(s)");
+        eprintln!("verified {checked} of {} pinned runtime archive(s)", keys.len());
         let _ = fs::remove_dir_all(&dir);
     }
 
