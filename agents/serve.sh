@@ -4,7 +4,7 @@
 # to. Runs in the foreground (Ctrl-C stops it). Bounds: small context (KV cache), capped threads.
 #
 #   bash agents/serve.sh            # the default model from models.toml
-#   bash agents/serve.sh lfm2.5-350m
+#   bash agents/serve.sh lfm2.5-1.2b
 #   pixi run serve-model [name]
 #
 set -euo pipefail

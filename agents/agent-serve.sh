@@ -5,7 +5,7 @@
 #
 #   pixi run agent-serve                          # default model, watch fm-serve on :8765
 #   pixi run agent-serve -- --serve-port 8770     # a different fm-serve port
-#   pixi run agent-serve -- --model lfm2.5-350m   # a different catalogued model
+#   pixi run agent-serve -- --model lfm2.5-1.2b   # a different catalogued model
 #
 # The binary reads `models.toml` itself (the single manifest reader) — no awk here — resolving the
 # model file, ctx, threads, and port; pass any flag through to override. First bare arg = a model name.

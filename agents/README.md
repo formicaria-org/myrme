@@ -10,7 +10,7 @@ agent's only durable output is an ordinary git branch + a proposal note (see
 
 ```
 pixi run fetch-model              # the default (lightest) model from models.toml
-pixi run fetch-model lfm2.5-350m  # a named model
+pixi run fetch-model lfm2.5-1.2b  # a named model
 ```
 
 This downloads a pinned prebuilt `llama-server` into `runtime/` and the chosen GGUF into `models/`
@@ -30,7 +30,7 @@ pixi run agent-serve -- --searxng-port 8888   # the agent: model (warm) + @name 
 Then **in any discussion in the app**, mention the agent:
 
 ```
-@lfm2.5-230m does mRNA change DNA? /search
+@lfm2.5-1.2b does mRNA change DNA? /search
 ```
 
 It replies in the thread. Commands: `/search` (web), `/propose` (in a note's discussion, draft an
