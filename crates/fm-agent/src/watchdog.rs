@@ -226,11 +226,16 @@ impl ResourceMonitor for SystemMonitor {
         {
             macos_sample()
         }
+        #[cfg(target_os = "ios")]
+        {
+            ios_sample()
+        }
         #[cfg(not(any(
             target_os = "linux",
             target_os = "android",
             target_os = "windows",
-            target_os = "macos"
+            target_os = "macos",
+            target_os = "ios"
         )))]
         {
             Err(WatchdogError::new(
@@ -366,6 +371,49 @@ fn macos_sample() -> Result<Resources, WatchdogError> {
     plausible(usable.saturating_mul(page), 0.0)
 }
 
+/// iOS: `os_proc_available_memory()`, which is a different question from every other arm here —
+/// and the right one.
+///
+/// **Not "how much memory does this machine have free".** iOS kills a process that exceeds a
+/// per-process resident limit (jetsam); that limit is per-device, undocumented, and unrelated to
+/// free physical memory, so a `host_statistics64` reading — the macOS arm right above — would be
+/// confidently wrong here in the one direction that hurts: optimistic. `os_proc_available_memory`
+/// answers "how many more bytes may *this app* allocate before it is killed", which is exactly
+/// what [`crate::preflight::admit`] needs and the only honest number iOS offers.
+///
+/// **Hand-declared, deliberately.** It lives in `<os/proc.h>` (iOS 13+) and `libc` does not expose
+/// it. The same trade as the Windows arm below, whose comment states the stance: a hand-declared
+/// symbol beats a large crate for one call. `cargo check --target aarch64-apple-ios` type-checks
+/// the declaration on this machine, which is the arrangement that makes an unverifiable arm
+/// defensible — the same one `check-cross` was built for after `die_with_supervisor` shipped
+/// calling Linux's `prctl` under `#[cfg(unix)]`.
+///
+/// **It returns 0 when it cannot answer**, and [`plausible`] refuses zero — so an iOS build with no
+/// usable reading declines to start the model rather than guessing, which is the behaviour every
+/// other arm here already has.
+///
+/// Load is `0.0` for the same reason as macOS and Android: there is no accessible load average, and
+/// on a battery device memory is the governor anyway (see `Limits::resident`).
+///
+/// **Never widen the macOS arm to cover iOS — and note the compiler will not stop you.** It looks
+/// like the obvious tidy-up, and `libc` *does* expose `host_statistics64` and `mach_host_self` for
+/// iOS targets, so `#[cfg(any(target_os = "macos", target_os = "ios"))]` compiles clean (measured:
+/// one dead-code warning, nothing else). That is worse than a build error. It would hand iOS the
+/// machine's free *physical* memory in place of this process's jetsam headroom — a plausible number,
+/// far too large, in the one direction [`plausible`] cannot catch and `admit` acts on. A wrong
+/// reading that refuses is safe; a wrong reading that admits is the failure preflight exists for.
+#[cfg(target_os = "ios")]
+fn ios_sample() -> Result<Resources, WatchdogError> {
+    extern "C" {
+        /// <os/proc.h>, iOS 13.0+. Bytes this process may still allocate before jetsam; 0 when
+        /// the OS declines to answer.
+        fn os_proc_available_memory() -> libc::size_t;
+    }
+    // SAFETY: a nullary call into libSystem returning an integer. No pointers, no ownership.
+    let available = unsafe { os_proc_available_memory() } as u64;
+    plausible(available, 0.0)
+}
+
 /// Read `/proc` for available memory + load. Shared by Linux and Android (both expose these).
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn proc_sample() -> Result<Resources, WatchdogError> {
@@ -423,10 +471,12 @@ fn parse_proc(meminfo: &str, loadavg: &str, cores: f32) -> Result<Resources, Wat
         .next()
         .and_then(|v| v.parse::<f32>().ok())
         .unwrap_or(0.0);
-    Ok(Resources {
-        mem_available_bytes: mem_available_kb * 1024,
-        load_per_core: load1 / cores.max(1.0),
-    })
+    // Through the same guard as every other arm — four of four, rather than three of four.
+    // `/proc` is text, so it cannot misread a struct layout the way an FFI arm can; but a
+    // `MemAvailable` of 0 should refuse here exactly as it does on Windows, and `* 1024` on a
+    // garbage value is an overflow panic in debug and a wrap in release. `saturating_mul` then
+    // lands on the ceiling, which `plausible` rejects — the failure mode this guard is for.
+    plausible(mem_available_kb.saturating_mul(1024), load1 / cores.max(1.0))
 }
 
 #[cfg(test)]
@@ -437,9 +487,9 @@ mod tests {
         Resources { mem_available_bytes: 8_000_000_000, load_per_core: 0.2 }
     }
 
-    /// **The guard that makes the Windows and macOS arms safe to write blind.**
+    /// **The guard that makes the Windows, macOS and iOS arms safe to write blind.**
     ///
-    /// Those two call a syscall this machine cannot compile, let alone run. What they hand back
+    /// Those three call a syscall this machine cannot compile, let alone run. What they hand back
     /// goes through `plausible`, which is compiled and tested everywhere — so the dangerous
     /// outcome, a wrong-but-believable number admitting a model onto a machine with no room, is
     /// guarded by code that *is* exercised. A misread field yields 0 or something astronomical;

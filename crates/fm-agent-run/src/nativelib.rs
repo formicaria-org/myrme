@@ -27,6 +27,17 @@ pub fn lib_dir_from_maps(maps: &str, soname: &str) -> Option<PathBuf> {
 
 /// The app's native library directory, found by locating our own mapped `soname` in
 /// `/proc/self/maps`. `None` if the file can't be read or no mapping matches.
+///
+/// **Android only, and gated so the compiler says so.** `/proc` is a Linux-kernel interface and
+/// `nativeLibraryDir` is an Android concept; neither exists on iOS. Ungated, an iOS build of the
+/// mobile shell compiled, installed, launched, and then told the user *"the assistant cannot locate
+/// this app's own library directory"* — a sentence naming an Android idea, on a platform where the
+/// whole approach is forbidden anyway (iOS permits no `exec` at all: `decisions.md#track-m`,
+/// 2026-09-02). A compile error at the call site is the honest version of that.
+///
+/// The parsing half, [`lib_dir_from_maps`], stays `cfg`-free and unit-tested everywhere — the
+/// pattern this repo already requires of a platform arm: a thin syscall wrapper over a tested core.
+#[cfg(target_os = "android")]
 pub fn native_lib_dir(soname: &str) -> Option<PathBuf> {
     let maps = std::fs::read_to_string("/proc/self/maps").ok()?;
     lib_dir_from_maps(&maps, soname)
