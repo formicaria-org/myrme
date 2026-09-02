@@ -38,6 +38,13 @@ pub struct Model {
     pub ctx: Option<u32>,
     /// Per-model thread-count override; falls back to the manifest's `threads` when unset.
     pub threads: Option<u32>,
+    /// The weights' licence, e.g. `Apache-2.0` — shown before anything is downloaded, because the
+    /// terms someone is accepting should not be discoverable only by reading a TOML comment.
+    pub license: Option<String>,
+    /// The download size in bytes, and the projector's separately. A first enable can cost several
+    /// gigabytes; a screen that asks first has to be able to say how many.
+    pub bytes: Option<u64>,
+    pub mmproj_bytes: Option<u64>,
 }
 
 /// The runtime defaults and the model list from `models.toml`.
@@ -69,6 +76,29 @@ pub struct Manifest {
     pub whisper_mobile: Option<String>,
     /// Every catalogued model.
     models: Vec<Model>,
+    /// The prebuilt runtime archives, keyed by the suffix that names a platform — `linux_x64`,
+    /// `linux_x64_gpu`, `whisper_linux_x64`, and in time `macos_arm64` / `windows_x64`.
+    ///
+    /// **Flat suffixed keys rather than a `[runtime.…]` table**, because this parser has no concept
+    /// of a named table: a `[…]` line that is not `[[models]]` is skipped and its keys are then read
+    /// as *top-level* ones — silently. A shape the parser cannot see is worse than an ugly one it
+    /// can, and the suffix is also what `agents/fetch.sh`'s `awk` can still read.
+    ///
+    /// Read through [`runtime`](Self::runtime), which picks the suffix for the running platform.
+    runtimes: std::collections::BTreeMap<String, Runtime>,
+}
+
+/// One prebuilt runtime archive: where to get it, and what it must hash to.
+///
+/// **The checksum is not optional here, unlike a model's.** A model is pinned by a Hugging Face
+/// commit as well, so `sha256` is a second belt; a runtime archive is a URL to an executable and
+/// the checksum is the only thing standing between a redirect and running someone else's binary.
+/// A platform whose checksum we have not verified therefore has no entry at all, rather than an
+/// entry we cannot check.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Runtime {
+    pub url: String,
+    pub sha256: String,
 }
 
 impl Manifest {
@@ -88,6 +118,11 @@ impl Manifest {
         let mut max_reply_chars = 2000usize;
         let mut whisper_mobile: Option<String> = None;
         let mut models: Vec<Model> = Vec::new();
+        // `runtime_url_<platform>` and `runtime_sha256_<platform>` arrive in either order, so they
+        // are gathered by suffix and paired at the end. A URL without a checksum is **dropped**,
+        // not kept — see [`Runtime`].
+        let mut rt_url: std::collections::BTreeMap<String, String> = Default::default();
+        let mut rt_sha: std::collections::BTreeMap<String, String> = Default::default();
         // The block currently being parsed. `Some` ⇒ we are inside a `[[models]]` block (so top-level
         // keys no longer apply); a block is committed on the next `[[models]]` or at EOF, when it has
         // at least a name + file. Keys within a block are order-free.
@@ -116,6 +151,9 @@ impl Manifest {
                     mmproj: None,
                     ctx: None,
                     threads: None,
+                    license: None,
+                    bytes: None,
+                    mmproj_bytes: None,
                 });
                 continue;
             }
@@ -135,6 +173,9 @@ impl Manifest {
                     "mmproj" => m.mmproj = Some(val.to_string()),
                     "ctx" => m.ctx = val.parse().ok(),
                     "threads" => m.threads = val.parse().ok(),
+                    "license" => m.license = Some(val.to_string()),
+                    "bytes" => m.bytes = val.parse().ok(),
+                    "mmproj_bytes" => m.mmproj_bytes = val.parse().ok(),
                     _ => {}
                 },
                 // Top-level (before any [[models]]).
@@ -148,11 +189,27 @@ impl Manifest {
                     "gpu" => gpu = val.to_string(),
                     "max_reply_chars" => max_reply_chars = val.parse().unwrap_or(max_reply_chars),
                     "whisper_mobile" => whisper_mobile = Some(val.to_string()),
+                    k if k.starts_with("runtime_url_") => {
+                        rt_url.insert(k["runtime_url_".len()..].to_string(), val.to_string());
+                    }
+                    k if k.starts_with("runtime_sha256_") => {
+                        rt_sha.insert(k["runtime_sha256_".len()..].to_string(), val.to_string());
+                    }
                     _ => {}
                 },
             }
         }
         flush(&mut cur, &mut models); // the last block has no trailing [[models]] to flush it
+        // Pair them. A URL whose checksum is missing is discarded here rather than downstream: the
+        // fetch must never be handed an archive it cannot verify, and a half-entry that reaches it
+        // would be a decision made by omission.
+        let runtimes = rt_url
+            .into_iter()
+            .filter_map(|(k, url)| {
+                let sha256 = rt_sha.get(&k)?.clone();
+                (!url.is_empty() && !sha256.is_empty()).then_some((k, Runtime { url, sha256 }))
+            })
+            .collect();
         Manifest {
             default,
             default_mobile,
@@ -164,6 +221,48 @@ impl Manifest {
             max_reply_chars,
             whisper_mobile,
             models,
+            runtimes,
+        }
+    }
+
+    /// Every catalogued model's name, in file order — the order the catalogue's author chose,
+    /// which is the order a chooser should offer them in.
+    pub fn names(&self) -> Vec<String> {
+        self.models.iter().map(|m| m.name.clone()).collect()
+    }
+
+    /// The runtime archive for a platform suffix, e.g. `linux_x64` or `whisper_linux_x64`.
+    ///
+    /// `None` means this build has no verified archive for that platform — which the caller must
+    /// report as a missing capability, never paper over by falling back to another platform's.
+    pub fn runtime(&self, key: &str) -> Option<&Runtime> {
+        self.runtimes.get(key)
+    }
+
+    /// The suffix naming the platform this binary is running on, or `None` where no runtime has
+    /// been pinned for it yet. `#[cfg]`, not a runtime check, because it names the build target.
+    pub fn platform_key() -> Option<&'static str> {
+        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+        {
+            Some("linux_x64")
+        }
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+        {
+            Some("macos_arm64")
+        }
+        #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+        {
+            Some("windows_x64")
+        }
+        // Android bundles its runtime in `jniLibs` and never fetches one; anything else is a
+        // platform nobody has pinned an archive for. Both answer "not from here".
+        #[cfg(not(any(
+            all(target_os = "linux", target_arch = "x86_64"),
+            all(target_os = "macos", target_arch = "aarch64"),
+            all(target_os = "windows", target_arch = "x86_64")
+        )))]
+        {
+            None
         }
     }
 
@@ -230,6 +329,21 @@ impl Manifest {
             "https://huggingface.co/{}/resolve/{rev}/{}",
             m.repo, m.file
         ))
+    }
+
+    /// The projector's URL, from the **same pinned commit as the weights**.
+    ///
+    /// `None` for a text-only model, which is not an error: `/transcribe` reports that images
+    /// cannot be read rather than handing a picture to a blind model, which is the one failure mode
+    /// the vision ruling calls silent and damaging.
+    pub fn mmproj_url(&self, name: &str) -> Option<String> {
+        let m = self.model(name)?;
+        let file = m.mmproj.as_deref()?;
+        if m.repo.is_empty() {
+            return None;
+        }
+        let rev = m.revision.as_deref().unwrap_or("main");
+        Some(format!("https://huggingface.co/{}/resolve/{rev}/{file}", m.repo))
     }
 }
 
@@ -342,5 +456,44 @@ mod tests {
         let m = Manifest::parse("ctx = not-a-number\nthreads = 8");
         assert_eq!(m.ctx, 2048);
         assert_eq!(m.threads, 8);
+    }
+
+    #[test]
+    fn a_runtime_is_read_by_platform_and_carries_its_checksum() {
+        let m = Manifest::parse(
+            "runtime_url_linux_x64 = \"https://example.invalid/llama-linux.tar.gz\"\n\
+             runtime_sha256_linux_x64 = \"abc123\"\n\
+             runtime_url_whisper_linux_x64 = \"https://example.invalid/whisper.tar.gz\"\n\
+             runtime_sha256_whisper_linux_x64 = \"def456\"\n",
+        );
+        let rt = m.runtime("linux_x64").expect("the linux runtime is catalogued");
+        assert_eq!(rt.url, "https://example.invalid/llama-linux.tar.gz");
+        assert_eq!(rt.sha256, "abc123");
+        assert_eq!(m.runtime("whisper_linux_x64").unwrap().sha256, "def456");
+        assert!(m.runtime("macos_arm64").is_none(), "a platform with no entry is absent, not empty");
+    }
+
+    #[test]
+    fn a_runtime_url_without_a_checksum_is_dropped_rather_than_fetched_unverified() {
+        // The whole point of the pairing: a URL to an executable that we cannot verify must never
+        // reach the fetch. Absent is a capability the caller reports; unverified is a binary run.
+        let m = Manifest::parse(
+            "runtime_url_linux_x64 = \"https://example.invalid/unverified.tar.gz\"\n\
+             runtime_url_macos_arm64 = \"https://example.invalid/mac.tar.gz\"\n\
+             runtime_sha256_macos_arm64 = \"\"\n",
+        );
+        assert!(m.runtime("linux_x64").is_none(), "no checksum, no entry");
+        assert!(m.runtime("macos_arm64").is_none(), "an empty checksum is no checksum");
+    }
+
+    #[test]
+    fn the_shipped_manifest_pins_a_verified_runtime_for_linux() {
+        // Reads the real file, so a hand-edit that drops a checksum fails here rather than at a
+        // user's first enable.
+        let m = Manifest::parse(include_str!("../../../agents/models.toml"));
+        let rt = m.runtime("linux_x64").expect("linux_x64 must stay pinned and verified");
+        assert!(rt.url.starts_with("https://"), "{}", rt.url);
+        assert_eq!(rt.sha256.len(), 64, "a sha256 is 64 hex characters: {}", rt.sha256);
+        assert!(m.runtime("whisper_linux_x64").is_some(), "the audio runtime is pinned too");
     }
 }

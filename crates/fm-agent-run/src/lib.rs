@@ -6,6 +6,12 @@
 /// In-app model downloader (resumable + checksum). Agent-only — behind the `download` feature so a
 /// build that runs an already-provisioned model links no HTTPS/TLS stack.
 #[cfg(feature = "download")]
+/// The orchestrator crate this one runs, re-exported so a caller that already links `fm-agent-run`
+/// can reach the watchdog's `ResourceMonitor` without declaring a second dependency on the same
+/// tree. `fm-serve` uses it to ask whether this machine's memory can actually be read — the check
+/// that decides whether the assistant may run here at all.
+pub use fm_agent;
+
 pub mod fetch;
 pub mod fmserve;
 pub mod manifest;

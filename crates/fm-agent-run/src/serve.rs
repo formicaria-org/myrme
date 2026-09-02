@@ -34,6 +34,15 @@ struct Args {
     /// The local web-search proxy port (enables /search); omit to run without the web.
     #[arg(long)]
     searxng_port: Option<u16>,
+    /// Search the web **in-process over HTTPS** instead of through the local proxy.
+    ///
+    /// What the phone has always done, and what a desktop without `python3` needs — the proxy is a
+    /// Python script, so a released build that spawns no shell has no way to run it. Ignored when
+    /// `--searxng-port` is given: an explicit proxy wins, because someone who started one meant it.
+    /// Costs the DuckDuckGo engine, which needs HTML scraping the in-process client does not do;
+    /// wikipedia, GitHub and arXiv remain.
+    #[arg(long, default_value_t = false)]
+    web_direct: bool,
     /// The local `whisper.cpp` server port (enables **/transcribe** audio→transcript). Omit to run
     /// without audio transcription. When set, a `whisper-server` is launched under the same watchdog
     /// as the model, from `<agents_dir>/runtime/whisper-server` + `<agents_dir>/models/<whisper-model>.bin`.
@@ -172,7 +181,7 @@ fn run() -> Result<(), String> {
         model_port,
         model: name.clone(),
         searxng_port: a.searxng_port,
-        web_direct: false, // desktop serve uses the local proxy (--searxng-port), never in-process HTTPS
+        web_direct: a.web_direct,
         whisper_port: a.whisper_port,
         // Vision is a property of the *weights loaded*, not a second server — so it is simply
         // whether the projector made it onto the command line above.
@@ -187,7 +196,7 @@ fn run() -> Result<(), String> {
         name,
         model_port,
         a.serve_port,
-        if a.searxng_port.is_some() { ", web on" } else { "" },
+        if a.searxng_port.is_some() || a.web_direct { ", web on" } else { "" },
         if a.whisper_port.is_some() { ", audio on" } else { "" },
         name,
     );

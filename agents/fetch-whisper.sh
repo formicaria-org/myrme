@@ -7,7 +7,7 @@
 #   bash agents/fetch-whisper.sh     # or: pixi run fetch-whisper
 #
 # It always fetches the (small, reliably hosted) ggml weights. The `whisper-server` binary is fetched
-# only if `whisper_runtime_url` is set in models.toml (whisper.cpp ships no portable Linux server
+# only if `runtime_url_whisper_linux_x64` is set in models.toml (whisper.cpp ships no portable Linux server
 # tarball the way llama.cpp does); otherwise it prints how to place it. `agent-serve --whisper-port`
 # errors clearly if the binary is missing, so this never half-works silently.
 set -euo pipefail
@@ -29,7 +29,7 @@ conf_get() {
 MODEL="$(conf_get whisper_model)"
 REPO="$(conf_get whisper_model_repo)"
 FILE="$(conf_get whisper_model_file)"
-RUNTIME_URL="$(conf_get whisper_runtime_url)"
+RUNTIME_URL="$(conf_get runtime_url_whisper_linux_x64)"
 [ -n "$MODEL" ] && [ -n "$REPO" ] && [ -n "$FILE" ] || {
   echo "models.toml is missing whisper_model / whisper_model_repo / whisper_model_file" >&2; exit 1;
 }
@@ -67,7 +67,7 @@ else
   cat >&2 <<EOF
 
 whisper-server binary is NOT staged. Either:
-  • set 'whisper_runtime_url' in agents/models.toml to a tarball that contains a 'whisper-server', or
+  • set 'runtime_url_whisper_linux_x64' in agents/models.toml to a tarball that contains a 'whisper-server', or
   • build it from whisper.cpp and copy the binary (with its shared libs) to:
         $WBIN
 

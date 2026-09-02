@@ -28,8 +28,17 @@ path = "src/serve.rs"
 # pure-Rust (bundled Mozilla roots via webpki-roots), so it needs no system TLS and cross-compiles to
 # Android; `sha2` verifies the download. Both are **agent-only** deps — the notes core links neither
 # (the owner's ruling: the core stays minimal, an agent may carry its own heavier deps).
+#
+# `flate2` + `tar` arrived with the desktop runtime fetch (2026-09-02): the prebuilt llama.cpp and
+# whisper.cpp servers are published as `.tar.gz`, and until then the only extractor in this project
+# was the `tar` binary shelled out from `agents/fetch.sh` — which Windows may not have and which is
+# the shell dependency the desktop launch path exists to remove. Both are MIT/Apache-2.0 pure Rust.
+# `zip` joined them when Windows was pinned: llama.cpp publishes `.tar.gz` for Linux and macOS but
+# `.zip` for Windows, so the extractor has to read both. Default features off — the archives use
+# plain deflate, and the optional codecs (zstd, bzip2, aes) would each add a C dependency for a
+# format we never receive.
 [features]
-download = ["dep:ureq", "dep:sha2"]
+download = ["dep:ureq", "dep:sha2", "dep:flate2", "dep:tar", "dep:zip"]
 
 [dependencies]
 fm-agent = { path = "../fm-agent" }
@@ -37,3 +46,6 @@ clap = { workspace = true }
 serde_json = "1"
 ureq = { version = "2", optional = true }
 sha2 = { version = "0.11", optional = true }
+flate2 = { version = "1", optional = true }
+tar = { version = "0.4", optional = true }
+zip = { version = "2", optional = true, default-features = false, features = ["deflate"] }

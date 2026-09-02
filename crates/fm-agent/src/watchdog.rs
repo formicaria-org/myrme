@@ -205,8 +205,9 @@ impl<M: ResourceMonitor> Watchdog<M> {
     }
 }
 
-/// The default monitor: reads the host it runs on. Linux reads `/proc`; other OSes **fail closed**
-/// until they get an impl, so nothing ever runs unmonitored.
+/// The default monitor: reads the host it runs on. Linux and Android read `/proc`, Windows asks
+/// `GlobalMemoryStatusEx`, macOS asks the mach kernel; anything else **fails closed**, so nothing
+/// ever runs unmonitored.
 pub struct SystemMonitor;
 
 impl ResourceMonitor for SystemMonitor {
@@ -217,13 +218,152 @@ impl ResourceMonitor for SystemMonitor {
         {
             proc_sample()
         }
-        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        #[cfg(target_os = "windows")]
+        {
+            windows_sample()
+        }
+        #[cfg(target_os = "macos")]
+        {
+            macos_sample()
+        }
+        #[cfg(not(any(
+            target_os = "linux",
+            target_os = "android",
+            target_os = "windows",
+            target_os = "macos"
+        )))]
         {
             Err(WatchdogError::new(
                 "resource monitoring is not implemented on this OS yet — refusing to run the model unmonitored",
             ))
         }
     }
+}
+
+/// Turn a raw memory reading into [`Resources`], **refusing an implausible one**.
+///
+/// This is the guard that makes the platform arms below safe to write on a machine that cannot
+/// compile them. A wrong struct layout or a misread field does not usually produce a *plausible*
+/// wrong number — it produces `0`, or something astronomically large. Either would be acted on:
+/// zero refuses every launch (annoying but safe), and a huge value **admits a model onto a machine
+/// with no room for it**, which is the failure the whole preflight exists to prevent.
+///
+/// So the arithmetic and the bounds live here, `cfg`-free, compiled and unit-tested on every
+/// platform including the one this was written on. The per-OS code below does one syscall and hands
+/// its number to this.
+///
+/// The ceiling is 1 PiB: far above any machine this will run on for years, far below the values a
+/// misread 64-bit field produces.
+fn plausible(mem_available_bytes: u64, load_per_core: f32) -> Result<Resources, WatchdogError> {
+    const CEILING: u64 = 1 << 50; // 1 PiB
+    if mem_available_bytes == 0 {
+        return Err(WatchdogError::new(
+            "this machine reported no available memory at all — refusing to start the model on a reading that cannot be right",
+        ));
+    }
+    if mem_available_bytes >= CEILING {
+        return Err(WatchdogError::new(format!(
+            "this machine reported {mem_available_bytes} bytes of available memory, which cannot be right — refusing rather than trusting it"
+        )));
+    }
+    Ok(Resources { mem_available_bytes, load_per_core })
+}
+
+/// Windows: `GlobalMemoryStatusEx`, the documented way to ask how much physical memory is free.
+///
+/// **Hand-declared rather than pulling in `windows-sys`**, which is a very large crate for one
+/// call — the same stance that keeps a hand-rolled HTTP client in `fm_agent::http` instead of a
+/// framework. The struct is `MEMORYSTATUSEX` verbatim and has been stable since Windows 2000;
+/// `dwLength` must be set to its size before the call, which is the one thing that goes wrong.
+///
+/// No load average: Windows has none, and `Limits::resident()` sets the load ceiling to infinity,
+/// so memory is the whole judgment — exactly as on Android, where `/proc/loadavg` is unreadable.
+#[cfg(target_os = "windows")]
+fn windows_sample() -> Result<Resources, WatchdogError> {
+    #[repr(C)]
+    struct MemoryStatusEx {
+        length: u32,
+        memory_load: u32,
+        total_phys: u64,
+        avail_phys: u64,
+        total_page_file: u64,
+        avail_page_file: u64,
+        total_virtual: u64,
+        avail_virtual: u64,
+        avail_extended_virtual: u64,
+    }
+    // SAFETY: `GlobalMemoryStatusEx` writes exactly `length` bytes into the struct we own, and we
+    // set `length` to its true size. Every field is a plain integer; there are no pointers or
+    // handles to get wrong, and the call cannot fail in a way that leaves the struct partly written
+    // while returning non-zero.
+    unsafe extern "system" {
+        fn GlobalMemoryStatusEx(buffer: *mut MemoryStatusEx) -> i32;
+    }
+    let mut status = MemoryStatusEx {
+        length: std::mem::size_of::<MemoryStatusEx>() as u32,
+        memory_load: 0,
+        total_phys: 0,
+        avail_phys: 0,
+        total_page_file: 0,
+        avail_page_file: 0,
+        total_virtual: 0,
+        avail_virtual: 0,
+        avail_extended_virtual: 0,
+    };
+    let ok = unsafe { GlobalMemoryStatusEx(&mut status) };
+    if ok == 0 {
+        return Err(WatchdogError::new(
+            "Windows would not report this machine's memory — refusing to start the model unmonitored",
+        ));
+    }
+    plausible(status.avail_phys, 0.0)
+}
+
+/// macOS: the mach kernel's own VM statistics, through `libc` rather than hand-declared bindings —
+/// the struct is large and getting one field's offset wrong is exactly the silent-wrong-number
+/// failure [`plausible`] exists to catch, so it is not written out by hand here.
+///
+/// **Available, not free.** macOS keeps very little memory "free": pages that a new process could
+/// have are counted `inactive` (evictable file cache) and `purgeable`. Counting only `free_count`
+/// would under-report by gigabytes on a healthy machine and refuse launches that would have been
+/// perfectly fine. Under-reporting is the safe direction, but not when it makes the feature
+/// unusable, so the three are summed — which is what every memory tool on the platform does.
+///
+/// Speculative pages are deliberately **not** counted: they are read-ahead the kernel expects to
+/// use, and claiming them would tip the estimate optimistic, which is the one direction that hurts.
+#[cfg(target_os = "macos")]
+fn macos_sample() -> Result<Resources, WatchdogError> {
+    let mut stats: libc::vm_statistics64 = unsafe { std::mem::zeroed() };
+    let mut count = (std::mem::size_of::<libc::vm_statistics64>() / std::mem::size_of::<u32>())
+        as libc::mach_msg_type_number_t;
+    // SAFETY: `host_statistics64` fills `count` 32-bit words into a struct we own and sized from
+    // that same type. `mach_host_self()` returns a port that does not need releasing here.
+    //
+    // `mach_host_self` is deprecated in `libc` in favour of the `mach2` crate. Kept as-is: it is
+    // deprecated, not removed, and taking a whole crate for one call is the trade this project
+    // declines elsewhere too (a hand-rolled HTTP client rather than a framework, hand-declared
+    // Windows FFI rather than `windows-sys`). If `libc` ever removes it, `pixi run -e cross
+    // check-cross` fails on the spot — which is the arrangement that makes keeping it defensible.
+    #[allow(deprecated)]
+    let rc = unsafe {
+        libc::host_statistics64(
+            libc::mach_host_self(),
+            libc::HOST_VM_INFO64,
+            &mut stats as *mut _ as *mut libc::integer_t,
+            &mut count,
+        )
+    };
+    if rc != libc::KERN_SUCCESS {
+        return Err(WatchdogError::new(
+            "macOS would not report this machine's memory — refusing to start the model unmonitored",
+        ));
+    }
+    // `vm_page_size` is the kernel's own page size for this machine, not a compile-time guess.
+    let page = unsafe { libc::vm_page_size } as u64;
+    let usable = (stats.free_count as u64)
+        .saturating_add(stats.inactive_count as u64)
+        .saturating_add(stats.purgeable_count as u64);
+    plausible(usable.saturating_mul(page), 0.0)
 }
 
 /// Read `/proc` for available memory + load. Shared by Linux and Android (both expose these).
@@ -295,6 +435,32 @@ mod tests {
 
     fn good() -> Resources {
         Resources { mem_available_bytes: 8_000_000_000, load_per_core: 0.2 }
+    }
+
+    /// **The guard that makes the Windows and macOS arms safe to write blind.**
+    ///
+    /// Those two call a syscall this machine cannot compile, let alone run. What they hand back
+    /// goes through `plausible`, which is compiled and tested everywhere — so the dangerous
+    /// outcome, a wrong-but-believable number admitting a model onto a machine with no room, is
+    /// guarded by code that *is* exercised. A misread field yields 0 or something astronomical;
+    /// both must refuse.
+    #[test]
+    fn an_implausible_memory_reading_is_refused_rather_than_acted_on() {
+        assert!(plausible(0, 0.0).is_err(), "zero cannot be right, and admitting on it is worse");
+        assert!(plausible(1 << 50, 0.0).is_err(), "a petabyte is a misread field, not a machine");
+        assert!(plausible(u64::MAX, 0.0).is_err(), "the classic all-ones misread");
+
+        let ok = plausible(8_000_000_000, 0.0).expect("8 GB is an ordinary reading");
+        assert_eq!(ok.mem_available_bytes, 8_000_000_000);
+        assert_eq!(ok.load_per_core, 0.0, "no load average off Linux — memory is the judgment");
+    }
+
+    /// A refusal must say something a person can act on, like every other capability message here.
+    #[test]
+    fn an_implausible_reading_says_what_it_saw() {
+        let why = plausible(u64::MAX, 0.0).unwrap_err().to_string();
+        assert!(why.contains(&u64::MAX.to_string()), "name the number: {why}");
+        assert!(why.len() > 20, "and explain it: {why}");
     }
 
     /// Fast limits for tests: a 10 ms poll so the loop reacts quickly.

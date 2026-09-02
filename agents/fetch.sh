@@ -71,9 +71,9 @@ else
   # installed (a discrete GPU then offloads via `-ngl`; the same binary still runs on CPU where there is
   # no GPU). Otherwise the portable CPU build. So a GPU machine gets GPU speed with no configuration.
   GPU="$(conf_get gpu)"; GPU="${GPU:-auto}"
-  URL="$(conf_get runtime_url)"
+  URL="$(conf_get runtime_url_linux_x64)"
   if [ "$GPU" != "off" ] && ldconfig -p 2>/dev/null | grep -q 'libvulkan\.so'; then
-    GPU_URL="$(conf_get runtime_url_gpu)"
+    GPU_URL="$(conf_get runtime_url_linux_x64_gpu)"
     if [ -n "$GPU_URL" ]; then URL="$GPU_URL"; echo "GPU detected (Vulkan) — using the GPU runtime"; fi
   fi
   echo "fetching llama.cpp runtime…"

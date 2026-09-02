@@ -34,6 +34,10 @@ impl SupervisedModel {
         die_with_supervisor(&mut cmd);
         let mut child =
             cmd.spawn().map_err(|e| format!("could not start the model server: {e}"))?;
+        // Windows has no pre-exec hook, so its half of the same guarantee is arranged after the
+        // spawn instead of before it. Best-effort by design: failing to get it leaves exactly
+        // today's behaviour, never a refusal to start.
+        adopt_child(&child);
         let stop = StopFlag::new();
         let stop_for_wd = stop.clone();
         let watchdog = Watchdog::new(monitor, limits);
@@ -70,13 +74,17 @@ impl SupervisedModel {
     }
 }
 
-/// Arrange for the spawned model process to receive `SIGKILL` if the thread that launched it goes
-/// away — the behaviour-independent teardown behind the explicit `stop()`. If formicaria is swiped
-/// away, LMKD-reaped on the phone, or simply crashes, the kernel reaps the model too, so a
-/// `llama-server` can never orphan and keep RAM / GPU VRAM pinned. Shared by both the desktop
-/// `agent-serve` and the mobile in-process agent — one code path, so the CI test below exercises the
-/// same call the phone relies on. No-op off Unix.
-#[cfg(unix)]
+/// Arrange for the spawned model process to die if the thing that launched it goes away — the
+/// behaviour-independent teardown behind the explicit `stop()`. If formicaria is swiped away,
+/// LMKD-reaped on the phone, or simply crashes, the model is reaped too, so a `llama-server` can
+/// never orphan and keep RAM / GPU VRAM pinned. Shared by the desktop `agent-serve` and the mobile
+/// in-process agent — one code path, so the CI test below exercises the call the phone relies on.
+///
+/// **`linux`/`android`, not `unix`.** `prctl(PR_SET_PDEATHSIG)` is a Linux facility; `libc` does not
+/// define it on macOS, so the old `#[cfg(unix)]` would not *compile* there. It was never caught
+/// because nothing on macOS built this crate until `fm-serve` gained the assistant — the arrangement
+/// that makes a downloaded copy able to run it also made this a build error waiting to happen.
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn die_with_supervisor(cmd: &mut Command) {
     use std::os::unix::process::CommandExt;
     // Safe: `pre_exec` runs in the forked child before `exec`, and `prctl` here touches no shared
@@ -88,8 +96,113 @@ fn die_with_supervisor(cmd: &mut Command) {
         });
     }
 }
-#[cfg(not(unix))]
+
+/// **macOS has no equivalent, and that is a real gap rather than an oversight.** There is no
+/// `PDEATHSIG`; the honest alternatives are a `kqueue`/`EVFILT_PROC` watcher or an explicit reaper
+/// process, both of which are more machinery than this has earned while the platform is new here.
+/// What still holds on macOS: every ordinary path — `stop()`, the watchdog's thresholds, the app
+/// closing — kills the child explicitly. What is lost is only the case where the supervisor is
+/// itself `SIGKILL`ed or crashes, and then a `llama-server` can outlive it. Recorded in
+/// `known-issues.md` rather than papered over with a no-op that reads like it does something.
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 fn die_with_supervisor(_cmd: &mut Command) {}
+
+/// Windows' half of the same guarantee, arranged after the spawn because there is no pre-exec hook.
+///
+/// A **Job Object** with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` kills every process in the job when
+/// the last handle to it closes — which happens when this process dies, however it dies. That is
+/// strictly stronger than `PDEATHSIG`, which only fires for the direct parent.
+///
+/// **Deliberately best-effort and silent.** Every failure path here leaves precisely the behaviour
+/// that shipped before it existed, so a wrong guess about these APIs cannot stop the assistant
+/// starting — it can only fail to add a guarantee. The handle is intentionally leaked: the job must
+/// outlive this function and live exactly as long as the process, and closing it early would kill
+/// the model immediately.
+#[cfg(target_os = "windows")]
+fn adopt_child(child: &std::process::Child) {
+    use std::os::windows::io::AsRawHandle;
+
+    #[repr(C)]
+    #[derive(Default)]
+    struct IoCounters {
+        read_ops: u64,
+        write_ops: u64,
+        other_ops: u64,
+        read_bytes: u64,
+        write_bytes: u64,
+        other_bytes: u64,
+    }
+    #[repr(C)]
+    #[derive(Default)]
+    struct BasicLimits {
+        per_process_user_time: i64,
+        per_job_user_time: i64,
+        limit_flags: u32,
+        minimum_working_set: usize,
+        maximum_working_set: usize,
+        active_process_limit: u32,
+        affinity: usize,
+        priority_class: u32,
+        scheduling_class: u32,
+    }
+    #[repr(C)]
+    #[derive(Default)]
+    struct ExtendedLimits {
+        basic: BasicLimits,
+        io: IoCounters,
+        process_memory_limit: usize,
+        job_memory_limit: usize,
+        peak_process_memory_used: usize,
+        peak_job_memory_used: usize,
+    }
+    const KILL_ON_JOB_CLOSE: u32 = 0x2000;
+    const EXTENDED_LIMIT_INFORMATION: u32 = 9;
+
+    // SAFETY: three documented kernel32 calls with plain-integer arguments. Each is checked, and
+    // any failure returns without changing behaviour.
+    unsafe extern "system" {
+        fn CreateJobObjectW(attrs: *mut std::ffi::c_void, name: *const u16) -> *mut std::ffi::c_void;
+        fn SetInformationJobObject(
+            job: *mut std::ffi::c_void,
+            class: u32,
+            info: *mut std::ffi::c_void,
+            len: u32,
+        ) -> i32;
+        fn AssignProcessToJobObject(
+            job: *mut std::ffi::c_void,
+            process: *mut std::ffi::c_void,
+        ) -> i32;
+    }
+
+    unsafe {
+        let job = CreateJobObjectW(std::ptr::null_mut(), std::ptr::null());
+        if job.is_null() {
+            return;
+        }
+        let mut info = ExtendedLimits::default();
+        info.basic.limit_flags = KILL_ON_JOB_CLOSE;
+        let set = SetInformationJobObject(
+            job,
+            EXTENDED_LIMIT_INFORMATION,
+            &mut info as *mut _ as *mut std::ffi::c_void,
+            std::mem::size_of::<ExtendedLimits>() as u32,
+        );
+        if set == 0 {
+            return;
+        }
+        AssignProcessToJobObject(job, child.as_raw_handle() as *mut std::ffi::c_void);
+        // **The handle is deliberately never closed**, because closing the last one is precisely
+        // what kills the job — and the job must outlive this function and last as long as this
+        // process. Simply not calling `CloseHandle` is the whole mechanism; an earlier draft wrote
+        // `std::mem::forget(job)`, which the Windows type-check flagged as doing nothing at all: a
+        // raw pointer is `Copy` and has no destructor to suppress. It read like a safeguard and was
+        // one line of noise.
+        let _ = job;
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn adopt_child(_child: &std::process::Child) {}
 
 #[cfg(test)]
 mod tests {
