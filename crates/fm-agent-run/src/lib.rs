@@ -3,15 +3,23 @@
 //! running fm-serve (the single vault writer — no second FileStore), and retrieval is RAG over the
 //! vault (FTS via fm-serve) plus optional web search through a local proxy.
 
-/// In-app model downloader (resumable + checksum). Agent-only — behind the `download` feature so a
-/// build that runs an already-provisioned model links no HTTPS/TLS stack.
-#[cfg(feature = "download")]
 /// The orchestrator crate this one runs, re-exported so a caller that already links `fm-agent-run`
 /// can reach the watchdog's `ResourceMonitor` without declaring a second dependency on the same
 /// tree. `fm-serve` uses it to ask whether this machine's memory can actually be read — the check
 /// that decides whether the assistant may run here at all.
+///
+/// **Unconditional, and it must stay so.** A `#[cfg(feature = "download")]` sat above this item
+/// from a stray line ordering until 2026-09-03: it was written for `fetch` below, landed on this
+/// re-export instead, and so tied "fm-serve can read this machine's memory" to "the downloader is
+/// compiled in" — two unrelated things.
 pub use fm_agent;
 
+/// In-app model downloader (resumable + checksum). Agent-only — behind the `download` feature so a
+/// build that runs an already-provisioned model links no HTTPS/TLS stack. **This** is the item that
+/// gate was always for; without it `fetch.rs` compiled unconditionally while `ureq`/`sha2` did not,
+/// so `cargo check -p fm-agent-run` failed on its own. Invisible in `pixi run ci` because the only
+/// workspace consumer (`fm-serve`) hard-enables `download`, and feature unification then hid it.
+#[cfg(feature = "download")]
 pub mod fetch;
 pub mod fmserve;
 pub mod manifest;
