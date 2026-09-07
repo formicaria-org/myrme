@@ -70,7 +70,7 @@ pub fn parse(message: &str) -> Intent {
     // artifact" rather than silently treating it as chat.
     let transcribe = want_transcribe.then(|| {
         if let Some(pos) = rest.iter().position(|t| asset_ref(t).is_some()) {
-            asset_ref(&rest.remove(pos)).unwrap_or_default()
+            asset_ref(rest.remove(pos)).unwrap_or_default()
         } else {
             String::new()
         }
