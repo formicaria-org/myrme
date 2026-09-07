@@ -19,9 +19,12 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 /// Wait for the model server to answer `/health` (up to ~40 s). Shared by the desktop binary and the
 /// in-process app — both launch a local `llama-server` and talk to it over `127.0.0.1`.
 pub fn wait_ready(port: u16) {
-    let req = format!("GET /health HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n");
+    let req =
+        format!("GET /health HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n");
     for _ in 0..40 {
-        if let Ok(raw) = fm_agent::http::send("127.0.0.1", port, req.as_bytes(), Duration::from_secs(2)) {
+        if let Ok(raw) =
+            fm_agent::http::send("127.0.0.1", port, req.as_bytes(), Duration::from_secs(2))
+        {
             if String::from_utf8_lossy(&raw).contains("\"status\":\"ok\"") {
                 return;
             }
@@ -146,11 +149,17 @@ pub fn serve_loop<V: VaultAccess>(
                             handled.insert(rid);
                         }
                         posted += 1;
-                        println!("@{name} replied in {}: {}", &id[..8.min(id.len())], reply.chars().take(60).collect::<String>());
+                        println!(
+                            "@{name} replied in {}: {}",
+                            &id[..8.min(id.len())],
+                            reply.chars().take(60).collect::<String>()
+                        );
                     }
                     Err(e) => {
                         eprintln!("turn failed in {id}: {e}");
-                        let notice = format!("⚠️ I couldn't finish that one — {e}. Try again, or simplify it.");
+                        let notice = format!(
+                            "⚠️ I couldn't finish that one — {e}. Try again, or simplify it."
+                        );
                         let email = format!("{name}@fm-agents.local");
                         if let Ok(meta) = agent.fm.reply_as(id, &notice, name, &email) {
                             posted += 1;
@@ -170,7 +179,14 @@ pub fn serve_loop<V: VaultAccess>(
 
 /// Append one turn's per-stage timing to `<runtime>/timing.jsonl` and echo a one-line summary, so it
 /// is clear where the orchestration spends its time (the LLM is often *not* the slow part). Best-effort.
-fn log_timing(runtime: &Path, disc: &str, question: &str, marks: &[(String, Instant)], ended: Instant, ok: bool) {
+fn log_timing(
+    runtime: &Path,
+    disc: &str,
+    question: &str,
+    marks: &[(String, Instant)],
+    ended: Instant,
+    ok: bool,
+) {
     if marks.is_empty() {
         return;
     }

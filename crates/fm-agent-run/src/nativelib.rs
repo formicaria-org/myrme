@@ -66,9 +66,6 @@ mod tests {
     fn ignores_anonymous_and_unmatched_mappings() {
         assert!(lib_dir_from_maps(MAPS, "libnope.so").is_none());
         // A bare soname must not match the system libc line's directory.
-        assert_eq!(
-            lib_dir_from_maps(MAPS, "libc.so").unwrap(),
-            Path::new("/system/lib64"),
-        );
+        assert_eq!(lib_dir_from_maps(MAPS, "libc.so").unwrap(), Path::new("/system/lib64"),);
     }
 }

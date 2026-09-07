@@ -231,7 +231,8 @@ fn parse_completion(json: &str) -> Result<LlmResponse, AgentError> {
         .to_string();
     let finish_reason = choice["finish_reason"].as_str().map(str::to_string);
     let usage = v["usage"].as_object().map(|u| Usage {
-        prompt_tokens: u.get("prompt_tokens").and_then(serde_json::Value::as_u64).unwrap_or(0) as u32,
+        prompt_tokens: u.get("prompt_tokens").and_then(serde_json::Value::as_u64).unwrap_or(0)
+            as u32,
         completion_tokens: u
             .get("completion_tokens")
             .and_then(serde_json::Value::as_u64)
@@ -260,7 +261,8 @@ mod tests {
 
     #[test]
     fn it_pulls_content_finish_reason_and_usage_out_of_a_completion_body() {
-        let json = "{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"content\":\"the answer\"}}],\
+        let json =
+            "{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"content\":\"the answer\"}}],\
                     \"usage\":{\"prompt_tokens\":11,\"completion_tokens\":3}}";
         let r = parse_completion(json).unwrap();
         assert_eq!(r.content, "the answer");
@@ -271,7 +273,8 @@ mod tests {
 
     #[test]
     fn a_length_finish_reason_reads_as_truncated() {
-        let json = "{\"choices\":[{\"finish_reason\":\"length\",\"message\":{\"content\":\"cut of\"}}]}";
+        let json =
+            "{\"choices\":[{\"finish_reason\":\"length\",\"message\":{\"content\":\"cut of\"}}]}";
         assert!(parse_completion(json).unwrap().truncated());
     }
 

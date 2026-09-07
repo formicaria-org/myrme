@@ -46,10 +46,7 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 const READ_TIMEOUT: Duration = Duration::from_secs(60);
 
 fn http() -> ureq::Agent {
-    ureq::AgentBuilder::new()
-        .timeout_connect(CONNECT_TIMEOUT)
-        .timeout_read(READ_TIMEOUT)
-        .build()
+    ureq::AgentBuilder::new().timeout_connect(CONNECT_TIMEOUT).timeout_read(READ_TIMEOUT).build()
 }
 
 /// One download: from `url` to `dest`, optionally verified against `sha256` (hex, case-insensitive).
@@ -149,8 +146,11 @@ pub fn ensure_runtime(
     // across a device boundary, and a cancelled fetch leaves its `.part` where a retry resumes it.
     // The name carries the format because the extractor dispatches on it — llama.cpp publishes
     // `.tar.gz` for Linux and macOS and `.zip` for Windows.
-    let archive = runtime_dir
-        .join(if rt.url.ends_with(".zip") { "runtime-archive.zip" } else { "runtime-archive.tar.gz" });
+    let archive = runtime_dir.join(if rt.url.ends_with(".zip") {
+        "runtime-archive.zip"
+    } else {
+        "runtime-archive.tar.gz"
+    });
     let dl = Download { url: &rt.url, dest: &archive, sha256: Some(&rt.sha256) };
     let mut stalls: u32 = 0;
     loop {
@@ -207,7 +207,8 @@ fn unpack_tar_gz(archive: &Path, dest: &Path, want: &str) -> Result<(), String> 
     let mut ar = tar::Archive::new(flate2::read::GzDecoder::new(f));
     let entries = ar.entries().map_err(|e| format!("unreadable runtime archive: {e}"))?;
     for entry in entries {
-        let mut entry = entry.map_err(|e| format!("unreadable entry in the runtime archive: {e}"))?;
+        let mut entry =
+            entry.map_err(|e| format!("unreadable entry in the runtime archive: {e}"))?;
         let path = entry.path().map_err(|e| format!("bad path in the runtime archive: {e}"))?;
         let Some(name) = path.file_name().and_then(|n| n.to_str()).map(str::to_string) else {
             continue;
@@ -282,9 +283,8 @@ pub fn ensure_model(
     on_progress: &dyn Fn(u64, Option<u64>),
     cancel: &dyn Fn() -> bool,
 ) -> Result<PathBuf, String> {
-    let model = manifest
-        .model(name)
-        .ok_or_else(|| format!("model '{name}' is not in the manifest"))?;
+    let model =
+        manifest.model(name).ok_or_else(|| format!("model '{name}' is not in the manifest"))?;
     let dest = models_dir.join(&model.file);
 
     // Already provisioned (a prior fetch, or sideloaded)? Then no URL is even needed.
@@ -452,9 +452,8 @@ pub fn fetch(
             )));
         }
     }
-    fs::rename(&part, d.dest).map_err(|e| {
-        Fatal(format!("rename {} -> {}: {e}", part.display(), d.dest.display()))
-    })?;
+    fs::rename(&part, d.dest)
+        .map_err(|e| Fatal(format!("rename {} -> {}: {e}", part.display(), d.dest.display())))?;
     Ok(())
 }
 
@@ -465,9 +464,9 @@ pub fn fetch(
 fn write_failed(part: &Path, e: std::io::Error) -> FetchError {
     let msg = format!("write {}: {e}", part.display());
     match e.kind() {
-        std::io::ErrorKind::StorageFull => FetchError::Fatal(format!(
-            "{msg} — there is not enough free space for this download"
-        )),
+        std::io::ErrorKind::StorageFull => {
+            FetchError::Fatal(format!("{msg} — there is not enough free space for this download"))
+        }
         std::io::ErrorKind::PermissionDenied => FetchError::Fatal(msg),
         _ => FetchError::Transient(msg),
     }
@@ -601,8 +600,12 @@ mod tests {
         let _ = fs::remove_file(&dest);
 
         let last = std::cell::Cell::new(0u64);
-        fetch(&Download { url: &url, dest: &dest, sha256: Some(&want) }, &|d, _| last.set(d), &never)
-            .unwrap();
+        fetch(
+            &Download { url: &url, dest: &dest, sha256: Some(&want) },
+            &|d, _| last.set(d),
+            &never,
+        )
+        .unwrap();
 
         assert_eq!(fs::read(&dest).unwrap(), body, "downloaded bytes match");
         assert_eq!(last.get(), body.len() as u64, "progress reached the full size");
@@ -622,7 +625,8 @@ mod tests {
         // Pre-seed a partial: the first 25 000 bytes already on disk. The server must Range-serve the rest.
         fs::write(part_path(&dest), &body[..25_000]).unwrap();
 
-        fetch(&Download { url: &url, dest: &dest, sha256: Some(&want) }, &|_, _| {}, &never).unwrap();
+        fetch(&Download { url: &url, dest: &dest, sha256: Some(&want) }, &|_, _| {}, &never)
+            .unwrap();
 
         assert_eq!(fs::read(&dest).unwrap(), body, "resumed file equals the whole body");
         let _ = fs::remove_dir_all(&dir);
@@ -632,9 +636,7 @@ mod tests {
     fn ensure_model_uses_a_present_file_without_network() {
         // No server is started: if ensure_model touched the network this would hang/fail. A present,
         // unpinned file must be returned as-is (the sideloaded / already-fetched case).
-        let m = Manifest::parse(
-            "[[models]]\nname = \"x\"\nrepo = \"r/x\"\nfile = \"x.gguf\"\n",
-        );
+        let m = Manifest::parse("[[models]]\nname = \"x\"\nrepo = \"r/x\"\nfile = \"x.gguf\"\n");
         let dir = std::env::temp_dir().join(format!("fm-ensure-{}", std::process::id()));
         let _ = fs::create_dir_all(&dir);
         fs::write(dir.join("x.gguf"), b"already here").unwrap();
@@ -659,7 +661,10 @@ mod tests {
     /// A one-shot server that answers with `declared` as its `Content-Length` but sends only
     /// `send.len()` bytes and hangs up — the shape of a connection cut mid-transfer. It also hands
     /// back the request text it received, so a test can assert what we asked for.
-    fn serve_truncated(declared: usize, send: Vec<u8>) -> (String, std::sync::mpsc::Receiver<String>) {
+    fn serve_truncated(
+        declared: usize,
+        send: Vec<u8>,
+    ) -> (String, std::sync::mpsc::Receiver<String>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let url = format!("http://{}/model", listener.local_addr().unwrap());
         let (tx, rx) = std::sync::mpsc::channel();
@@ -675,7 +680,9 @@ mod tests {
                 }
             }
             let _ = tx.send(String::from_utf8_lossy(&req).into_owned());
-            let head = format!("HTTP/1.1 200 OK\r\nContent-Length: {declared}\r\nConnection: close\r\n\r\n");
+            let head = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {declared}\r\nConnection: close\r\n\r\n"
+            );
             let _ = stream.write_all(head.as_bytes());
             let _ = stream.write_all(&send);
         });
@@ -895,8 +902,8 @@ mod tests {
         {
             let f = fs::File::create(&archive).unwrap();
             let mut z = zip::ZipWriter::new(f);
-            let opts: zip::write::FileOptions<()> =
-                zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+            let opts: zip::write::FileOptions<()> = zip::write::FileOptions::default()
+                .compression_method(zip::CompressionMethod::Deflated);
             for (name, body) in [
                 ("build/bin/llama-server.exe", &b"MZ"[..]),
                 ("build/bin/ggml.dll", &b"dll"[..]),
@@ -995,7 +1002,8 @@ mod tests {
     #[ignore = "downloads ~110 MB; run via `pixi run check-pins`"]
     #[cfg(feature = "download")]
     fn every_pinned_runtime_still_hashes_to_what_the_catalogue_records() {
-        let manifest = crate::manifest::Manifest::parse(include_str!("../../../agents/models.toml"));
+        let manifest =
+            crate::manifest::Manifest::parse(include_str!("../../../agents/models.toml"));
         let dir = scratch("pins");
         fs::create_dir_all(&dir).unwrap();
         let mut checked = 0;
@@ -1038,5 +1046,4 @@ mod tests {
         assert_eq!(got, dir.join("llama-server"));
         let _ = fs::remove_dir_all(&dir);
     }
-
 }

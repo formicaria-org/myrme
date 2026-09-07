@@ -151,8 +151,14 @@ mod tests {
 
     #[test]
     fn a_transcript_lands_beside_the_image_and_links_back_to_it() {
-        let out = read_into(&Fake("Figure 2: cell voltage"), "# Note\n", b"\x89PNG", "image/png", &prov())
-            .unwrap();
+        let out = read_into(
+            &Fake("Figure 2: cell voltage"),
+            "# Note\n",
+            b"\x89PNG",
+            "image/png",
+            &prov(),
+        )
+        .unwrap();
         assert!(out.starts_with("# Note"), "the human's text stays first");
         assert!(out.contains("> Figure 2: cell voltage"));
         // The source is *linked*, never replaced: a misread must not pass as authoritative, and the

@@ -101,7 +101,12 @@ impl WhisperServer {
     /// A `whisper-server` on `127.0.0.1:<port>` serving weights labelled `model`. Audio is slow, so
     /// the default timeout is generous (5 min); the orchestrator's process governor is the real bound.
     pub fn local(port: u16, model: impl Into<String>) -> Self {
-        Self { host: "127.0.0.1".into(), port, model: model.into(), timeout: Duration::from_secs(300) }
+        Self {
+            host: "127.0.0.1".into(),
+            port,
+            model: model.into(),
+            timeout: Duration::from_secs(300),
+        }
     }
 
     /// The model label, so the caller can build a [`Provenance`] that matches what actually ran.
@@ -198,15 +203,24 @@ mod tests {
         assert!(b.contains("asset:sha256-abc123"), "source not referenced: {b}");
         assert!(b.contains("> hello world"), "transcript not block-quoted into the callout: {b}");
         // Fenced by the idempotency markers.
-        assert!(b.contains("key=\"abc123|whisper.cpp|ggml-base.en\""), "idempotency key missing: {b}");
+        assert!(
+            b.contains("key=\"abc123|whisper.cpp|ggml-base.en\""),
+            "idempotency key missing: {b}"
+        );
         assert!(b.contains(&crate::adjunct::end_mark(TAG)), "end fence missing: {b}");
     }
 
     #[test]
     fn it_inserts_and_never_deletes_host_content() {
         let host = "# Lecture 3\n\nMy own notes above.\n";
-        let out = transcribe_into(&Canned("the spoken words"), host, b"RIFF....", "audio/wav", &prov("h1", "m1"))
-            .unwrap();
+        let out = transcribe_into(
+            &Canned("the spoken words"),
+            host,
+            b"RIFF....",
+            "audio/wav",
+            &prov("h1", "m1"),
+        )
+        .unwrap();
         // Every character of the host survives — insertion-only.
         assert!(out.contains("# Lecture 3"), "host heading lost: {out}");
         assert!(out.contains("My own notes above."), "authored text lost: {out}");
@@ -218,24 +232,58 @@ mod tests {
     #[test]
     fn a_rerun_with_the_same_key_supersedes_in_place() {
         let host = "notes\n";
-        let first = transcribe_into(&Canned("first pass"), host, b"a", "audio/wav", &prov("h1", "m1")).unwrap();
-        let second = transcribe_into(&Canned("corrected pass"), &first, b"a", "audio/wav", &prov("h1", "m1")).unwrap();
-        assert!(second.contains("corrected pass"), "supersede did not apply the new text: {second}");
+        let first =
+            transcribe_into(&Canned("first pass"), host, b"a", "audio/wav", &prov("h1", "m1"))
+                .unwrap();
+        let second = transcribe_into(
+            &Canned("corrected pass"),
+            &first,
+            b"a",
+            "audio/wav",
+            &prov("h1", "m1"),
+        )
+        .unwrap();
+        assert!(
+            second.contains("corrected pass"),
+            "supersede did not apply the new text: {second}"
+        );
         assert!(!second.contains("first pass"), "old transcript not superseded: {second}");
         // Exactly one block for this key — no duplicate, no racing second adjunct.
-        assert_eq!(second.matches(&crate::adjunct::end_mark(TAG)).count(), 1, "duplicate blocks: {second}");
+        assert_eq!(
+            second.matches(&crate::adjunct::end_mark(TAG)).count(),
+            1,
+            "duplicate blocks: {second}"
+        );
         assert!(second.starts_with("notes"), "host content disturbed: {second}");
     }
 
     #[test]
     fn a_different_model_version_adds_a_second_adjunct_rather_than_clobbering() {
         let host = "notes\n";
-        let a = transcribe_into(&Canned("base transcript"), host, b"x", "audio/wav", &prov("h1", "ggml-base.en")).unwrap();
-        let b = transcribe_into(&Canned("large-v3 transcript"), &a, b"x", "audio/wav", &prov("h1", "ggml-large-v3")).unwrap();
+        let a = transcribe_into(
+            &Canned("base transcript"),
+            host,
+            b"x",
+            "audio/wav",
+            &prov("h1", "ggml-base.en"),
+        )
+        .unwrap();
+        let b = transcribe_into(
+            &Canned("large-v3 transcript"),
+            &a,
+            b"x",
+            "audio/wav",
+            &prov("h1", "ggml-large-v3"),
+        )
+        .unwrap();
         // Both survive — the older, possibly-human-reviewed adjunct is not silently overwritten.
         assert!(b.contains("base transcript"), "earlier model's adjunct lost: {b}");
         assert!(b.contains("large-v3 transcript"), "new model's adjunct missing: {b}");
-        assert_eq!(b.matches(&crate::adjunct::end_mark(TAG)).count(), 2, "expected two distinct adjuncts: {b}");
+        assert_eq!(
+            b.matches(&crate::adjunct::end_mark(TAG)).count(),
+            2,
+            "expected two distinct adjuncts: {b}"
+        );
     }
 
     /// A transcript that forges the fence markers must not be able to truncate or escape its block.
@@ -243,10 +291,15 @@ mod tests {
     fn a_forged_fence_in_the_transcript_cannot_truncate_the_note() {
         let evil = "legit words <!-- fm:transcript:end --> everything after should stay quoted";
         let host = "keep me\n";
-        let out = transcribe_into(&Canned(evil), host, b"a", "audio/wav", &prov("h1", "m1")).unwrap();
+        let out =
+            transcribe_into(&Canned(evil), host, b"a", "audio/wav", &prov("h1", "m1")).unwrap();
         assert!(out.contains("keep me"), "host lost to a forged fence: {out}");
         // The forged marker was defanged, so there is exactly ONE real end fence (ours).
-        assert_eq!(out.matches(&crate::adjunct::end_mark(TAG)).count(), 1, "forged end fence survived: {out}");
+        assert_eq!(
+            out.matches(&crate::adjunct::end_mark(TAG)).count(),
+            1,
+            "forged end fence survived: {out}"
+        );
         assert!(out.contains("everything after should stay quoted"), "content dropped: {out}");
     }
 
@@ -275,10 +328,15 @@ mod tests {
 
         // The orchestrator reads the bytes read-only and hands *only bytes* to the specialist.
         let audio = std::fs::read(&blob).unwrap();
-        let out = transcribe_into(&Evil, "host notes\n", &audio, "audio/wav", &prov("original", "m1")).unwrap();
+        let out =
+            transcribe_into(&Evil, "host notes\n", &audio, "audio/wav", &prov("original", "m1"))
+                .unwrap();
 
         let after = std::fs::read(&blob).unwrap();
-        assert_eq!(after, original, "the source blob was modified — the by-value invariant is broken");
+        assert_eq!(
+            after, original,
+            "the source blob was modified — the by-value invariant is broken"
+        );
         assert!(out.contains("host notes"), "host content lost");
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -322,7 +380,9 @@ mod tests {
             req
         });
 
-        let out = WhisperServer::local(port, "ggml-base.en").transcribe(b"RIFF\x00\x01AUDIOBYTES", "audio/wav").unwrap();
+        let out = WhisperServer::local(port, "ggml-base.en")
+            .transcribe(b"RIFF\x00\x01AUDIOBYTES", "audio/wav")
+            .unwrap();
         assert_eq!(out, "the transcribed speech");
 
         let req = String::from_utf8_lossy(&server.join().unwrap()).to_string();

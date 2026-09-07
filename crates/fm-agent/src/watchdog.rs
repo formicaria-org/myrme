@@ -81,7 +81,11 @@ impl Limits {
     ///   poor phone governor anyway (it lags bursts and reads oddly on Android). Memory is the safety;
     ///   thermal headroom is the right *additional* phone signal, a later `ResourceMonitor` refinement.
     pub fn resident() -> Self {
-        Self { max_duration: Duration::MAX, max_load_per_core: f32::INFINITY, ..Self::conservative() }
+        Self {
+            max_duration: Duration::MAX,
+            max_load_per_core: f32::INFINITY,
+            ..Self::conservative()
+        }
     }
 }
 
@@ -162,10 +166,12 @@ impl<M: ResourceMonitor> Watchdog<M> {
                 Ok(Some(status)) => return Outcome::Completed(status),
                 Ok(None) => {}
                 Err(e) => {
-                    return self
-                        .kill(child, Outcome::Failed(WatchdogError::new(format!(
+                    return self.kill(
+                        child,
+                        Outcome::Failed(WatchdogError::new(format!(
                             "cannot poll the model process: {e}"
-                        ))))
+                        ))),
+                    )
                 }
             }
             // Stop requested — the easy off-switch.
@@ -175,13 +181,17 @@ impl<M: ResourceMonitor> Watchdog<M> {
             // Hard wall-clock bound.
             if start.elapsed() >= self.limits.max_duration {
                 let secs = self.limits.max_duration.as_secs();
-                return self.kill(child, Outcome::Stopped(format!("exceeded the {secs}s time limit")));
+                return self
+                    .kill(child, Outcome::Stopped(format!("exceeded the {secs}s time limit")));
             }
             // Resource check — fail-closed: if we cannot read the device, we do not run blind.
             match self.monitor.sample() {
                 Ok(r) => {
                     if let Health::Breach(why) = assess(&r, &self.limits) {
-                        return self.kill(child, Outcome::Stopped(format!("device threshold crossed: {why}")));
+                        return self.kill(
+                            child,
+                            Outcome::Stopped(format!("device threshold crossed: {why}")),
+                        );
                     }
                 }
                 Err(e) => {
@@ -466,11 +476,8 @@ fn parse_proc(meminfo: &str, loadavg: &str, cores: f32) -> Result<Resources, Wat
         .ok_or_else(|| WatchdogError::new("no MemAvailable in /proc/meminfo"))?;
     // Unreadable/absent loadavg (Android, or a `/proc` without it) ⇒ load unknown = 0.0: memory does
     // the gating. We never fail the whole sample for a missing *load* figure.
-    let load1 = loadavg
-        .split_whitespace()
-        .next()
-        .and_then(|v| v.parse::<f32>().ok())
-        .unwrap_or(0.0);
+    let load1 =
+        loadavg.split_whitespace().next().and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
     // Through the same guard as every other arm — four of four, rather than three of four.
     // `/proc` is text, so it cannot misread a struct layout the way an FFI arm can; but a
     // `MemAvailable` of 0 should refuse here exactly as it does on Windows, and `* 1024` on a

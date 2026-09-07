@@ -206,7 +206,9 @@ fn enc(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(b as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
             _ => out.push_str(&format!("%{b:02X}")),
         }
     }
@@ -227,7 +229,10 @@ mod tests {
         assert_eq!(hits.len(), 2);
         assert_eq!(hits[0].title, "Ada Lovelace");
         assert_eq!(hits[0].url, "https://en.wikipedia.org/wiki/Ada_Lovelace");
-        assert_eq!(hits[0].text, "Ada Lovelace was a mathematician & writer", "tags stripped, entity decoded");
+        assert_eq!(
+            hits[0].text, "Ada Lovelace was a mathematician & writer",
+            "tags stripped, entity decoded"
+        );
     }
 
     #[test]

@@ -161,7 +161,10 @@ fn adopt_child(child: &std::process::Child) {
     // SAFETY: three documented kernel32 calls with plain-integer arguments. Each is checked, and
     // any failure returns without changing behaviour.
     unsafe extern "system" {
-        fn CreateJobObjectW(attrs: *mut std::ffi::c_void, name: *const u16) -> *mut std::ffi::c_void;
+        fn CreateJobObjectW(
+            attrs: *mut std::ffi::c_void,
+            name: *const u16,
+        ) -> *mut std::ffi::c_void;
         fn SetInformationJobObject(
             job: *mut std::ffi::c_void,
             class: u32,
@@ -275,7 +278,10 @@ mod tests {
         // /proc/<pid>/stat: "<pid> (<comm>) <state> ...". comm can contain ')', so split on the LAST ')'.
         let state = stat.rsplit_once(')').and_then(|(_, rest)| rest.split_whitespace().next());
         let dead = stat.is_empty() || state == Some("Z");
-        assert!(dead, "PDEATHSIG must kill the model when its supervisor thread dies (stat: {stat:?})");
+        assert!(
+            dead,
+            "PDEATHSIG must kill the model when its supervisor thread dies (stat: {stat:?})"
+        );
     }
 
     #[cfg(unix)]

@@ -38,12 +38,7 @@ impl Intent {
 /// parses), or `None` if the token is not an asset reference.
 pub fn asset_ref(tok: &str) -> Option<String> {
     let t = tok.trim_matches(|c| matches!(c, '(' | ')' | '!' | '[' | ']' | '<' | '>'));
-    let t = t
-        .rsplit(']')
-        .next()
-        .unwrap_or(t)
-        .trim_start_matches('(')
-        .trim_end_matches(')');
+    let t = t.rsplit(']').next().unwrap_or(t).trim_start_matches('(').trim_end_matches(')');
     if t.starts_with("asset:sha256-") || t.starts_with("sha256:") || t.starts_with("sha256-") {
         Some(t.to_string())
     } else {
@@ -80,13 +75,7 @@ pub fn parse(message: &str) -> Intent {
             String::new()
         }
     });
-    Intent {
-        ask: rest.join(" "),
-        search,
-        propose,
-        research,
-        transcribe,
-    }
+    Intent { ask: rest.join(" "), search, propose, research, transcribe }
 }
 
 /// Which agent, if any, a message addresses — so an agent responds **only when called by name**
@@ -192,10 +181,7 @@ mod tests {
             i.ask
         );
         // Other reference forms are accepted too.
-        assert_eq!(
-            parse("/transcribe sha256:abc123").transcribe.as_deref(),
-            Some("sha256:abc123")
-        );
+        assert_eq!(parse("/transcribe sha256:abc123").transcribe.as_deref(), Some("sha256:abc123"));
         // `/transcribe` with no asset ref records the intent with an empty source (runner will ask).
         assert_eq!(parse("/transcribe").transcribe.as_deref(), Some(""));
     }
@@ -205,24 +191,14 @@ mod tests {
         // A plain chat that happens to mention a blob keeps its text — nothing is stripped.
         let i = parse("what is in asset:sha256-deadbeef ?");
         assert!(i.is_chat());
-        assert!(
-            i.ask.contains("asset:sha256-deadbeef"),
-            "asset ref wrongly stripped: {}",
-            i.ask
-        );
+        assert!(i.ask.contains("asset:sha256-deadbeef"), "asset ref wrongly stripped: {}", i.ask);
     }
 
     #[test]
     fn asset_ref_recognises_the_forms_and_rejects_others() {
-        assert_eq!(
-            asset_ref("asset:sha256-abc").as_deref(),
-            Some("asset:sha256-abc")
-        );
+        assert_eq!(asset_ref("asset:sha256-abc").as_deref(), Some("asset:sha256-abc"));
         assert_eq!(asset_ref("sha256:abc").as_deref(), Some("sha256:abc"));
-        assert_eq!(
-            asset_ref("![clip](asset:sha256-abc)").as_deref(),
-            Some("asset:sha256-abc")
-        );
+        assert_eq!(asset_ref("![clip](asset:sha256-abc)").as_deref(), Some("asset:sha256-abc"));
         assert!(asset_ref("ordinary").is_none());
         assert!(asset_ref("note:01KY42HKAM9EZNFMGCS4A99V4C").is_none());
     }
@@ -250,10 +226,7 @@ mod tests {
         // Over the cap → cut at a word boundary, result (with ellipsis) within the cap.
         let out = cap_reply("hello world and then some", Some(9));
         assert!(out.chars().count() <= 9, "over cap: {out:?}");
-        assert!(
-            out.ends_with('…') && !out.contains("wor"),
-            "cut mid-word: {out:?}"
-        );
+        assert!(out.ends_with('…') && !out.contains("wor"), "cut mid-word: {out:?}");
         assert_eq!(out, "hello…");
     }
 }

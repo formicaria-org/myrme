@@ -13,7 +13,10 @@ use fm_agent_run::Agent;
 use std::io::{BufRead, Write};
 
 #[derive(Parser)]
-#[command(name = "agent-chat", about = "Chat with the study assistant in a note's discussion (via fm-serve).")]
+#[command(
+    name = "agent-chat",
+    about = "Chat with the study assistant in a note's discussion (via fm-serve)."
+)]
 struct Args {
     #[arg(long)]
     note: String,

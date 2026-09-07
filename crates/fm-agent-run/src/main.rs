@@ -24,7 +24,10 @@ use fm_agent_run::fmserve::{FmServe, Origin, VaultAccess};
 
 /// Ask the local study assistant to propose a change to one note.
 #[derive(Parser)]
-#[command(name = "fm-agent-run", about = "Propose a study-assistant edit to one note (never main).")]
+#[command(
+    name = "fm-agent-run",
+    about = "Propose a study-assistant edit to one note (never main)."
+)]
 struct Args {
     /// The running fm-serve to read/write through (start formicaria first).
     #[arg(long, default_value_t = 8765)]
@@ -110,11 +113,8 @@ fn run(args: Args) -> Result<(), String> {
     // and a person use: the branch + `proposes:` note, attributed to the model, size-limited by the
     // target vault's own `vault.json` (refused, never truncated), committed by the single writer.
     let email = format!("{}@fm-agents.local", args.model);
-    let origin = Origin {
-        tool: "propose",
-        query: Some(args.ask.clone()),
-        sources: draft.sources.clone(),
-    };
+    let origin =
+        Origin { tool: "propose", query: Some(args.ask.clone()), sources: draft.sources.clone() };
     let prop =
         fm.create_proposal(&draft.host_note, &draft.new_body, &args.model, &email, &origin)?;
     let prop_id = prop["id"].as_str().unwrap_or("(unknown)");

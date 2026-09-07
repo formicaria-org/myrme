@@ -14,14 +14,8 @@ use fm_agent_run::Agent;
 #[test]
 #[ignore = "needs a running fm-serve + whisper-server; set FM_SERVE_PORT, WHISPER_PORT, FM_NOTE, FM_ASSET"]
 fn it_transcribes_through_the_real_fmserve_and_whisper() {
-    let serve: u16 = std::env::var("FM_SERVE_PORT")
-        .expect("FM_SERVE_PORT")
-        .parse()
-        .unwrap();
-    let whisper: u16 = std::env::var("WHISPER_PORT")
-        .expect("WHISPER_PORT")
-        .parse()
-        .unwrap();
+    let serve: u16 = std::env::var("FM_SERVE_PORT").expect("FM_SERVE_PORT").parse().unwrap();
+    let whisper: u16 = std::env::var("WHISPER_PORT").expect("WHISPER_PORT").parse().unwrap();
     let note = std::env::var("FM_NOTE").expect("FM_NOTE");
     let asset = std::env::var("FM_ASSET").expect("FM_ASSET");
 
@@ -49,8 +43,5 @@ fn it_transcribes_through_the_real_fmserve_and_whisper() {
         .handle(&note, &intent, true, &|s| println!("stage: {s}"))
         .expect("the transcribe turn failed");
     println!("REPLY: {reply}");
-    assert!(
-        reply.contains("transcribed"),
-        "expected a success reply, got: {reply}"
-    );
+    assert!(reply.contains("transcribed"), "expected a success reply, got: {reply}");
 }

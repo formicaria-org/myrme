@@ -34,9 +34,8 @@ pub fn send(
 /// return the body. A non-200 is an error naming the status line, not a parse attempt.
 pub fn body(raw: &[u8]) -> Result<String, AgentError> {
     let text = String::from_utf8_lossy(raw);
-    let (head, body) = text
-        .split_once("\r\n\r\n")
-        .ok_or_else(|| AgentError::new("malformed HTTP response"))?;
+    let (head, body) =
+        text.split_once("\r\n\r\n").ok_or_else(|| AgentError::new("malformed HTTP response"))?;
     let status = head.lines().next().unwrap_or("");
     if !status.contains(" 200") {
         return Err(AgentError::new(format!("server returned: {}", status.trim())));
@@ -53,9 +52,8 @@ fn dechunk(body: &str) -> Result<String, AgentError> {
     let mut out = String::new();
     let mut rest = body;
     loop {
-        let (size_line, after) = rest
-            .split_once("\r\n")
-            .ok_or_else(|| AgentError::new("truncated chunked response"))?;
+        let (size_line, after) =
+            rest.split_once("\r\n").ok_or_else(|| AgentError::new("truncated chunked response"))?;
         let size = usize::from_str_radix(size_line.trim(), 16)
             .map_err(|_| AgentError::new("bad chunk size in response"))?;
         if size == 0 {
@@ -76,7 +74,9 @@ pub fn encode(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(b as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
             _ => out.push_str(&format!("%{b:02X}")),
         }
     }

@@ -103,11 +103,7 @@ pub struct FmServe {
 
 impl FmServe {
     pub fn local(port: u16) -> Self {
-        Self {
-            host: "127.0.0.1".into(),
-            port,
-            timeout: Duration::from_secs(60),
-        }
+        Self { host: "127.0.0.1".into(), port, timeout: Duration::from_secs(60) }
     }
 
     /// POST one command and return its JSON answer. A non-200 carries `fm-serve`'s error body.
@@ -128,16 +124,10 @@ impl FmServe {
                 )
             })?;
         let text = String::from_utf8_lossy(&raw);
-        let (head, resp) = text
-            .split_once("\r\n\r\n")
-            .ok_or("malformed fm-serve response")?;
+        let (head, resp) = text.split_once("\r\n\r\n").ok_or("malformed fm-serve response")?;
         let status = head.lines().next().unwrap_or("");
         if !status.contains(" 200") {
-            return Err(format!(
-                "fm-serve {cmd}: {} — {}",
-                status.trim(),
-                resp.trim()
-            ));
+            return Err(format!("fm-serve {cmd}: {} — {}", status.trim(), resp.trim()));
         }
         if resp.trim().is_empty() {
             return Ok(Value::Null);
@@ -227,8 +217,7 @@ impl VaultAccess for FmServe {
         let mime = head
             .lines()
             .find_map(|l| {
-                l.strip_prefix("Content-Type:")
-                    .or_else(|| l.strip_prefix("content-type:"))
+                l.strip_prefix("Content-Type:").or_else(|| l.strip_prefix("content-type:"))
             })
             .map(|v| v.trim().to_string())
             .unwrap_or_else(|| "application/octet-stream".to_string());
@@ -243,10 +232,7 @@ impl VaultAccess for FmServe {
     }
 
     fn activity_done(&self, disc: &str) {
-        let _ = self.call(
-            "agent_activity",
-            json!({ "discussion": disc, "done": true }),
-        );
+        let _ = self.call("agent_activity", json!({ "discussion": disc, "done": true }));
     }
 
     fn present(&self, name: &str) {

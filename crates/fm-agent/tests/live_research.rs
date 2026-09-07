@@ -27,7 +27,9 @@ fn env_port(key: &str) -> Option<u16> {
 #[test]
 #[ignore = "needs a live local SearXNG + model server; set FM_SEARXNG_PORT / FM_MODEL_PORT (/ FM_MODEL)"]
 fn deep_research_over_a_real_searxng_and_model_yields_a_cited_note() {
-    let (Some(searxng), Some(model_port)) = (env_port("FM_SEARXNG_PORT"), env_port("FM_MODEL_PORT")) else {
+    let (Some(searxng), Some(model_port)) =
+        (env_port("FM_SEARXNG_PORT"), env_port("FM_MODEL_PORT"))
+    else {
         eprintln!(
             "skip: set FM_SEARXNG_PORT and FM_MODEL_PORT (and optionally FM_MODEL) to run the live \
              deep-research test"
@@ -43,8 +45,9 @@ fn deep_research_over_a_real_searxng_and_model_yields_a_cited_note() {
 
     // A real research question by default (what /research is for); override with FM_RESEARCH_Q so a
     // human can eyeball correctness on any topic.
-    let ask = std::env::var("FM_RESEARCH_Q")
-        .unwrap_or_else(|_| "What is retrieval-augmented generation (RAG) and why is it used with LLMs?".into());
+    let ask = std::env::var("FM_RESEARCH_Q").unwrap_or_else(|_| {
+        "What is retrieval-augmented generation (RAG) and why is it used with LLMs?".into()
+    });
     let req = ResearchRequest {
         host_note: "01LIVE_RESEARCH_HOST".into(),
         ask: ask.clone(),
@@ -68,15 +71,23 @@ fn deep_research_over_a_real_searxng_and_model_yields_a_cited_note() {
     if out.draft.new_body.contains("## Sources") {
         // A cited note: it must carry real links, every URL token must be well-formed, and every claim
         // line must carry a [n] citation (the format a user expects).
-        assert!(out.draft.new_body.contains("http"), "a cited note must carry at least one real link");
+        assert!(
+            out.draft.new_body.contains("http"),
+            "a cited note must carry at least one real link"
+        );
         for tok in out.draft.new_body.split_whitespace().filter(|t| t.starts_with("http")) {
             assert!(
                 tok.starts_with("http://") || tok.starts_with("https://"),
                 "malformed source link: {tok}"
             );
         }
-        for line in out.draft.new_body.lines().filter(|l| l.starts_with("- ") && !l.starts_with("- [")) {
-            assert!(line.contains('[') && line.contains(']'), "a claim line must carry a [n] citation: {line}");
+        for line in
+            out.draft.new_body.lines().filter(|l| l.starts_with("- ") && !l.starts_with("- ["))
+        {
+            assert!(
+                line.contains('[') && line.contains(']'),
+                "a claim line must carry a [n] citation: {line}"
+            );
         }
     } else {
         // No verifiable support ⇒ the honest not-supported note, never a fabricated answer.

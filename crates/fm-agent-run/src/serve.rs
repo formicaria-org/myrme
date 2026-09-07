@@ -17,7 +17,10 @@ use std::path::PathBuf;
 use std::process::Command;
 
 #[derive(Parser)]
-#[command(name = "agent-serve", about = "Serve the model + answer @name mentions; tied to formicaria's life.")]
+#[command(
+    name = "agent-serve",
+    about = "Serve the model + answer @name mentions; tied to formicaria's life."
+)]
 struct Args {
     /// Where `models.toml`, `models/`, and `runtime/` live — the single manifest resolves the rest.
     #[arg(long, default_value = "agents")]
@@ -92,9 +95,9 @@ fn run() -> Result<(), String> {
     // The manifest is the single source for which model, and the runtime defaults; flags override.
     let manifest = Manifest::read(&a.agents_dir.join("models.toml"))?;
     let model_name = a.model.clone().unwrap_or_else(|| manifest.default.clone());
-    let file = manifest
-        .file(&model_name)
-        .ok_or_else(|| format!("model '{model_name}' is not in {}/models.toml", a.agents_dir.display()))?;
+    let file = manifest.file(&model_name).ok_or_else(|| {
+        format!("model '{model_name}' is not in {}/models.toml", a.agents_dir.display())
+    })?;
     let model_gguf = a.agents_dir.join("models").join(file);
     let runtime = a.agents_dir.join("runtime");
     let name = a.name.clone().unwrap_or_else(|| model_name.clone());
@@ -120,24 +123,31 @@ fn run() -> Result<(), String> {
 
     let bin = runtime.join("llama-server");
     let mut cmd = Command::new(&bin);
-    cmd.env("LD_LIBRARY_PATH", &runtime)
-        .arg("-m")
-        .arg(&model_gguf)
-        .args([
-            "--host", "127.0.0.1",
-            "--port", &model_port.to_string(),
-            "-c", &ctx.to_string(),
-            "-t", &threads.to_string(),
-            "-ngl", &ngl.to_string(),
-            "--no-warmup",
-        ]);
+    cmd.env("LD_LIBRARY_PATH", &runtime).arg("-m").arg(&model_gguf).args([
+        "--host",
+        "127.0.0.1",
+        "--port",
+        &model_port.to_string(),
+        "-c",
+        &ctx.to_string(),
+        "-t",
+        &threads.to_string(),
+        "-ngl",
+        &ngl.to_string(),
+        "--no-warmup",
+    ]);
     if let Some(proj) = &mmproj {
         cmd.arg("--mmproj").arg(proj);
     }
     let model_bytes = std::fs::metadata(&model_gguf).map(|m| m.len()).unwrap_or(500_000_000);
     // Resident, not one-shot: no wall-clock cliff (a per-turn cap is already on the model call), so it
     // stays warm for the whole session instead of being SIGKILLed after 5 minutes.
-    let model = SupervisedModel::launch(cmd, SystemMonitor, &Need::new(model_bytes, a.headroom), Limits::resident())?;
+    let model = SupervisedModel::launch(
+        cmd,
+        SystemMonitor,
+        &Need::new(model_bytes, a.headroom),
+        Limits::resident(),
+    )?;
     fm_agent_run::watch::wait_ready(model_port);
 
     // Optional audio→transcript runtime: a second supervised process (`whisper-server`), launched only
@@ -156,13 +166,22 @@ fn run() -> Result<(), String> {
         }
         let mut wcmd = Command::new(&wbin);
         wcmd.env("LD_LIBRARY_PATH", &runtime).args([
-            "--host", "127.0.0.1",
-            "--port", &wport.to_string(),
-            "-m", wmodel.to_str().unwrap_or_default(),
-            "-t", &threads.to_string(),
+            "--host",
+            "127.0.0.1",
+            "--port",
+            &wport.to_string(),
+            "-m",
+            wmodel.to_str().unwrap_or_default(),
+            "-t",
+            &threads.to_string(),
         ]);
         let wbytes = std::fs::metadata(&wmodel).map(|m| m.len()).unwrap_or(200_000_000);
-        let w = SupervisedModel::launch(wcmd, SystemMonitor, &Need::new(wbytes, a.headroom), Limits::resident())?;
+        let w = SupervisedModel::launch(
+            wcmd,
+            SystemMonitor,
+            &Need::new(wbytes, a.headroom),
+            Limits::resident(),
+        )?;
         // Wait for it to accept connections (it loads the model, then listens). Best-effort: the first
         // /inference blocks until ready anyway.
         for _ in 0..40 {
@@ -203,7 +222,14 @@ fn run() -> Result<(), String> {
 
     // The reusable watch loop — the same one the in-process mobile app runs, just with FmServe here.
     let stopper = model.stopper();
-    fm_agent_run::watch::serve_loop(&agent, &name, &runtime, a.poll_secs, &|| model.finished(), &|| stopper.stop());
+    fm_agent_run::watch::serve_loop(
+        &agent,
+        &name,
+        &runtime,
+        a.poll_secs,
+        &|| model.finished(),
+        &|| stopper.stop(),
+    );
 
     // Take the whisper runtime down with the agent — no orphaned second process holding its model.
     if let Some(w) = whisper {

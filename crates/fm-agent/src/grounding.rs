@@ -125,7 +125,8 @@ pub fn verify(model_output: &str, sources: &[Source]) -> GroundedNote {
         })
         .collect();
 
-    let (verified, dropped): (Vec<Claim>, Vec<Claim>) = claims.into_iter().partition(|c| c.verified);
+    let (verified, dropped): (Vec<Claim>, Vec<Claim>) =
+        claims.into_iter().partition(|c| c.verified);
     let body = assemble_body(&verified, sources);
     GroundedNote { body, verified, dropped }
 }
@@ -145,7 +146,9 @@ fn assemble_body(verified: &[Claim], sources: &[Source]) -> String {
         // plain `[n]`, still resolvable via the Sources list.
         let src = sources.iter().find(|s| s.id == c.source_id);
         let cite = match src {
-            Some(s) if !s.url.trim().is_empty() => format!("[\\[{}\\]]({})", c.source_id, s.url.trim()),
+            Some(s) if !s.url.trim().is_empty() => {
+                format!("[\\[{}\\]]({})", c.source_id, s.url.trim())
+            }
             _ => format!("[{}]", c.source_id),
         };
         out.push_str(&format!("- {} {}\n", c.text.trim(), cite));
@@ -266,7 +269,12 @@ mod tests {
     fn pack_sources_numbers_and_truncates_each_source() {
         let sources = vec![
             src(1, "CDC", "https://cdc.gov", "mRNA vaccines teach cells to make a spike protein."),
-            src(2, "NIH", "https://nih.gov", "The mRNA never enters the nucleus where DNA is kept."),
+            src(
+                2,
+                "NIH",
+                "https://nih.gov",
+                "The mRNA never enters the nucleus where DNA is kept.",
+            ),
         ];
         let pack = pack_sources(&sources, 20);
         assert!(pack.contains("[1] CDC — https://cdc.gov"));
@@ -278,14 +286,23 @@ mod tests {
 
     #[test]
     fn a_claim_with_a_verbatim_quote_is_verified() {
-        let sources = vec![src(1, "CDC", "https://cdc.gov", "mRNA vaccines teach our cells how to make a protein.")];
+        let sources = vec![src(
+            1,
+            "CDC",
+            "https://cdc.gov",
+            "mRNA vaccines teach our cells how to make a protein.",
+        )];
         let draft = "- mRNA vaccines make cells produce a protein [1]\n> \"teach our cells how to make a protein\"";
         let g = verify(draft, &sources);
         assert_eq!(g.verified.len(), 1);
         assert!(g.dropped.is_empty());
         assert!(g.body.contains("mRNA vaccines make cells produce a protein"));
         // Every statement carries an inline clickable link to the exact source it came from.
-        assert!(g.body.contains("[\\[1\\]](https://cdc.gov)"), "the statement links inline to its source: {}", g.body);
+        assert!(
+            g.body.contains("[\\[1\\]](https://cdc.gov)"),
+            "the statement links inline to its source: {}",
+            g.body
+        );
         assert!(g.body.contains("## Sources"));
         assert!(g.body.contains("- [1] CDC — https://cdc.gov"));
         assert_eq!(g.verified_quote_rate(), 1.0);
@@ -295,12 +312,16 @@ mod tests {
     fn a_claim_whose_quote_is_not_in_its_source_is_dropped() {
         // THE load-bearing assertion: the model invents a supporting quote → the claim is dropped, not
         // shipped. This is the deterministic grounding gate.
-        let sources = vec![src(1, "CDC", "https://cdc.gov", "mRNA vaccines teach cells to make a protein.")];
+        let sources =
+            vec![src(1, "CDC", "https://cdc.gov", "mRNA vaccines teach cells to make a protein.")];
         let draft = "- mRNA vaccines alter your DNA permanently [1]\n> \"the vaccine rewrites your genome\"";
         let g = verify(draft, &sources);
         assert!(g.verified.is_empty(), "a fabricated quote must not verify");
         assert_eq!(g.dropped.len(), 1);
-        assert!(!g.body.contains("alter your DNA"), "the unsupported claim must not appear in the note");
+        assert!(
+            !g.body.contains("alter your DNA"),
+            "the unsupported claim must not appear in the note"
+        );
         // Fail-closed: nothing verified → an honest not-supported line, never a fabricated answer.
         assert!(g.body.contains("did not support an answer"));
         assert_eq!(g.verified_quote_rate(), 0.0);
@@ -311,7 +332,10 @@ mod tests {
         let sources = vec![src(1, "CDC", "https://cdc.gov", "some real text here")];
         let draft = "- a claim citing nothing real [7]\n> \"some real text here\"";
         let g = verify(draft, &sources);
-        assert!(g.verified.is_empty(), "an out-of-range citation cannot verify even if the quote exists elsewhere");
+        assert!(
+            g.verified.is_empty(),
+            "an out-of-range citation cannot verify even if the quote exists elsewhere"
+        );
         assert_eq!(g.dropped.len(), 1);
         assert_eq!(g.dropped[0].source_id, 7);
     }
@@ -320,10 +344,19 @@ mod tests {
     fn a_quote_is_matched_despite_reflowed_whitespace_and_curly_quotes() {
         // Extraction mangles whitespace and punctuation; a faithful quote must still verify: the
         // source has reflowed whitespace and a curly apostrophe, the model's quote is flat + straight.
-        let sources = vec![src(1, "X", "", "The result\n  was  significant across\ttrials, the model’s best.")];
+        let sources = vec![src(
+            1,
+            "X",
+            "",
+            "The result\n  was  significant across\ttrials, the model’s best.",
+        )];
         let draft = "- The result was significant across trials [1]\n> \"was significant across trials, the model's best\"";
         let g = verify(draft, &sources);
-        assert_eq!(g.verified.len(), 1, "normalization must let a reflowed/curly-quote match through");
+        assert_eq!(
+            g.verified.len(),
+            1,
+            "normalization must let a reflowed/curly-quote match through"
+        );
     }
 
     #[test]
@@ -367,7 +400,11 @@ mod tests {
         // A source with no URL (a user's own note) keeps a plain marker, still in the Sources list.
         let with_note = vec![src(1, "my note", "", "a fact from my own note text")];
         let g2 = verify("- Local fact [1]\n> \"a fact from my own note text\"", &with_note);
-        assert!(g2.body.contains("Local fact [1]"), "no-URL source keeps a plain marker: {}", g2.body);
+        assert!(
+            g2.body.contains("Local fact [1]"),
+            "no-URL source keeps a plain marker: {}",
+            g2.body
+        );
     }
 
     #[test]
@@ -391,8 +428,14 @@ mod tests {
     #[test]
     fn split_citation_only_treats_a_trailing_digit_bracket_as_a_citation() {
         assert_eq!(super::split_citation("a claim [3]"), ("a claim".to_string(), Some(3)));
-        assert_eq!(super::split_citation("see [RFC] for detail"), ("see [RFC] for detail".to_string(), None));
-        assert_eq!(super::split_citation("no citation here"), ("no citation here".to_string(), None));
+        assert_eq!(
+            super::split_citation("see [RFC] for detail"),
+            ("see [RFC] for detail".to_string(), None)
+        );
+        assert_eq!(
+            super::split_citation("no citation here"),
+            ("no citation here".to_string(), None)
+        );
     }
 
     // --- Realistic ground-truth scenarios: well-known knowledge, the way a user expects it to behave.
@@ -428,11 +471,23 @@ mod tests {
         assert!(g.body.contains("converts light energy into the chemical energy"));
         assert!(g.body.contains("happens in the chloroplasts"));
         // Each statement links inline to the source it came from.
-        assert!(g.body.contains("[\\[1\\]](https://en.wikipedia.org/wiki/Photosynthesis)"), "body: {}", g.body);
-        assert!(g.body.contains("[\\[2\\]](https://en.wikipedia.org/wiki/Chloroplast)"), "body: {}", g.body);
+        assert!(
+            g.body.contains("[\\[1\\]](https://en.wikipedia.org/wiki/Photosynthesis)"),
+            "body: {}",
+            g.body
+        );
+        assert!(
+            g.body.contains("[\\[2\\]](https://en.wikipedia.org/wiki/Chloroplast)"),
+            "body: {}",
+            g.body
+        );
         assert!(!g.body.contains("at night"), "the unsupported claim must never reach the note");
-        assert!(g.body.contains("- [1] Photosynthesis - Wikipedia — https://en.wikipedia.org/wiki/Photosynthesis"));
-        assert!(g.body.contains("- [2] Chloroplast - Wikipedia — https://en.wikipedia.org/wiki/Chloroplast"));
+        assert!(g.body.contains(
+            "- [1] Photosynthesis - Wikipedia — https://en.wikipedia.org/wiki/Photosynthesis"
+        ));
+        assert!(g
+            .body
+            .contains("- [2] Chloroplast - Wikipedia — https://en.wikipedia.org/wiki/Chloroplast"));
         assert!((g.verified_quote_rate() - 2.0 / 3.0).abs() < 1e-6);
     }
 
@@ -458,8 +513,16 @@ mod tests {
 > \"the Great Wall of China cannot be seen from space with the naked eye\"";
         let g = verify(draft, &sources);
 
-        assert_eq!(g.verified.len(), 2, "the fortifications fact and the corrected visibility fact survive");
-        assert_eq!(g.dropped.len(), 1, "the 'visible from space' myth is dropped — no source supports it");
+        assert_eq!(
+            g.verified.len(),
+            2,
+            "the fortifications fact and the corrected visibility fact survive"
+        );
+        assert_eq!(
+            g.dropped.len(),
+            1,
+            "the 'visible from space' myth is dropped — no source supports it"
+        );
         assert!(g.body.contains("cannot be seen from space"), "the sourced truth reaches the note");
         assert!(
             !g.body.contains("is visible from space with the naked eye"),

@@ -80,7 +80,14 @@ pub fn defang(text: &str, tag: &str) -> String {
 ///
 /// `heading` is the callout's title line and `empty` is what to say when the specialist found
 /// nothing, so a blank result is still a *statement* rather than an empty box.
-pub fn block(tag: &str, prov: &Provenance, heading: &str, source_label: &str, text: &str, empty: &str) -> String {
+pub fn block(
+    tag: &str,
+    prov: &Provenance,
+    heading: &str,
+    source_label: &str,
+    text: &str,
+    empty: &str,
+) -> String {
     let safe = defang(text, tag);
     let quoted: String = if safe.trim().is_empty() {
         format!("> _{empty}_\n")
@@ -149,7 +156,8 @@ mod tests {
         assert!(body.starts_with("# Note"), "the human's text stays first");
 
         // Re-running one supersedes only its own block.
-        let a2 = block("fm:transcript", &prov("m1"), "Transcript", "audio", "spoken again", "nothing");
+        let a2 =
+            block("fm:transcript", &prov("m1"), "Transcript", "audio", "spoken again", "nothing");
         let body = insert_or_supersede(&body, &a2, "fm:transcript", &prov("m1").key());
         assert!(body.contains("spoken again") && !body.contains("> spoken\n"));
         assert!(body.contains("a chart"), "the other specialist's block is untouched");
@@ -157,8 +165,10 @@ mod tests {
 
     #[test]
     fn a_different_model_adds_a_block_rather_than_clobbering_a_reviewed_one() {
-        let one = block("fm:description", &prov("v1"), "Description", "image", "first read", "nothing");
-        let two = block("fm:description", &prov("v2"), "Description", "image", "second read", "nothing");
+        let one =
+            block("fm:description", &prov("v1"), "Description", "image", "first read", "nothing");
+        let two =
+            block("fm:description", &prov("v2"), "Description", "image", "second read", "nothing");
         let body = insert_or_supersede("", &one, "fm:description", &prov("v1").key());
         let body = insert_or_supersede(&body, &two, "fm:description", &prov("v2").key());
         assert!(body.contains("first read") && body.contains("second read"));
@@ -175,7 +185,8 @@ mod tests {
 
     #[test]
     fn a_hand_edited_note_that_lost_its_closing_fence_is_appended_to_not_eaten() {
-        let mangled = format!("{}\n> half a block\nthe rest of my note\n", open_mark("fm:description", "k"));
+        let mangled =
+            format!("{}\n> half a block\nthe rest of my note\n", open_mark("fm:description", "k"));
         let b = block("fm:description", &prov("m"), "Description", "image", "fresh", "nothing");
         let out = insert_or_supersede(&mangled, &b, "fm:description", "k");
         assert!(out.contains("the rest of my note"), "must never eat the tail");

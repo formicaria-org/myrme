@@ -171,13 +171,9 @@ impl<V: VaultAccess> Agent<V> {
             reply_id = meta["id"].as_str().map(|s| s.to_string());
         }
         if let Some(body) = &turn.proposal {
-            let origin = Origin {
-                tool: "propose",
-                query: Some(intent.ask.clone()),
-                sources: Vec::new(),
-            };
-            self.fm
-                .create_proposal(note, body, &self.model, &email, &origin)?;
+            let origin =
+                Origin { tool: "propose", query: Some(intent.ask.clone()), sources: Vec::new() };
+            self.fm.create_proposal(note, body, &self.model, &email, &origin)?;
         }
         Ok((reply, reply_id))
     }
@@ -231,8 +227,7 @@ impl<V: VaultAccess> Agent<V> {
             query: Some(intent.ask.clone()),
             sources: out.draft.sources.clone(),
         };
-        self.fm
-            .create_proposal(note, &body, &self.model, &email, &origin)?;
+        self.fm.create_proposal(note, &body, &self.model, &email, &origin)?;
 
         let dropped = if out.grounded.dropped.is_empty() {
             String::new()
@@ -343,9 +338,7 @@ impl<V: VaultAccess> Agent<V> {
                      first.){aside}_"
                 ))
             } else {
-                say(format!(
-                    "_(That doesn't look like something I can transcribe.){aside}_"
-                ))
+                say(format!("_(That doesn't look like something I can transcribe.){aside}_"))
             };
         }
 
@@ -386,13 +379,8 @@ impl<V: VaultAccess> Agent<V> {
         }
 
         on_stage("proposing the transcript");
-        let origin = Origin {
-            tool: "transcribe",
-            query: None,
-            sources,
-        };
-        self.fm
-            .create_proposal(note, &new_body, &self.model, &email, &origin)?;
+        let origin = Origin { tool: "transcribe", query: None, sources };
+        self.fm.create_proposal(note, &new_body, &self.model, &email, &origin)?;
 
         let what = match (clips.len(), pages.len()) {
             (a, 0) => format!("{a} recording{}", if a == 1 { "" } else { "s" }),
@@ -580,10 +568,7 @@ impl<V: VaultAccess> Agent<V> {
         let hits = web.search(ask).map_err(|e| e.to_string())?;
         Ok(hits
             .into_iter()
-            .map(|h| InputDoc {
-                label: format!("web: {} ({})", h.title, h.url),
-                text: h.text,
-            })
+            .map(|h| InputDoc { label: format!("web: {} ({})", h.title, h.url), text: h.text })
             .collect())
     }
 
@@ -634,10 +619,8 @@ fn asset_ref_candidates(body: &str) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     for pat in ["asset:sha256-", "sha256:"] {
         for (i, _) in body.match_indices(pat) {
-            let hex: String = body[i + pat.len()..]
-                .chars()
-                .take_while(char::is_ascii_hexdigit)
-                .collect();
+            let hex: String =
+                body[i + pat.len()..].chars().take_while(char::is_ascii_hexdigit).collect();
             // A sha-256 is 64 hex chars; be lenient but reject stray short runs.
             if hex.len() >= 8 && seen.insert(hex.clone()) {
                 out.push(format!("sha256:{hex}"));
@@ -760,10 +743,7 @@ mod tests {
             alive: true,
         };
         let history = agent(fm).history("note").unwrap();
-        assert!(
-            history.contains("hi") && history.contains("there"),
-            "got: {history:?}"
-        );
+        assert!(history.contains("hi") && history.contains("there"), "got: {history:?}");
     }
 
     // --- history() budgeting: the multi-round refinement fix (pin both ends, trim the middle). ---
@@ -773,12 +753,7 @@ mod tests {
         // The common case: under budget, nothing is dropped and the order is oldest-first.
         let thread =
             json!({ "messages": [{ "body": "one" }, { "body": "two" }, { "body": "three" }] });
-        let h = agent(FakeVault {
-            thread,
-            alive: true,
-        })
-        .history("note")
-        .unwrap();
+        let h = agent(FakeVault { thread, alive: true }).history("note").unwrap();
         assert_eq!(h, "- one\n- two\n- three");
     }
 
@@ -794,33 +769,21 @@ mod tests {
             { "body": "third turn — more middle padding here" },
             { "body": "LATEST: and fix the title" },
         ]});
-        let mut a = agent(FakeVault {
-            thread,
-            alive: true,
-        });
+        let mut a = agent(FakeVault { thread, alive: true });
         a.history_budget = 120; // room for both ends + the gap marker, but not every middle turn
         let h = a.history("note").unwrap();
         assert!(
             h.contains("FIRST: always keep"),
             "the original ask is pinned, never dropped: {h:?}"
         );
-        assert!(
-            h.contains("LATEST: and fix"),
-            "the most recent turn is always kept: {h:?}"
-        );
-        assert!(
-            h.contains("omitted"),
-            "a dropped middle is marked as a gap: {h:?}"
-        );
+        assert!(h.contains("LATEST: and fix"), "the most recent turn is always kept: {h:?}");
+        assert!(h.contains("omitted"), "a dropped middle is marked as a gap: {h:?}");
         assert!(
             !h.contains("second turn"),
             "a middle turn is what gives way to fit the budget: {h:?}"
         );
         // The opener leads and the latest closes — order preserved.
-        assert!(
-            h.find("FIRST").unwrap() < h.find("LATEST").unwrap(),
-            "chronological: {h:?}"
-        );
+        assert!(h.find("FIRST").unwrap() < h.find("LATEST").unwrap(), "chronological: {h:?}");
     }
 
     #[test]
@@ -828,10 +791,7 @@ mod tests {
         // Two turns are both ends, so even under an absurdly tight budget both survive, in order, with
         // no gap marker and no duplicated opener.
         let thread = json!({ "messages": [{ "body": "the ask" }, { "body": "the answer" }] });
-        let mut a = agent(FakeVault {
-            thread,
-            alive: true,
-        });
+        let mut a = agent(FakeVault { thread, alive: true });
         a.history_budget = 5;
         let h = a.history("note").unwrap();
         assert_eq!(h, "- the ask\n- the answer");
@@ -843,10 +803,7 @@ mod tests {
         // the empty string the old tail-only loop could return.
         let thread =
             json!({ "messages": [{ "body": "a single very long turn that exceeds the budget" }] });
-        let mut a = agent(FakeVault {
-            thread,
-            alive: true,
-        });
+        let mut a = agent(FakeVault { thread, alive: true });
         a.history_budget = 5;
         let h = a.history("note").unwrap();
         assert!(
@@ -862,10 +819,7 @@ mod tests {
         // false), the watch loop must trip `stop_model` and RETURN, rather than keep the model (and its
         // memory / GPU VRAM) loaded. This is the seam that failed when a restarted fm-serve was mistaken
         // for the original: the agent must go out after formicaria does.
-        let agent = agent(FakeVault {
-            alive: false,
-            ..Default::default()
-        });
+        let agent = agent(FakeVault { alive: false, ..Default::default() });
         let stopped = std::cell::Cell::new(false);
         // `finished` stays false (the model itself is fine); only the missing vault should end the loop.
         crate::watch::serve_loop(
@@ -892,39 +846,21 @@ mod tests {
             transcribe: Some(src.to_string()),
         };
         // No whisper runtime on this device → say so, propose nothing (regardless of any asset).
-        let off = agent(FakeVault {
-            alive: true,
-            ..Default::default()
-        }); // whisper_port None
+        let off = agent(FakeVault { alive: true, ..Default::default() }); // whisper_port None
         let (reply, _) = off.handle("note", &intent(""), true, &|_| {}).unwrap();
         // The wording now names *which* capability is missing, because `/transcribe` covers two
         // and a device may have either, both or neither.
-        assert!(
-            reply.contains("available on this device"),
-            "no runtime: {reply}"
-        );
-        assert!(
-            reply.contains("audio transcription"),
-            "it must name the missing one: {reply}"
-        );
+        assert!(reply.contains("available on this device"), "no runtime: {reply}");
+        assert!(reply.contains("audio transcription"), "it must name the missing one: {reply}");
         // Runtime on, but the note embeds no audio → asks to record/attach — and NEVER demands a hash.
         // (whisper is never contacted: resolution fails first on the empty note body.)
-        let mut on = agent(FakeVault {
-            alive: true,
-            ..Default::default()
-        });
+        let mut on = agent(FakeVault { alive: true, ..Default::default() });
         on.whisper_port = Some(1);
         let (reply, _) = on.handle("note", &intent(""), true, &|_| {}).unwrap();
         // `/transcribe` now covers recordings *and* writing, so it asks for either — and still
         // never demands a content hash.
-        assert!(
-            reply.contains("don't see a recording or an image"),
-            "no media in note: {reply}"
-        );
-        assert!(
-            !reply.contains("sha256"),
-            "must never demand a hash: {reply}"
-        );
+        assert!(reply.contains("don't see a recording or an image"), "no media in note: {reply}");
+        assert!(!reply.contains("sha256"), "must never demand a hash: {reply}");
     }
 
     #[test]
@@ -996,9 +932,7 @@ mod tests {
         }
 
         let a = Agent {
-            fm: CapVault {
-                proposed: RefCell::new(None),
-            },
+            fm: CapVault { proposed: RefCell::new(None) },
             model_port: 0,
             model: "test".into(),
             searxng_port: None,
@@ -1019,23 +953,10 @@ mod tests {
         };
         let (reply, _) = a.handle("note", &intent, true, &|_| {}).unwrap();
         assert!(reply.contains("transcribed"), "user is told, got: {reply}");
-        let body =
-            a.fm.proposed
-                .borrow()
-                .clone()
-                .expect("a proposal was created");
-        assert!(
-            body.contains("existing note body"),
-            "insertion-only: host body kept: {body}"
-        );
-        assert!(
-            body.contains("the recorded lecture words"),
-            "transcript inserted: {body}"
-        );
-        assert!(
-            body.contains("asset:sha256-abc123"),
-            "source referenced, not replaced: {body}"
-        );
+        let body = a.fm.proposed.borrow().clone().expect("a proposal was created");
+        assert!(body.contains("existing note body"), "insertion-only: host body kept: {body}");
+        assert!(body.contains("the recorded lecture words"), "transcript inserted: {body}");
+        assert!(body.contains("asset:sha256-abc123"), "source referenced, not replaced: {body}");
         assert!(body.contains("whisper.cpp"), "provenance present: {body}");
     }
 
@@ -1115,9 +1036,7 @@ mod tests {
         }
 
         let a = Agent {
-            fm: TwoClips {
-                proposed: RefCell::new(None),
-            },
+            fm: TwoClips { proposed: RefCell::new(None) },
             model_port: 0,
             model: "test".into(),
             searxng_port: None,
@@ -1137,43 +1056,20 @@ mod tests {
             transcribe: Some(String::new()), // bare /transcribe
         };
         let (reply, _) = a.handle("note", &intent, true, &|_| {}).unwrap();
-        assert!(
-            reply.contains("1 recording"),
-            "only the one untranscribed clip: {reply}"
-        );
-        let body =
-            a.fm.proposed
-                .borrow()
-                .clone()
-                .expect("a proposal was created");
-        assert!(
-            body.contains("OLD A TRANSCRIPT"),
-            "the accepted transcript is preserved: {body}"
-        );
-        assert!(
-            body.contains("fresh clip words"),
-            "the untranscribed clip is transcribed: {body}"
-        );
-        assert!(
-            body.contains("asset:sha256-bbbbbbbb"),
-            "the new block references clip B: {body}"
-        );
+        assert!(reply.contains("1 recording"), "only the one untranscribed clip: {reply}");
+        let body = a.fm.proposed.borrow().clone().expect("a proposal was created");
+        assert!(body.contains("OLD A TRANSCRIPT"), "the accepted transcript is preserved: {body}");
+        assert!(body.contains("fresh clip words"), "the untranscribed clip is transcribed: {body}");
+        assert!(body.contains("asset:sha256-bbbbbbbb"), "the new block references clip B: {body}");
         // Exactly two transcript blocks now: A's (kept) + B's (new).
-        assert_eq!(
-            body.matches("fm:transcript:end").count(),
-            2,
-            "expected A + B blocks: {body}"
-        );
+        assert_eq!(body.matches("fm:transcript:end").count(), 2, "expected A + B blocks: {body}");
     }
 
     #[test]
     fn research_without_a_search_proxy_tells_the_user_and_proposes_nothing() {
         // /research needs the web; with no proxy configured, the turn must short-circuit to a plain
         // notice (no model call, no network, no proposal) — hermetically checkable.
-        let a = agent(FakeVault {
-            alive: true,
-            ..Default::default()
-        });
+        let a = agent(FakeVault { alive: true, ..Default::default() });
         let intent = convo::Intent {
             ask: "how do mRNA vaccines work".into(),
             search: false,

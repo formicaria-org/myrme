@@ -21,9 +21,9 @@
 
 pub mod adjunct;
 pub mod convo;
-pub mod imagetext;
 pub mod grounding;
 pub mod http;
+pub mod imagetext;
 pub mod launch;
 pub mod openai;
 pub mod preference;
@@ -293,10 +293,13 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
         // model's (small, local) context with room to finish the note. A tiny model favors a tight
         // top-K anyway (research 2026-07-22), so cap the sources and truncate each; if a source-heavy
         // query still overflows, retry once tighter rather than shipping — or refusing — a cut-off note.
-        let write = |max_src: usize, chars: usize| -> Result<(LlmResponse, Vec<crate::grounding::Source>), AgentError> {
+        let write = |max_src: usize,
+                     chars: usize|
+         -> Result<(LlmResponse, Vec<crate::grounding::Source>), AgentError> {
             let used: Vec<_> = sources.iter().take(max_src).cloned().collect();
             let pack = crate::grounding::pack_sources(&used, chars);
-            let user = format!("{}\n{}\n\n# Numbered sources\n{}", heading::TASK, req.ask.trim(), pack);
+            let user =
+                format!("{}\n{}\n\n# Numbered sources\n{}", heading::TASK, req.ask.trim(), pack);
             Ok((self.llm.complete(crate::grounding::GROUNDED_WRITE_INSTRUCTION, &user)?, used))
         };
         let (resp, used) = {
@@ -320,7 +323,13 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
             new_body: grounded.body.clone(),
             sources: used
                 .iter()
-                .map(|s| if s.url.is_empty() { s.title.clone() } else { format!("{} — {}", s.title, s.url) })
+                .map(|s| {
+                    if s.url.is_empty() {
+                        s.title.clone()
+                    } else {
+                        format!("{} — {}", s.title, s.url)
+                    }
+                })
                 .collect(),
         };
         Ok(Research { draft, grounded })
@@ -445,10 +454,7 @@ fn normalize_answer(content: &str, max_chars: Option<usize>) -> String {
 /// `\[ … \]` → `$$ … $$` (display) and `\( … \)` → `$ … $` (inline). Deterministic; leaves prose and
 /// already-`$` math untouched.
 fn normalize_math(s: &str) -> String {
-    s.replace("\\[", "$$")
-        .replace("\\]", "$$")
-        .replace("\\(", "$")
-        .replace("\\)", "$")
+    s.replace("\\[", "$$").replace("\\]", "$$").replace("\\(", "$").replace("\\)", "$")
 }
 
 /// Assemble a conversational turn's context: the prior conversation, then the retrieved notes and
@@ -534,7 +540,11 @@ mod tests {
     struct TruncatingLlm;
     impl LlmStep for TruncatingLlm {
         fn complete(&self, _: &str, _: &str) -> Result<LlmResponse, AgentError> {
-            Ok(LlmResponse { content: "half a not".into(), finish_reason: Some("length".into()), usage: None })
+            Ok(LlmResponse {
+                content: "half a not".into(),
+                finish_reason: Some("length".into()),
+                usage: None,
+            })
         }
     }
 
@@ -563,7 +573,11 @@ mod tests {
     fn with_search_it_refines_then_searches_then_writes_once() {
         let llm = FakeLlm::new(&["mrna vaccine mechanism", "THE WRITTEN NOTE"]);
         let web = FakeWeb {
-            hits: vec![SearchHit { title: "CDC".into(), url: "https://cdc.gov".into(), text: "facts".into() }],
+            hits: vec![SearchHit {
+                title: "CDC".into(),
+                url: "https://cdc.gov".into(),
+                text: "facts".into(),
+            }],
             seen: RefCell::new(Vec::new()),
         };
         let agent = StudyAssistant::new(llm, web);
@@ -573,7 +587,10 @@ mod tests {
         assert_eq!(draft.host_note, "01HOST");
         assert_eq!(draft.new_body, "THE WRITTEN NOTE");
         // Sources = the hit, then the named input.
-        assert_eq!(draft.sources, vec!["CDC — https://cdc.gov".to_string(), "my notes".to_string()]);
+        assert_eq!(
+            draft.sources,
+            vec!["CDC — https://cdc.gov".to_string(), "my notes".to_string()]
+        );
 
         // The web was searched with the *refined* query, not the raw one.
         assert_eq!(agent.web.seen.borrow().as_slice(), &["mrna vaccine mechanism".to_string()]);
@@ -616,11 +633,15 @@ mod tests {
     #[test]
     fn a_wrapping_code_fence_is_stripped_but_inner_blocks_survive() {
         let web = FakeWeb { hits: vec![], seen: RefCell::new(Vec::new()) };
-        let agent = StudyAssistant::new(FakeLlm::new(&["```markdown\n# Title\n\n- a\n- b\n```"]), web);
+        let agent =
+            StudyAssistant::new(FakeLlm::new(&["```markdown\n# Title\n\n- a\n- b\n```"]), web);
         let draft = agent.run(&req(None)).unwrap();
         assert_eq!(draft.new_body, "# Title\n\n- a\n- b");
         // A body with a genuine inner code block, not a wrapping fence, is left intact.
-        assert_eq!(super::strip_wrapping_fence("see this:\n```rust\nfn x(){}\n```"), "see this:\n```rust\nfn x(){}\n```");
+        assert_eq!(
+            super::strip_wrapping_fence("see this:\n```rust\nfn x(){}\n```"),
+            "see this:\n```rust\nfn x(){}\n```"
+        );
     }
 
     #[test]
@@ -629,7 +650,10 @@ mod tests {
         assert_eq!(super::normalize_answer("2 + 2 = 4.", None), "2 + 2 = 4.");
         assert_eq!(super::normalize_answer("# Answer\nParis.", None), "# Answer\nParis.");
         // Math delimiters are converted to the note's KaTeX vocabulary so they actually render.
-        assert_eq!(super::normalize_math("display \\[ a=b \\] and inline \\( x \\)"), "display $$ a=b $$ and inline $ x $");
+        assert_eq!(
+            super::normalize_math("display \\[ a=b \\] and inline \\( x \\)"),
+            "display $$ a=b $$ and inline $ x $"
+        );
         assert_eq!(super::normalize_answer("Bayes: \\[ P(H|E) \\]", None), "Bayes: $$ P(H|E) $$");
         // Already-$ math is untouched.
         assert_eq!(super::normalize_math("$E=mc^2$ and $$x$$"), "$E=mc^2$ and $$x$$");
@@ -643,7 +667,13 @@ mod tests {
         use crate::convo::Intent;
         let web = FakeWeb { hits: vec![], seen: RefCell::new(Vec::new()) };
         let agent = StudyAssistant::new(FakeLlm::new(&["Here is the answer."]), web);
-        let intent = Intent { ask: "what does the note say?".into(), search: false, propose: false, research: false, transcribe: None };
+        let intent = Intent {
+            ask: "what does the note say?".into(),
+            search: false,
+            propose: false,
+            research: false,
+            transcribe: None,
+        };
         let ctx = [InputDoc { label: "note".into(), text: "the note body".into() }];
         let turn = agent.turn("earlier: hi", &intent, &ctx, Some(200)).unwrap();
         assert_eq!(turn.reply.as_deref(), Some("Here is the answer."));
@@ -660,7 +690,13 @@ mod tests {
         let web = FakeWeb { hits: vec![], seen: RefCell::new(Vec::new()) };
         // Only one canned reply is needed — the proposal body; the acknowledgement is deterministic.
         let agent = StudyAssistant::new(FakeLlm::new(&["# Clean note\n\n- point"]), web);
-        let intent = Intent { ask: "tidy this".into(), search: false, propose: true, research: false, transcribe: None };
+        let intent = Intent {
+            ask: "tidy this".into(),
+            search: false,
+            propose: true,
+            research: false,
+            transcribe: None,
+        };
         let turn = agent.turn("", &intent, &[], Some(200)).unwrap();
         assert_eq!(turn.proposal.as_deref(), Some("# Clean note\n\n- point"));
         assert_eq!(turn.reply.as_deref(), Some(super::PROPOSAL_ACK));
@@ -671,8 +707,17 @@ mod tests {
     fn a_turn_reply_is_capped_at_the_max_length() {
         use crate::convo::Intent;
         let web = FakeWeb { hits: vec![], seen: RefCell::new(Vec::new()) };
-        let agent = StudyAssistant::new(FakeLlm::new(&["this reply is quite a bit too long for the cap"]), web);
-        let intent = Intent { ask: "hi".into(), search: false, propose: false, research: false, transcribe: None };
+        let agent = StudyAssistant::new(
+            FakeLlm::new(&["this reply is quite a bit too long for the cap"]),
+            web,
+        );
+        let intent = Intent {
+            ask: "hi".into(),
+            search: false,
+            propose: false,
+            research: false,
+            transcribe: None,
+        };
         let turn = agent.turn("", &intent, &[], Some(12)).unwrap();
         assert!(turn.reply.unwrap().chars().count() <= 12);
     }
@@ -725,7 +770,8 @@ mod tests {
 > \"The Eiffel Tower is a wrought-iron lattice tower on the Champ de Mars in Paris\"\n\
 - The Eiffel Tower is made of solid gold [2]\n\
 > \"the Eiffel Tower is made of solid gold\"";
-        let agent = StudyAssistant::new(FakeLlm::new(&["capital of France Eiffel Tower", draft]), web);
+        let agent =
+            StudyAssistant::new(FakeLlm::new(&["capital of France Eiffel Tower", draft]), web);
 
         let mut r = req(Some("whats the capitol of france and the famus tower"));
         r.inputs = vec![]; // pure web grounding
@@ -737,14 +783,27 @@ mod tests {
         assert!(out.draft.new_body.contains("The Eiffel Tower stands in Paris"));
         // Every statement carries the inline link it came from (web-search mode).
         assert!(out.draft.new_body.contains("[\\[1\\]](https://en.wikipedia.org/wiki/Paris)"));
-        assert!(out.draft.new_body.contains("[\\[2\\]](https://en.wikipedia.org/wiki/Eiffel_Tower)"));
-        assert!(!out.draft.new_body.contains("solid gold"), "a fabricated claim must never reach the note");
+        assert!(out
+            .draft
+            .new_body
+            .contains("[\\[2\\]](https://en.wikipedia.org/wiki/Eiffel_Tower)"));
+        assert!(
+            !out.draft.new_body.contains("solid gold"),
+            "a fabricated claim must never reach the note"
+        );
         // We assemble the Sources section from the verified set — real, un-hallucinable links.
         assert!(out.draft.new_body.contains("## Sources"));
         assert!(out.draft.new_body.contains("https://en.wikipedia.org/wiki/Paris"));
-        assert!(out.draft.sources.iter().any(|s| s.contains("https://en.wikipedia.org/wiki/Eiffel_Tower")));
+        assert!(out
+            .draft
+            .sources
+            .iter()
+            .any(|s| s.contains("https://en.wikipedia.org/wiki/Eiffel_Tower")));
         // The web was searched with the refined query; exactly two model calls: refine, then grounded write.
-        assert_eq!(agent.web.seen.borrow().as_slice(), &["capital of France Eiffel Tower".to_string()]);
+        assert_eq!(
+            agent.web.seen.borrow().as_slice(),
+            &["capital of France Eiffel Tower".to_string()]
+        );
         let seen = agent.llm.seen.borrow();
         assert_eq!(seen.len(), 2);
         assert_eq!(seen[0].0, QUERY_REFINE_INSTRUCTION);
@@ -757,7 +816,11 @@ mod tests {
         // fewer/shorter sources, and only if it STILL won't fit does it refuse — with a clear, actionable
         // message — rather than shipping a truncated note.
         let web = FakeWeb {
-            hits: vec![SearchHit { title: "T".into(), url: "https://t".into(), text: "long source text".into() }],
+            hits: vec![SearchHit {
+                title: "T".into(),
+                url: "https://t".into(),
+                text: "long source text".into(),
+            }],
             seen: RefCell::new(Vec::new()),
         };
         let agent = StudyAssistant::new(TruncatingLlm, web);

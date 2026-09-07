@@ -40,7 +40,13 @@ impl SearxngSearch {
     /// A SearXNG on `127.0.0.1:<port>`. Caps results (the orchestrator trims context anyway) and
     /// times out rather than hanging the pipeline.
     pub fn local(port: u16) -> Self {
-        Self { host: "127.0.0.1".into(), port, max_results: 6, timeout: Duration::from_secs(30), engines: None }
+        Self {
+            host: "127.0.0.1".into(),
+            port,
+            max_results: 6,
+            timeout: Duration::from_secs(30),
+            engines: None,
+        }
     }
 
     pub fn with_host(mut self, host: impl Into<String>) -> Self {
@@ -131,13 +137,17 @@ mod tests {
         ]}"#;
         let hits = parse_results(json, 2).unwrap();
         assert_eq!(hits.len(), 2, "capped at max_results");
-        assert_eq!(hits[0], SearchHit { title: "A".into(), url: "https://a".into(), text: "about a".into() });
+        assert_eq!(
+            hits[0],
+            SearchHit { title: "A".into(), url: "https://a".into(), text: "about a".into() }
+        );
         assert_eq!(hits[1].text, "about b");
     }
 
     #[test]
     fn a_result_missing_a_url_is_skipped_not_fatal() {
-        let json = r#"{"results":[{"title":"no url"},{"title":"ok","url":"https://ok","content":"x"}]}"#;
+        let json =
+            r#"{"results":[{"title":"no url"},{"title":"ok","url":"https://ok","content":"x"}]}"#;
         let hits = parse_results(json, 6).unwrap();
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].url, "https://ok");
@@ -165,10 +175,20 @@ mod tests {
         });
 
         let hits = SearxngSearch::local(port).search("mRNA vaccine").unwrap();
-        assert_eq!(hits, vec![SearchHit { title: "CDC".into(), url: "https://cdc.gov".into(), text: "facts".into() }]);
+        assert_eq!(
+            hits,
+            vec![SearchHit {
+                title: "CDC".into(),
+                url: "https://cdc.gov".into(),
+                text: "facts".into()
+            }]
+        );
 
         let req = server.join().unwrap();
-        assert!(req.starts_with("GET /search?q=mRNA%20vaccine&format=json"), "query not encoded: {req}");
+        assert!(
+            req.starts_with("GET /search?q=mRNA%20vaccine&format=json"),
+            "query not encoded: {req}"
+        );
     }
 
     /// Configured engines must reach SearXNG as `&engines=…` so web / wikipedia / github / arxiv sources
@@ -191,10 +211,16 @@ mod tests {
             sock.write_all(resp.as_bytes()).unwrap();
             req
         });
-        SearxngSearch::local(port).with_engines(super::DEFAULT_ENGINES.iter().copied()).search("q").unwrap();
+        SearxngSearch::local(port)
+            .with_engines(super::DEFAULT_ENGINES.iter().copied())
+            .search("q")
+            .unwrap();
         let req = server.join().unwrap();
         assert!(req.contains("&engines="), "engines param missing: {req}");
-        assert!(req.contains("wikipedia") && req.contains("github") && req.contains("arxiv"), "engines not sent: {req}");
+        assert!(
+            req.contains("wikipedia") && req.contains("github") && req.contains("arxiv"),
+            "engines not sent: {req}"
+        );
 
         // Empty engines list ⇒ no engines param at all.
         let s = SearxngSearch::local(0).with_engines(Vec::<String>::new());
