@@ -138,6 +138,10 @@ fn run() -> Result<(), String> {
     ]);
     if let Some(proj) = &mmproj {
         cmd.arg("--mmproj").arg(proj);
+        // Keep the projector off a small GPU so the context window fits (`models.toml`).
+        if manifest.model(&model_name).and_then(|m| m.mmproj_offload) == Some(false) {
+            cmd.arg("--no-mmproj-offload");
+        }
     }
     let model_bytes = std::fs::metadata(&model_gguf).map(|m| m.len()).unwrap_or(500_000_000);
     // Resident, not one-shot: no wall-clock cliff (a per-turn cap is already on the model call), so it

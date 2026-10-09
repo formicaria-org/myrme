@@ -129,6 +129,13 @@ sha256 = "66358cb18bb6b3b1b6675aa412c7a88ef01d228f481184d13668e5201c730a0a"
 # `/describe` says so instead of describing an image it never saw. Fetched beside the weights from
 # the same pinned commit. Apache-2.0, like the model.
 mmproj = "mmproj-Qwen3VL-4B-Instruct-F16.gguf"
+# **8192, and the projector off the GPU — the two go together** (measured 2026-10-09 on the 4 GB RTX
+# 3050). With the projector on the card, nothing above 2048 starts (out of device memory). Off the
+# card, 8192 starts at 3626 MiB and answered a 6.8k-token email exchange in 14.5 s at 3641 MiB. Why
+# 8192: the meeting pass reads a whole email conversation in one prompt, and 2048 holds ~700 words.
+# Cost on a machine with no GPU: ~0.9 GB more RAM for the larger KV cache.
+ctx = 8192
+mmproj_offload = false
 note = "LAPTOP pick (2026-07-24) — measured on our case: 40.1 t/s on the RTX 3050 (Vulkan, 2.78 GB VRAM), 3/3 verbatim grounding (best of the sweep), abstains on junk sources. Served text-only via /v1/chat/completions (mmproj-Qwen3VL-4B-Instruct-F16.gguf only needed if we later add image-notes). Caveat: less eager to *initiate* a search — fine while /research is deterministically routed. Apache-2.0."
 
 [[models]]

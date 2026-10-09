@@ -25,6 +25,8 @@ pub mod grounding;
 pub mod http;
 pub mod imagetext;
 pub mod launch;
+/// Meetings found in an email exchange: the model quotes, Rust checks the quote and reads the date.
+pub mod meetings;
 pub mod openai;
 pub mod preference;
 pub mod preflight;

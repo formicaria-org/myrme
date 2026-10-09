@@ -79,6 +79,39 @@ pub trait VaultAccess {
     fn activity_done(&self, disc: &str);
     /// Heartbeat: "this agent is alive right now," by name. Best-effort.
     fn present(&self, name: &str);
+
+    // ── the meeting pass (`decisions.md` 2026-10-09, *the assistant proposes meetings*) ──────────
+    // Defaulted, so a vault without mail (the phone, the test fakes) needs nothing and the pass simply
+    // finds nothing to do.
+
+    /// Every email conversation and the meeting starts already on the agenda (`mail_conversations`).
+    fn mail_conversations(&self) -> Result<Value, String> {
+        Err("there is no mail on this device".into())
+    }
+    /// A proposal that also sets the allowlisted properties (`start`/`due`/`location`, added tags).
+    fn propose_with(
+        &self,
+        _note: &str,
+        _body: &str,
+        _props: &Value,
+        _name: &str,
+        _email: &str,
+        _origin: &Origin,
+    ) -> Result<Value, String> {
+        Err("proposals with dates are not available on this device".into())
+    }
+    /// Propose a **new** note linked to `about` (`propose_note`): it exists only on its proposal branch
+    /// until a person accepts it.
+    fn propose_note(
+        &self,
+        _about: &str,
+        _note: &Value,
+        _name: &str,
+        _email: &str,
+        _origin: &Origin,
+    ) -> Result<Value, String> {
+        Err("proposing new notes is not available on this device".into())
+    }
 }
 
 /// The header every request from this process carries: **"I am the assistant, not a person."**
@@ -191,6 +224,52 @@ impl VaultAccess for FmServe {
                 "sources": origin.sources,
             }),
         )
+    }
+
+    fn mail_conversations(&self) -> Result<Value, String> {
+        self.call("mail_conversations", json!({}))
+    }
+
+    fn propose_with(
+        &self,
+        note: &str,
+        body: &str,
+        props: &Value,
+        name: &str,
+        email: &str,
+        origin: &Origin,
+    ) -> Result<Value, String> {
+        self.call(
+            "create_proposal",
+            json!({
+                "id": note,
+                "body": body,
+                "props": props,
+                "authorName": name,
+                "authorEmail": email,
+                "tool": origin.tool,
+                "query": origin.query,
+                "sources": origin.sources,
+            }),
+        )
+    }
+
+    fn propose_note(
+        &self,
+        about: &str,
+        note: &Value,
+        name: &str,
+        email: &str,
+        origin: &Origin,
+    ) -> Result<Value, String> {
+        let mut args = note.clone();
+        args["about"] = json!(about);
+        args["authorName"] = json!(name);
+        args["authorEmail"] = json!(email);
+        args["tool"] = json!(origin.tool);
+        args["query"] = json!(origin.query);
+        args["sources"] = json!(origin.sources);
+        self.call("propose_note", args)
     }
 
     fn blob_bytes(&self, reference: &str) -> Result<(Vec<u8>, String), String> {

@@ -44,6 +44,8 @@ download = ["dep:fm-fetch", "dep:ureq", "dep:sha2", "dep:flate2", "dep:tar", "de
 fm-agent = { path = "../fm-agent" }
 clap = { workspace = true }
 serde_json = "1"
+# "Today", for the meeting pass (`meetings.rs`). Already in the workspace; no new crate.
+time = { workspace = true }
 # The download engine itself, since 2026-09-10. See `fm-fetch`'s header for why it moved out.
 fm-fetch = { path = "../fm-fetch", optional = true }
 ureq = { version = "2", optional = true }

@@ -173,6 +173,25 @@ pub fn serve_loop<V: VaultAccess>(
             }
             last_count.insert(id.to_string(), count + posted);
         }
+        // **The meeting pass**, on the minute rescan and only when no one was just answered: at most
+        // one email conversation per minute, so a question in a discussion never waits behind mail.
+        // Its failures (the model busy or gone) are logged and retried next minute; they never stop
+        // the loop. `decisions.md` 2026-10-09, *the assistant proposes meetings*.
+        if force_scan && !worked {
+            // The answer is capped so prompt + answer always fit the model's window together
+            // (`fm_agent::meetings::TEXT_TOKENS`).
+            let llm = fm_agent::openai::OpenAiStep::local(agent.model_port, &agent.model)
+                .with_temperature(0.0)
+                .with_max_tokens(fm_agent::meetings::ANSWER_TOKENS);
+            // UTC's day: this process cannot read the machine's offset (`fm_core::events`). Within a
+            // few hours of midnight a meeting "today" may be judged by the neighbouring day.
+            let today = time::OffsetDateTime::now_utc().date();
+            match agent.meeting_pass(&llm, &runtime.join("mail-meetings.json"), today) {
+                Ok(Some(said)) => println!("@{name} {said}"),
+                Ok(None) => {}
+                Err(e) => eprintln!("meeting pass: {e}"),
+            }
+        }
         interval = if worked { poll_min } else { (interval * 2).min(poll_max) };
     }
 }

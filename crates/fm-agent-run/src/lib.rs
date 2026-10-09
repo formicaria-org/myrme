@@ -23,6 +23,8 @@ pub use fm_agent;
 pub mod fetch;
 pub mod fmserve;
 pub mod manifest;
+/// The meeting pass: email conversations → proposed meetings, on its own (`decisions.md` 2026-10-09).
+pub mod meetings;
 /// Locate the Android native-library dir (where the bundled model runtime lives) in pure Rust.
 pub mod nativelib;
 pub mod watch;

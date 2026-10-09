@@ -36,6 +36,12 @@ pub struct Model {
     pub mmproj: Option<String>,
     /// Per-model context-window override; falls back to the manifest's `ctx` when unset.
     pub ctx: Option<u32>,
+    /// `false` keeps the projector in system memory (`--no-mmproj-offload`) instead of on the GPU.
+    /// Measured on the 4 GB RTX 3050 (2026-10-09): with the 0.8 GB projector on the card, qwen3-vl-4b
+    /// could not start at any context above 2048; with it off the card, 8192 starts at 3.6 GB and
+    /// holds under a 6.8k-token prompt. Image reading gets slower; text does not. `None` = the
+    /// runtime's default (on the GPU).
+    pub mmproj_offload: Option<bool>,
     /// Per-model thread-count override; falls back to the manifest's `threads` when unset.
     pub threads: Option<u32>,
     /// The weights' licence, e.g. `Apache-2.0` — shown before anything is downloaded, because the
@@ -149,6 +155,7 @@ impl Manifest {
                     sha256: None,
                     revision: None,
                     mmproj: None,
+                    mmproj_offload: None,
                     ctx: None,
                     threads: None,
                     license: None,
@@ -172,6 +179,7 @@ impl Manifest {
                     "revision" => m.revision = Some(val.to_string()),
                     "mmproj" => m.mmproj = Some(val.to_string()),
                     "ctx" => m.ctx = val.parse().ok(),
+                    "mmproj_offload" => m.mmproj_offload = val.parse().ok(),
                     "threads" => m.threads = val.parse().ok(),
                     "license" => m.license = Some(val.to_string()),
                     "bytes" => m.bytes = val.parse().ok(),
@@ -381,6 +389,17 @@ mod tests {
         repo = "LiquidAI/LFM2.5-1.2B-Instruct-GGUF"
         file = "LFM2.5-1.2B-Instruct-Q4_K_M.gguf"
     "#;
+
+    /// The shipped catalogue: only the laptop model got the larger window, and it is paired with the
+    /// projector off the GPU — 8192 with it on the card does not start on a 4 GB GPU (measured).
+    #[test]
+    fn the_laptop_model_has_the_large_window_and_keeps_its_projector_off_the_gpu() {
+        let m = Manifest::parse(include_str!("../../../agents/models.toml"));
+        assert_eq!(m.model_ctx("qwen3-vl-4b"), 8192);
+        assert_eq!(m.model("qwen3-vl-4b").and_then(|x| x.mmproj_offload), Some(false));
+        assert_eq!(m.model_ctx("lfm2.5-1.2b"), m.ctx, "the phone's model is unchanged");
+        assert_eq!(m.ctx, 2048, "the global default is unchanged");
+    }
 
     #[test]
     fn parses_defaults_and_the_catalogue() {
