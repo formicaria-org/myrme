@@ -4,7 +4,11 @@ This folder holds everything the local agent needs to *run*, kept out of the cor
 history. Only the **manifest and scripts** commit; the runtime binary and model weights are fetched
 on demand and ignored (see `.gitignore`). Delete this folder and the app is byte-identical — the
 agent's only durable output is an ordinary git branch + a proposal note (see
-`docs/context/ai-agents-plan.md`).
+`docs/context/decisions.md`, `#agent`).
+
+**The app does all of this by itself.** Turning the assistant on in Settings downloads the runtime
+and a model, starts them, and searches the web in-process. What follows is the developer route: the
+same pieces staged by hand in a checkout, which the app then prefers.
 
 ## Get a model
 
@@ -51,11 +55,11 @@ pixi run agent-chat -- --note <ULID> --searxng-port 8888
 - **Watchdog-guarded:** the model runs under preflight + a resource watchdog that kills it if the
   device is pushed. `Ctrl-C` on `agent-serve` stops everything.
 - **Off = pure formicaria:** don't run `agent-serve` and the app is byte-identical, super-light.
-- **RAG on the tiny model:** quality comes from context — the host note + relevant notes (FTS) + web
-  results — not model size. The 230M default is a *helper*; step up via `models.toml` if you must.
+- **Context, not size:** an answer draws on the host note, the notes it links to, and web results
+  when asked. It does not search the rest of the vault.
 
 ## The philosophy
 
-**Stay on the lightest model.** `models.toml`'s default is the smallest that works; quality is meant
-to come from *context* (the user's own notes + clean web text — RAG) and a good search, not from a
-bigger model. The larger entries are deliberate, measured step-ups, never the default.
+**The smallest model that does the job.** `models.toml` names one default per kind of device, each
+chosen by measurement on that device (`agents/bench/results.md`). Changing a default is a
+decision: after an update the app offers the new model and never downloads it unasked.
