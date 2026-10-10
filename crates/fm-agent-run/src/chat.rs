@@ -24,15 +24,14 @@ struct Args {
     serve_port: u16,
     #[arg(long, default_value_t = 8081)]
     model_port: u16,
-    #[arg(long, default_value = "lfm2.5-230m")]
+    /// A model name from `agents/models.toml` — the name the server was started with.
+    #[arg(long)]
     model: String,
     /// The local web-search proxy port (enables /search); omit to run without the web.
     #[arg(long)]
     searxng_port: Option<u16>,
     #[arg(long, default_value_t = 600)]
     max_reply_chars: usize,
-    #[arg(long, default_value_t = 3)]
-    retrieve: usize,
     #[arg(long, default_value_t = 4000)]
     history_budget: usize,
 }
@@ -56,8 +55,9 @@ fn run() -> Result<(), String> {
         whisper_port: None,
         whisper_model: "ggml-base.en".into(),
         vision: false,
+        read_prompt: None,
+        image_specialist: None,
         max_reply_chars: a.max_reply_chars,
-        retrieve: a.retrieve,
         history_budget: a.history_budget,
     };
 
@@ -84,7 +84,7 @@ fn run() -> Result<(), String> {
         // Record the user's message, then answer (propose allowed — this is a note's discussion).
         agent.fm.reply(&a.note, msg)?;
         let intent = convo::parse(msg);
-        let (reply, _) = agent.handle(&a.note, &intent, true, &|stage| println!("  … {stage}"))?;
+        let (reply, _) = agent.handle(&a.note, &intent, &|stage| println!("  … {stage}"))?;
         println!("\n{}> {reply}\n", a.model);
     }
     println!("bye.");

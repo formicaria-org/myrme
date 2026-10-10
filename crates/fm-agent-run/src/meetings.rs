@@ -156,7 +156,10 @@ impl<V: VaultAccess> Agent<V> {
             let body = note["body"].as_str().unwrap_or_default().to_string();
 
             let answer = llm
-                .complete(meetings::SYSTEM, &meetings::user_prompt(title, &body))
+                .complete(
+                    fm_agent::prompts::MEETINGS_INSTRUCTION,
+                    &meetings::user_prompt(title, &body),
+                )
                 .map_err(|e| format!("the model did not answer for \u{201c}{title}\u{201d}: {e}"))?
                 .content;
             let found = meetings::parse(&answer);
@@ -266,9 +269,6 @@ mod tests {
         fn alive(&self) -> bool {
             true
         }
-        fn search(&self, _: &str) -> Result<Value, String> {
-            Ok(json!([]))
-        }
         fn reply(&self, _: &str, _: &str) -> Result<Value, String> {
             Ok(Value::Null)
         }
@@ -344,8 +344,9 @@ mod tests {
             whisper_port: None,
             whisper_model: String::new(),
             vision: false,
+            read_prompt: None,
+            image_specialist: None,
             max_reply_chars: 1000,
-            retrieve: 0,
             history_budget: 1000,
         }
     }

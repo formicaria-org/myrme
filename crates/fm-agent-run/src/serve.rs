@@ -69,8 +69,6 @@ struct Args {
     /// Longest reply in characters; defaults from the manifest's `max_reply_chars`.
     #[arg(long)]
     max_reply_chars: Option<usize>,
-    #[arg(long, default_value_t = 3)]
-    retrieve: usize,
     #[arg(long, default_value_t = 4000)]
     history_budget: usize,
     #[arg(long, default_value_t = 1_000_000_000)]
@@ -112,16 +110,9 @@ fn run() -> Result<(), String> {
 
     // Launch the model under the watchdog (preflight → resource caps → guaranteed kill). Its
     // stdout/stderr are inherited (not nulled) so a crash is visible in the agent log.
-    // The multimodal projector, when this model has one and it has actually been fetched. Present ⇒
-    // the same server also answers vision turns (`/describe`); absent ⇒ it serves text-only, exactly
-    // as it always has, and the agent says so rather than asking a blind model to read a picture.
-    let mmproj = manifest
-        .model(&model_name)
-        .and_then(|m| m.mmproj.clone())
-        .map(|f| a.agents_dir.join("models").join(f))
-        .filter(|p| p.exists());
-
-    let bin = runtime.join("llama-server");
+    // `EXE_SUFFIX` because the staged file is `llama-server.exe` on Windows, and the `exists()`
+    // check below on the whisper binary would otherwise never pass there.
+    let bin = runtime.join(format!("llama-server{}", std::env::consts::EXE_SUFFIX));
     let mut cmd = Command::new(&bin);
     cmd.env("LD_LIBRARY_PATH", &runtime).arg("-m").arg(&model_gguf).args([
         "--host",
@@ -136,14 +127,13 @@ fn run() -> Result<(), String> {
         &ngl.to_string(),
         "--no-warmup",
     ]);
-    if let Some(proj) = &mmproj {
-        cmd.arg("--mmproj").arg(proj);
-        // Keep the projector off a small GPU so the context window fits (`models.toml`).
-        if manifest.model(&model_name).and_then(|m| m.mmproj_offload) == Some(false) {
-            cmd.arg("--no-mmproj-offload");
-        }
-    }
-    let model_bytes = std::fs::metadata(&model_gguf).map(|m| m.len()).unwrap_or(500_000_000);
+    // The multimodal projector, when this model has one and it has actually been fetched. Present ⇒
+    // the same server also answers image turns; absent ⇒ it serves text-only, exactly as it always
+    // has, and the agent says so rather than asking a blind model to read a picture.
+    let mmproj = manifest.add_projector(&mut cmd, &model_name, &a.agents_dir.join("models"));
+    // The projector is loaded beside the weights, so admission counts it (as the phone does).
+    let model_bytes = std::fs::metadata(&model_gguf).map(|m| m.len()).unwrap_or(500_000_000)
+        + mmproj.as_ref().and_then(|p| std::fs::metadata(p).ok()).map(|m| m.len()).unwrap_or(0);
     // Resident, not one-shot: no wall-clock cliff (a per-turn cap is already on the model call), so it
     // stays warm for the whole session instead of being SIGKILLed after 5 minutes.
     let model = SupervisedModel::launch(
@@ -155,10 +145,10 @@ fn run() -> Result<(), String> {
     fm_agent_run::watch::wait_ready(model_port);
 
     // Optional audio→transcript runtime: a second supervised process (`whisper-server`), launched only
-    // when `--whisper-port` is given, killed on exit like the model. Laptop v1; the phone audio path is
-    // a later spike. If its binary/weights aren't staged, launch fails loudly rather than degrading.
+    // when `--whisper-port` is given, killed on exit like the model. (The phone launches its own bundled
+    // whisper from `mobile/src-tauri/src/agent.rs`.) If its binary/weights aren't staged, launch fails loudly rather than degrading.
     let whisper = if let Some(wport) = a.whisper_port {
-        let wbin = runtime.join("whisper-server");
+        let wbin = runtime.join(format!("whisper-server{}", std::env::consts::EXE_SUFFIX));
         let wmodel = a.agents_dir.join("models").join(format!("{}.bin", a.whisper_model));
         if !wbin.exists() || !wmodel.exists() {
             return Err(format!(
@@ -209,9 +199,10 @@ fn run() -> Result<(), String> {
         // Vision is a property of the *weights loaded*, not a second server — so it is simply
         // whether the projector made it onto the command line above.
         vision: mmproj.is_some(),
+        read_prompt: manifest.read_prompt(&model_name),
+        image_specialist: None,
         whisper_model: a.whisper_model.clone(),
         max_reply_chars: a.max_reply_chars.unwrap_or(manifest.max_reply_chars),
-        retrieve: a.retrieve,
         history_budget: a.history_budget,
     };
     println!(

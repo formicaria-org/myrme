@@ -53,8 +53,6 @@ pub trait VaultAccess {
     fn discussions(&self) -> Result<Value, String>;
     /// Is the vault reachable? A cheap liveness probe.
     fn alive(&self) -> bool;
-    /// Full-text search over the vault (RAG retrieval) — `[{ id, title, preview }]`.
-    fn search(&self, query: &str) -> Result<Value, String>;
     /// Post a message to a note's discussion, unattributed — used to record a *user's* message.
     fn reply(&self, note: &str, body: &str) -> Result<Value, String>;
     /// Post the agent's **own** message, attributed to its model identity `(name, email)`.
@@ -142,20 +140,18 @@ impl FmServe {
     /// POST one command and return its JSON answer. A non-200 carries `fm-serve`'s error body.
     fn call(&self, cmd: &str, args: Value) -> Result<Value, String> {
         let body = args.to_string();
-        let request = format!(
-            "POST /api/{cmd} HTTP/1.1\r\nHost: {host}:{port}\r\n{AGENT_HEADER}\
-             Content-Type: application/json\r\nContent-Length: {len}\r\nConnection: close\r\n\r\n{body}",
-            host = self.host,
-            port = self.port,
-            len = body.len(),
-        );
-        let raw =
-            http::send(&self.host, self.port, request.as_bytes(), self.timeout).map_err(|e| {
-                format!(
-                    "cannot reach fm-serve at {}:{} — is it running? ({e})",
-                    self.host, self.port
-                )
-            })?;
+        let raw = http::post(
+            &self.host,
+            self.port,
+            &format!("/api/{cmd}"),
+            "application/json",
+            AGENT_HEADER,
+            body.as_bytes(),
+            self.timeout,
+        )
+        .map_err(|e| {
+            format!("cannot reach fm-serve at {}:{} — is it running? ({e})", self.host, self.port)
+        })?;
         let text = String::from_utf8_lossy(&raw);
         let (head, resp) = text.split_once("\r\n\r\n").ok_or("malformed fm-serve response")?;
         let status = head.lines().next().unwrap_or("");
@@ -187,10 +183,6 @@ impl VaultAccess for FmServe {
 
     fn alive(&self) -> bool {
         self.call("alive", Value::Null).is_ok()
-    }
-
-    fn search(&self, query: &str) -> Result<Value, String> {
-        self.call("search", json!({ "query": query }))
     }
 
     fn reply(&self, note: &str, body: &str) -> Result<Value, String> {

@@ -6,6 +6,8 @@
 //! **search before propose** so a proposal is built with fresh results. A message with no command is
 //! a plain chat turn. This module is the pure parse; the model-driven turn builds on it.
 
+use crate::adjunct::asset_ref;
+
 /// What a user's discussion message asks for. The `ask` is the message with command tokens removed —
 /// the natural-language content, used as the search seed and the proposal instruction.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,24 +27,43 @@ pub struct Intent {
     pub transcribe: Option<String>,
 }
 
+/// The **one** thing a message asks the assistant to do — a closed list, so adding an ability is a
+/// new variant the compiler makes every dispatcher handle, not a fifth flag to remember.
+///
+/// [`Intent`] keeps the flags as typed; this is their reading. Where a message carries several
+/// commands, the more specific pipeline wins: research and reading each produce their own proposal
+/// and never share a turn.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Command {
+    /// Answer in the discussion; `search` adds web results to what the model is given.
+    Chat { search: bool },
+    /// Write a proposed edit to the host note; `search` as for chat.
+    Propose { search: bool },
+    /// Grounded web research, proposed as a cited note.
+    Research,
+    /// Turn the note's media into text. The reference names one file, or is empty for "everything
+    /// in this note not read yet"; which reader runs is decided by each file's type, not here.
+    Read(String),
+}
+
 impl Intent {
+    /// Which single [`Command`] this message is. Research first, then reading, then a proposal;
+    /// plain chat is what is left.
+    pub fn command(&self) -> Command {
+        if self.research {
+            Command::Research
+        } else if let Some(reference) = &self.transcribe {
+            Command::Read(reference.clone())
+        } else if self.propose {
+            Command::Propose { search: self.search }
+        } else {
+            Command::Chat { search: self.search }
+        }
+    }
+
     /// A plain conversation turn — no command, just talk.
     pub fn is_chat(&self) -> bool {
         !self.search && !self.propose && !self.research && self.transcribe.is_none()
-    }
-}
-
-/// Recognise a blob/asset reference token, in any of the forms a note carries it (`asset:sha256-<hex>`
-/// in a body embed, `sha256:<hex>` in frontmatter, or a bare `sha256-<hex>`). Markdown wrappers a
-/// user might paste (`![x](asset:…)`) are trimmed. Returns the reference as-is (what `blob_path`
-/// parses), or `None` if the token is not an asset reference.
-pub fn asset_ref(tok: &str) -> Option<String> {
-    let t = tok.trim_matches(|c| matches!(c, '(' | ')' | '!' | '[' | ']' | '<' | '>'));
-    let t = t.rsplit(']').next().unwrap_or(t).trim_start_matches('(').trim_end_matches(')');
-    if t.starts_with("asset:sha256-") || t.starts_with("sha256:") || t.starts_with("sha256-") {
-        Some(t.to_string())
-    } else {
-        None
     }
 }
 
@@ -118,6 +139,21 @@ pub fn cap_reply(reply: &str, max_chars: Option<usize>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_message_is_exactly_one_command_and_the_specific_pipeline_wins() {
+        assert_eq!(parse("hello").command(), Command::Chat { search: false });
+        assert_eq!(parse("/search x").command(), Command::Chat { search: true });
+        assert_eq!(parse("/propose /search x").command(), Command::Propose { search: true });
+        assert_eq!(parse("/transcribe").command(), Command::Read(String::new()));
+        assert_eq!(
+            parse("/transcribe asset:sha256-abc").command(),
+            Command::Read("asset:sha256-abc".into())
+        );
+        // Several commands at once: research, then reading, then a proposal.
+        assert_eq!(parse("/research /transcribe /propose x").command(), Command::Research);
+        assert_eq!(parse("/transcribe /propose x").command(), Command::Read(String::new()));
+    }
 
     #[test]
     fn a_message_with_no_command_is_a_chat_turn() {

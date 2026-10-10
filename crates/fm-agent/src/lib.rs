@@ -28,43 +28,12 @@ pub mod launch;
 /// Meetings found in an email exchange: the model quotes, Rust checks the quote and reads the date.
 pub mod meetings;
 pub mod openai;
-pub mod preference;
 pub mod preflight;
+pub mod prompts;
 pub mod search;
+pub mod textmatch;
 pub mod transcribe;
 pub mod watchdog;
-
-/// The fixed **house-format instruction** given to the model as the system prompt for the writing
-/// step. It formats within a closed set — Markdown plus the note vocabulary the renderers already
-/// understand — and is **not** user-editable, the same literal-free discipline the renderers enforce.
-pub const OUTPUT_FORMAT_INSTRUCTION: &str = "\
-You write the body of a study note. Output ONLY the note body itself — do NOT repeat the task or \
-these instructions, do NOT add a heading like '# Task', and do NOT wrap the whole answer in a code \
-fence. Use GitHub-flavored Markdown, and ONLY: headings, paragraphs, bullet and numbered lists, \
-tables, fenced code blocks (for code only), block quotes, callouts (`> [!note]` / `> [!tip]` / \
-`> [!warning]`), Mermaid diagrams (```mermaid fenced), and KaTeX math ($…$ inline, $$…$$ block). Do \
-not invent other syntax, do not add front-matter, and do not answer from memory: use only the \
-provided notes and search results, and say plainly when they do not answer the question.";
-
-/// The system prompt for the optional query-refinement step: rough request in, one clean search
-/// query out. Bounded, single-shot, no tools.
-pub const QUERY_REFINE_INSTRUCTION: &str = "\
-Rewrite the user's request as a single, well-formed web-search query. Fix spelling and grammar and \
-keep it short. Output only the query, nothing else.";
-
-/// The system prompt for a **conversational reply** in a discussion. Deliberately light: frame the
-/// role and ask for a direct, concise answer — nothing more. The owner's call is that pre/post exist
-/// for safety only and the user should see the model as it is, so this does not micro-manage format
-/// or forbid the model its own knowledge; any provided notes/search are offered, not mandated.
-pub const CHAT_INSTRUCTION: &str = "\
-You are a study assistant in a note's discussion. Reply to the latest message directly and concisely. \
-Use the conversation and any notes or search results provided; you may also draw on your own knowledge. \
-Write any math as KaTeX: $x$ inline and $$x$$ on its own line — never \\( \\) or \\[ \\].";
-
-/// The system prompt for compressing older conversation so it fits a tiny model's context window.
-pub const SUMMARY_INSTRUCTION: &str = "\
-Summarize the following conversation compactly, keeping the facts, decisions, and open questions a \
-reader would need to continue it. Plain prose, a few sentences at most. Output only the summary.";
 
 /// The fixed acknowledgement posted after a `/propose` turn. Deterministic on purpose: asking a tiny
 /// model to "acknowledge in one sentence" is a meta-instruction it fails (it echoes the prompt), and
@@ -208,56 +177,13 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
         Self { llm, web }
     }
 
-    /// Run the fixed pipeline: (1) optionally refine the search query, (2) search text-only if asked,
-    /// (3) assemble a deterministic prompt from the fixed instruction + the named inputs + the hits,
-    /// (4) one bounded generation call, (5) return the draft. **No autonomous loop** — the model is
-    /// called at most twice, and never chooses what happens next.
-    pub fn run(&self, req: &ResearchRequest) -> Result<ProposalDraft, AgentError> {
-        if req.host_note.trim().is_empty() {
-            return Err(AgentError::new("a request must name its host note"));
-        }
-
-        let mut sources = Vec::new();
-
-        // (1)–(2) Web, only if the user asked for it. The orchestrator runs the search; the model
-        // does not "call a tool".
-        let hits = match req.search.as_deref().map(str::trim) {
-            Some(seed) if !seed.is_empty() => {
-                let query = self.refine_query(seed)?;
-                let hits = self.web.search(&query)?;
-                sources.extend(hits.iter().map(|h| format!("{} — {}", h.title, h.url)));
-                hits
-            }
-            _ => Vec::new(),
-        };
-        sources.extend(req.inputs.iter().map(|d| d.label.clone()));
-
-        // (3)–(4) Deterministic prompt, one bounded writing call under the fixed house format.
-        let user = assemble_prompt(req, &hits);
-        let resp = self.llm.complete(OUTPUT_FORMAT_INSTRUCTION, &user)?;
-        // A note cut off at the token cap must never be proposed silently — refuse, don't ship half.
-        if resp.truncated() {
-            return Err(AgentError::new(
-                "the model's answer was cut off at the token limit — raise max_tokens and re-run",
-            ));
-        }
-
-        // (5) Well-defined output for the one host note. Strip a wrapping code fence — small models
-        // often wrap the whole answer in ```markdown despite being told not to.
-        Ok(ProposalDraft {
-            host_note: req.host_note.clone(),
-            new_body: strip_wrapping_fence(&resp.content),
-            sources,
-        })
-    }
-
     /// Run the **grounded research** pipeline: refine → search → number the sources → one bounded
     /// *quote-first* write → **deterministic substring-verify** ([`grounding::verify`]) that drops any
     /// claim whose verbatim quote is not found in its cited source → a note whose `## Sources` list is
     /// assembled by us from the *verified* set, so a source number or URL can never be hallucinated.
     /// Every claim in the returned body is backed by a quote actually present in a real source; the
-    /// model never ships an unfounded claim. Same [`LlmStep`]/[`WebSearch`] seams as [`run`](Self::run),
-    /// so it is exercised entirely with fakes.
+    /// model never ships an unfounded claim. It runs on the [`LlmStep`]/[`WebSearch`] seams, so it is
+    /// exercised entirely with fakes.
     pub fn research(&self, req: &ResearchRequest) -> Result<Research, AgentError> {
         if req.host_note.trim().is_empty() {
             return Err(AgentError::new("a request must name its host note"));
@@ -302,7 +228,7 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
             let pack = crate::grounding::pack_sources(&used, chars);
             let user =
                 format!("{}\n{}\n\n# Numbered sources\n{}", heading::TASK, req.ask.trim(), pack);
-            Ok((self.llm.complete(crate::grounding::GROUNDED_WRITE_INSTRUCTION, &user)?, used))
+            Ok((self.llm.complete(prompts::GROUNDED_WRITE_INSTRUCTION, &user)?, used))
         };
         let (resp, used) = {
             let (r, u) = write(5, 700)?;
@@ -337,19 +263,11 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
         Ok(Research { draft, grounded })
     }
 
-    /// Compress a block of prior conversation into a short summary that fits a tiny model's context —
-    /// **summarize-before-overflow**. One bounded call; on any failure the caller keeps the recent
-    /// turns without the summary rather than losing the conversation.
-    pub fn summarize(&self, text: &str) -> Result<String, AgentError> {
-        let resp = self.llm.complete(SUMMARY_INSTRUCTION, text)?;
-        Ok(strip_wrapping_fence(&resp.content))
-    }
-
     /// One bounded LLM call that turns a rough request into a search query, falling back to the seed
     /// if the model returns nothing usable — the pipeline never stalls on an empty refinement. A
     /// truncated query is harmless (it is still a query), so it is not refused here.
     fn refine_query(&self, seed: &str) -> Result<String, AgentError> {
-        let refined = self.llm.complete(QUERY_REFINE_INSTRUCTION, seed)?;
+        let refined = self.llm.complete(prompts::QUERY_REFINE_INSTRUCTION, seed)?;
         let refined = refined.content.trim();
         Ok(if refined.is_empty() { seed.to_string() } else { refined.to_string() })
     }
@@ -373,7 +291,7 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
         // A proposal edit to the host note, when asked — reuses the house-format write step.
         let proposal = if intent.propose {
             let user = format!("{ctx}\n\n{}\n{}", heading::TASK, intent.ask.trim());
-            let resp = self.llm.complete(OUTPUT_FORMAT_INSTRUCTION, &user)?;
+            let resp = self.llm.complete(prompts::OUTPUT_FORMAT_INSTRUCTION, &user)?;
             if resp.truncated() {
                 return Err(AgentError::new(
                     "the proposed note was cut off at the token limit — raise max_tokens",
@@ -410,7 +328,7 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
                 user.push('\n');
             }
             user.push_str(intent.ask.trim());
-            let resp = self.llm.complete(CHAT_INSTRUCTION, &user)?;
+            let resp = self.llm.complete(prompts::CHAT_INSTRUCTION, &user)?;
             normalize_answer(&resp.content, max_reply_chars)
         };
 
@@ -440,8 +358,6 @@ mod heading {
     pub const CONVERSATION: &str = "# Conversation so far";
     pub const NOTES: &str = "# Notes and search results";
     pub const TASK: &str = "# Task";
-    pub const PROVIDED: &str = "# Provided notes";
-    pub const SEARCH: &str = "# Search results";
 }
 
 /// Post-process a chat answer: normalise math delimiters to the note vocabulary, then cap the length
@@ -475,35 +391,6 @@ fn assemble_turn_context(history: &str, context: &[InputDoc]) -> String {
         p.push('\n');
         for d in context {
             p.push_str(&format!("## {}\n{}\n", d.label.trim(), d.text.trim()));
-        }
-    }
-    p
-}
-
-/// Assemble the writing step's user prompt from the request and the search hits, in a fixed,
-/// clearly-delimited structure. Free function (no `self`) so the exact text is trivial to assert.
-fn assemble_prompt(req: &ResearchRequest, hits: &[SearchHit]) -> String {
-    let mut p = String::new();
-    p.push_str(heading::TASK);
-    p.push('\n');
-    p.push_str(req.ask.trim());
-    p.push('\n');
-
-    if !req.inputs.is_empty() {
-        p.push('\n');
-        p.push_str(heading::PROVIDED);
-        p.push('\n');
-        for d in &req.inputs {
-            p.push_str(&format!("## {}\n{}\n", d.label.trim(), d.text.trim()));
-        }
-    }
-
-    if !hits.is_empty() {
-        p.push('\n');
-        p.push_str(heading::SEARCH);
-        p.push('\n');
-        for h in hits {
-            p.push_str(&format!("## {} ({})\n{}\n", h.title.trim(), h.url.trim(), h.text.trim()));
         }
     }
     p
@@ -571,55 +458,14 @@ mod tests {
         }
     }
 
-    #[test]
-    fn with_search_it_refines_then_searches_then_writes_once() {
-        let llm = FakeLlm::new(&["mrna vaccine mechanism", "THE WRITTEN NOTE"]);
-        let web = FakeWeb {
-            hits: vec![SearchHit {
-                title: "CDC".into(),
-                url: "https://cdc.gov".into(),
-                text: "facts".into(),
-            }],
-            seen: RefCell::new(Vec::new()),
-        };
-        let agent = StudyAssistant::new(llm, web);
-
-        let draft = agent.run(&req(Some("whats mrna vacine"))).unwrap();
-
-        assert_eq!(draft.host_note, "01HOST");
-        assert_eq!(draft.new_body, "THE WRITTEN NOTE");
-        // Sources = the hit, then the named input.
-        assert_eq!(
-            draft.sources,
-            vec!["CDC — https://cdc.gov".to_string(), "my notes".to_string()]
-        );
-
-        // The web was searched with the *refined* query, not the raw one.
-        assert_eq!(agent.web.seen.borrow().as_slice(), &["mrna vaccine mechanism".to_string()]);
-        // Exactly two model calls: refine, then write.
-        let seen = agent.llm.seen.borrow();
-        assert_eq!(seen.len(), 2);
-        assert_eq!(seen[0].0, QUERY_REFINE_INSTRUCTION);
-        assert_eq!(seen[1].0, OUTPUT_FORMAT_INSTRUCTION);
-        // The writing prompt carried the ask, the named input, and the search text — nothing else.
-        let write_prompt = &seen[1].1;
-        assert!(write_prompt.contains("explain mRNA vaccines"));
-        assert!(write_prompt.contains("prior context"));
-        assert!(write_prompt.contains("facts"));
-    }
-
-    #[test]
-    fn without_search_the_web_is_never_touched_and_the_model_is_called_once() {
-        let llm = FakeLlm::new(&["NOTE FROM INPUTS ONLY"]);
-        let web = FakeWeb { hits: vec![], seen: RefCell::new(Vec::new()) };
-        let agent = StudyAssistant::new(llm, web);
-
-        let draft = agent.run(&req(None)).unwrap();
-
-        assert_eq!(draft.new_body, "NOTE FROM INPUTS ONLY");
-        assert_eq!(draft.sources, vec!["my notes".to_string()]);
-        assert!(agent.web.seen.borrow().is_empty(), "web must not be touched when no search asked");
-        assert_eq!(agent.llm.seen.borrow().len(), 1, "only the writing call");
+    fn propose(ask: &str) -> crate::convo::Intent {
+        crate::convo::Intent {
+            ask: ask.into(),
+            search: false,
+            propose: true,
+            research: false,
+            transcribe: None,
+        }
     }
 
     #[test]
@@ -628,7 +474,7 @@ mod tests {
         let web = FakeWeb { hits: vec![], seen: RefCell::new(Vec::new()) };
         let agent = StudyAssistant::new(llm, web);
 
-        agent.run(&req(Some("seed query"))).unwrap();
+        agent.research(&req(Some("seed query"))).unwrap();
         assert_eq!(agent.web.seen.borrow().as_slice(), &["seed query".to_string()]);
     }
 
@@ -637,8 +483,8 @@ mod tests {
         let web = FakeWeb { hits: vec![], seen: RefCell::new(Vec::new()) };
         let agent =
             StudyAssistant::new(FakeLlm::new(&["```markdown\n# Title\n\n- a\n- b\n```"]), web);
-        let draft = agent.run(&req(None)).unwrap();
-        assert_eq!(draft.new_body, "# Title\n\n- a\n- b");
+        let turn = agent.turn("", &propose("tidy this"), &[], None).unwrap();
+        assert_eq!(turn.proposal.as_deref(), Some("# Title\n\n- a\n- b"));
         // A body with a genuine inner code block, not a wrapping fence, is left intact.
         assert_eq!(
             super::strip_wrapping_fence("see this:\n```rust\nfn x(){}\n```"),
@@ -728,7 +574,7 @@ mod tests {
     fn a_truncated_write_is_refused_not_proposed_half_finished() {
         let web = FakeWeb { hits: vec![], seen: RefCell::new(Vec::new()) };
         let agent = StudyAssistant::new(TruncatingLlm, web);
-        let err = agent.run(&req(None)).unwrap_err();
+        let err = agent.turn("", &propose("tidy this"), &[], None).unwrap_err();
         assert!(format!("{err}").contains("cut off"), "a truncated note must be refused: {err}");
     }
 
@@ -740,7 +586,7 @@ mod tests {
 
         let mut r = req(Some("x"));
         r.host_note = "  ".into();
-        assert!(agent.run(&r).is_err());
+        assert!(agent.research(&r).is_err());
         assert!(agent.llm.seen.borrow().is_empty(), "must not call the model on a bad request");
         assert!(agent.web.seen.borrow().is_empty());
     }
@@ -808,8 +654,8 @@ mod tests {
         );
         let seen = agent.llm.seen.borrow();
         assert_eq!(seen.len(), 2);
-        assert_eq!(seen[0].0, QUERY_REFINE_INSTRUCTION);
-        assert_eq!(seen[1].0, crate::grounding::GROUNDED_WRITE_INSTRUCTION);
+        assert_eq!(seen[0].0, prompts::QUERY_REFINE_INSTRUCTION);
+        assert_eq!(seen[1].0, prompts::GROUNDED_WRITE_INSTRUCTION);
     }
 
     #[test]

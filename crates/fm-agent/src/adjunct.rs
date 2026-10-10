@@ -45,15 +45,55 @@ impl Provenance {
     }
 }
 
-/// Extract the bare content hash from an asset reference — `asset:sha256-<hex>`, `sha256:<hex>` and
-/// `sha256-<hex>` all yield `<hex>`.
+// --- Asset references -------------------------------------------------------------------------
+// A note names a blob three ways: `asset:sha256-<hex>` in a body embed, `sha256:<hex>` in
+// frontmatter, and a bare `sha256-<hex>`. Everything that reads or writes one of those forms is
+// here, beside the block that writes one, so a fourth form is added in one file.
+
+const EMBED: &str = "asset:sha256-";
+const FRONTMATTER: &str = "sha256:";
+const BARE: &str = "sha256-";
+
+/// Extract the bare content hash from an asset reference — all three forms yield `<hex>`.
 pub fn hash_of(reference: &str) -> String {
     reference
         .trim()
         .trim_start_matches("asset:")
-        .trim_start_matches("sha256:")
-        .trim_start_matches("sha256-")
+        .trim_start_matches(FRONTMATTER)
+        .trim_start_matches(BARE)
         .to_string()
+}
+
+/// Recognise one typed token as an asset reference, in any of the three forms. Markdown wrappers a
+/// person might paste (`![x](asset:…)`) are trimmed. Returns the reference as-is (what `blob_path`
+/// parses), or `None` if the token is not one.
+pub fn asset_ref(tok: &str) -> Option<String> {
+    let t = tok.trim_matches(|c| matches!(c, '(' | ')' | '!' | '[' | ']' | '<' | '>'));
+    let t = t.rsplit(']').next().unwrap_or(t).trim_start_matches('(').trim_end_matches(')');
+    if t.starts_with(EMBED) || t.starts_with(FRONTMATTER) || t.starts_with(BARE) {
+        Some(t.to_string())
+    } else {
+        None
+    }
+}
+
+/// The `sha256:<hash>` reference of every asset a note body embeds — the body form and the
+/// frontmatter form — in order, deduped. This is how a bare `/transcribe` finds a note's own
+/// recordings and images, so nobody types a content hash.
+pub fn embedded_refs(body: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for pat in [EMBED, FRONTMATTER] {
+        for (i, _) in body.match_indices(pat) {
+            let hex: String =
+                body[i + pat.len()..].chars().take_while(char::is_ascii_hexdigit).collect();
+            // A sha-256 is 64 hex chars; be lenient but reject stray short runs.
+            if hex.len() >= 8 && seen.insert(hex.clone()) {
+                out.push(format!("{FRONTMATTER}{hex}"));
+            }
+        }
+    }
+    out
 }
 
 /// The opening fence for a block: an HTML comment, invisible when rendered, that lets a re-run find
@@ -97,7 +137,7 @@ pub fn block(
     format!(
         "{open}\n\
          > [!note] {heading}\n\
-         > Source: [{source_label}](asset:sha256-{hash})\n\
+         > Source: [{source_label}]({EMBED}{hash})\n\
          >\n\
          {quoted}{end}\n",
         open = open_mark(tag, &prov.key()),

@@ -19,7 +19,7 @@
 # The default model — the LAPTOP research pick. `default_mobile` overrides it on the phone (a smaller
 # model that fits a phone's RAM and stays responsive).
 default = "qwen3-vl-4b"
-default_mobile = "lfm2.5-1.2b"
+default_mobile = "lfm2.5-vl-450m"
 
 # Prebuilt llama.cpp server, pinned for reproducibility. `runtime_url_<platform>` is the portable
 # CPU build; the `_gpu` variant is the Vulkan build that offloads to a discrete GPU (measured: the RTX 3050 runs the
@@ -61,15 +61,13 @@ max_reply_chars = 2000
 # (always offload), or "off" (CPU only). Default is GPU-when-available.
 gpu = "auto"
 
-# --- Audio→transcript runtime (whisper.cpp) — manual-only, LAPTOP v1. -------------------------------
-# Used by `agent-serve --whisper-port <p>` (enables the /transcribe command) and staged by
-# `pixi run fetch-whisper`. The transcript rides the same insertion-only proposal path as /research; the
-# specialist only ever receives audio bytes by value, never a blob path (the transcribe safety invariant).
-# The model is small and reliably hosted. The prebuilt `whisper-server` binary is not fetched
-# automatically (whisper.cpp doesn't publish a portable Linux server tarball the way llama.cpp does);
-# set `whisper_runtime_url` to a tarball that unpacks a `whisper-server`, or place the binary at
-# `agents/runtime/whisper-server` by hand (build it from whisper.cpp). `agent-serve` errors clearly if
-# it is missing, so nothing silently half-works.
+# --- Audio→transcript runtime (whisper.cpp). ---------------------------------------------------------
+# Used by `agent-serve --whisper-port <p>` (enables audio in the /transcribe command). The transcript
+# rides the same insertion-only proposal path as /research; the specialist only ever receives audio
+# bytes by value, never a blob path (the transcribe safety invariant). The runtime and the weights
+# are fetched when Audio transcription is switched on (Linux and Windows; see the `runtime_url_whisper_*`
+# keys below), or by `pixi run fetch-whisper` in a checkout. `agent-serve` errors clearly if either is
+# missing, so nothing silently half-works.
 whisper_model = "ggml-base.en"
 whisper_model_repo = "ggerganov/whisper.cpp"
 whisper_model_file = "ggml-base.en.bin"
@@ -149,6 +147,23 @@ sha256 = "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597"
 note = "LAPTOP fallback (was the pick to 2026-07-24) — IFEval 83.4 / BFCL-v3 61.9; ~2.4 GB, 39.8 t/s GPU. Validated + fine; superseded by qwen3-vl-4b which grounds better at the same speed. Non-thinking Instruct."
 
 [[models]]
+name = "lfm2.5-vl-450m"
+license = "LFM Open License v1.0"
+bytes = 379219104
+repo = "LiquidAI/LFM2.5-VL-450M-GGUF"
+file = "LFM2.5-VL-450M-Q8_0.gguf"
+revision = "1abed04b6fe71314d8c446a1371c03d7c332266d"
+sha256 = "263aca93039e22140d55e046831c700c796affa8143d7638581c488a30c712bc"
+mmproj = "mmproj-LFM2.5-VL-450m-F16.gguf"
+mmproj_bytes = 189126080
+# A large photo is cut into up to ~1027 image tokens (measured), so the phone's global 2048 window
+# would leave too little room for the answer. 4096 is what the phone measurement ran at.
+ctx = 4096
+# Its own reading instruction: the house one took it from 1.00 to 0.63 on plain typed notes.
+read_prompt = "Transcribe the text in this image exactly."
+note = "PHONE pick since 2026-10-10 (owner's choice: one general model that can also see). Measured on the Dimensity 7300: an image read in 3-5 s (about 10 s for a full-size photo), 1.2 GB peak, text at ~25 tok/s. Correct on typed notes and tables; misread one formula and flattened one code block's nesting. NOT yet measured as a chat model against lfm2.5-1.2b, which it replaces and which is more than twice its size."
+
+[[models]]
 name = "lfm2.5-1.2b"
 license = "LFM Open License v1.0"
 # The DOWNLOAD size, measured from the server. The note below says ~1.4 GB, which is what it
@@ -159,7 +174,7 @@ repo = "LiquidAI/LFM2.5-1.2B-Instruct-GGUF"
 file = "LFM2.5-1.2B-Instruct-Q4_K_M.gguf"
 revision = "6767265158422fb8a19c62ceb45f16f05363615b"
 sha256 = "b1b3de114215d9507409a662a501a631095a479a419584e8a2ded6304b19b4f5"
-note = "PHONE pick — IFEval 86.2 / BFCL-v3 49.1, top of its size tier; measured 15.9 tok/s, ~1.4 GB resident on the Dimensity 7300. Runs smoothly at 4 threads without blocking the UI."
+note = "PHONE pick until 2026-10-10, kept as the text-only fallback — IFEval 86.2 / BFCL-v3 49.1, top of its size tier; measured 15.9 tok/s, ~1.4 GB resident on the Dimensity 7300. Runs smoothly at 4 threads without blocking the UI."
 
 [[models]]
 name = "ggml-base.en"

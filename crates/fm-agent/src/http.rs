@@ -30,6 +30,32 @@ pub fn send(
     Ok(raw)
 }
 
+/// Send one `POST` and read the whole raw response — the **one** place a request line and its
+/// framing headers are written, so the model, whisper and `fm-serve` seams cannot drift apart.
+/// `extra` is zero or more complete `Name: value\r\n` header lines. The body is bytes because one
+/// caller sends audio.
+pub fn post(
+    host: &str,
+    port: u16,
+    path: &str,
+    content_type: &str,
+    extra: &str,
+    body: &[u8],
+    timeout: Duration,
+) -> Result<Vec<u8>, AgentError> {
+    let mut request = format!(
+        "POST {path} HTTP/1.1\r\n\
+         Host: {host}:{port}\r\n\
+         {extra}Content-Type: {content_type}\r\n\
+         Content-Length: {len}\r\n\
+         Connection: close\r\n\r\n",
+        len = body.len(),
+    )
+    .into_bytes();
+    request.extend_from_slice(body);
+    send(host, port, &request, timeout)
+}
+
 /// Split an HTTP response into head/body, require a `200`, decode a chunked body if present, and
 /// return the body. A non-200 is an error naming the status line, not a parse attempt.
 pub fn body(raw: &[u8]) -> Result<String, AgentError> {

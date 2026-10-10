@@ -257,3 +257,113 @@ _mean decode: **7.8 tok/s** over 6 cases._
 | abstain | 271 | 104 | **11.8** | 70.9 | 12.64 | FABRICATED (2 cites, 0 hallucinated-quotes on junk sources) |
 
 _mean decode: **11.8 tok/s** over 6 cases._
+
+
+### phone · lfm2.5-2.6b · 2026-10-09  (candidate — rejected; `--n-predict 1024`)
+- model RSS 1791 MB / VmHWM 2933 MB · MemAvailable during run: 2481 MB (before 2618 MB)
+
+| case | prompt_n | gen_n | decode tok/s | prompt tok/s | wall s | quality |
+|---|---|---|---|---|---|---|
+| chat | 161 | 237 | **7.6** | 45.2 | 34.67 | ok |
+| research | 379 | 1024 | **7.5** | 48.9 | 143.63 | 1 claims / **0/0 verbatim** |
+| write | 338 | 490 | **7.6** | 43.4 | 72.4 | ok |
+| toolcall-search | 179 | 72 | **7.9** | 47.5 | 12.99 | CALL ok |
+| toolcall-nosearch | 191 | 139 | **7.8** | 48.1 | 21.9 | WRONG: called ['web_search'] |
+| abstain | 264 | 841 | **7.6** | 48.5 | 116.8 | ok (abstained — no fabricated citations) |
+
+_mean decode: **7.7 tok/s** over 6 cases._
+- Standalone llama-server (the app's own b10081 libs) on /data/local/tmp, `-c 2048 -t 4 -ngl 0` (app settings).
+- **It always thinks.** Its template opens `<think>` on every turn and has no off switch, so `enable_thinking: false` does nothing. At the usual `--n-predict 256`, research, write and abstain spent the whole budget thinking and gave no answer.
+- **Verdict: not an upgrade over the 1.2B.** Decode is 7.7 tok/s against 12.4, and with the thinking an answer takes 35–145 s. Research still gave **0 verbatim quotes** (it ran out at 1024 tokens). It also called search when it should not have, and memory peaked at 2.9 GB. The July candidate, qwen3-1.7b (8.9 tok/s, quotes verbatim, thinking can be turned off), remains the better next step for the phone.
+- **Correction, 2026-10-10: the quality verdict above does not stand; speed and memory do.** Liquid's model card recommends this model for "agentic workloads, tool use, data extraction, RAG, and long-context workflows" and not for "knowledge-heavy tasks", with `temperature 0.1` and `repetition_penalty 1.1`. This run used temperature 0, no repetition penalty, and scored open-ended writing. Re-measure on extraction and tool-call cases with the card's settings before deciding.
+
+### laptop · image → text · PaddleOCR-VL-1.6 against qwen3-vl-4b · 2026-10-10
+Five typeset fixtures (`agents/bench/vision/`), runtime b10076, `--temp 0`. Similarity is a character
+ratio against `ground-truth.json` after collapsing whitespace and case. Files verified by SHA-256
+against Hugging Face (`f3ae46ec…` weights 936 MB, `204d757d…` projector 882 MB; Apache-2.0).
+
+| model, where it ran | notes | math | code | table | chart | per image | peak RSS |
+|---|---|---|---|---|---|---|---|
+| qwen3-vl-4b, GPU, the app's instruction | 0.95 | 1.00 | 0.95 | 0.86 (`LiFeP04`) | ran to 1024 tokens | 6–7 s (chart 37 s) | 2.6 GB |
+| PaddleOCR-VL-1.6, text on CPU, **image encoder on the GPU** (Vulkan), `OCR:` | 1.00 | 1.00 | 1.00 | 0.74 (rows right, no table marks) | 0.52 (labels, jumbled) | **about 2 s** | 1.5 GB |
+| PaddleOCR-VL-1.6, **CPU only** (`--device none --no-mmproj-offload`, 4 threads), `OCR:` | 1.00 | 1.00 | 1.00 | 0.74 | — | **25–29 s** | 2.2 GB |
+
+- **It reads better on what it was built for.** Every character right on notes, math and code, and it
+  read `LiFePO4` where qwen3-vl-4b still reads a zero. It never ran away.
+- **The time is the image encoder, not the text.** Decode is 45–49 tok/s either way; on the CPU alone
+  an image costs ~25 s before the first token. *"Run the reader on the CPU and leave the GPU to the
+  study model"* (`transcription-specialists-grounded-2026-08-31.md`) is therefore a 25-second
+  reading on this laptop, and the phone will be slower. This is the number to measure on the phone
+  before promising image → text there.
+- **Its prompts are task words, and file type cannot pick them.** `OCR:` gives plain text.
+  `Table Recognition:` gives the table as `<fcel>…<nl>` marks (to be turned into a Markdown table in
+  code). `Formula Recognition:` gives LaTeX. `Chart Recognition:` gives a table of values read off
+  the plot. The app's own prose instruction is accepted and behaves like `OCR:`.
+- **Typeset fixtures only.** Handwriting and photographed pages are not measured yet.
+
+### phone · image → text · PaddleOCR-VL-1.6 · 2026-10-10
+The app's own runtime (b10081) from `/data/local/tmp`, `-c 4096 -ngl 0 --no-mmproj-offload --temp 0`,
+prompt `OCR:`, the same five fixtures. The app was closed; MemAvailable 3.5 GB before, 2.9 GB during.
+
+| fixture | similarity | image+prompt tokens | wall s (`-t 4`, the app's setting) |
+|---|---|---|---|
+| notes | 1.00 | 365 | 145 |
+| math | 1.00 | 365 | 152 |
+| code | 1.00 | 397 | 158 |
+| table | 0.74 | 365 | 147 |
+| chart | 0.52 | 553 | 224 |
+
+- **Same readings as the laptop, character for character.** Accuracy is not the question on the phone.
+- **About 2½ minutes per small image**, nearly all of it the image step (2.5 tokens/s over the image;
+  the text after it decodes at 10.9 tok/s). `-t 8` brought the notes image from 145 s to 119 s.
+- **Peak RSS 2.0 GB**, alone. Not measured beside the phone's main model.
+- **These fixtures are small.** The time follows the image's token count, and a photographed page is
+  larger, so a real photo will take longer unless it is shrunk first. Not measured.
+
+### laptop, CPU only · smaller image → text candidates for the phone · 2026-10-10
+Same five fixtures, `--device none --no-mmproj-offload -t 4 --temp 0`. The phone ran PaddleOCR-VL
+about 5.7× slower than this laptop's CPU, which is the only basis for the phone estimates below.
+
+| model (files) | prompt | notes | math | code | table | chart | per image | peak RSS | phone, estimated |
+|---|---|---|---|---|---|---|---|---|---|
+| PaddleOCR-VL-1.6 (936 + 882 MB) | `OCR:` | 1.00 | 1.00 | 1.00 | 0.74 | 0.52 | 25–29 s | 2.2 GB | **145–224 s measured** |
+| **LFM2.5-VL-450M** Q8 (379 + 189 MB) | "Transcribe the text in this image exactly." | 1.00 | 0.82 | 1.00* | **0.93** | 0.44 | **3.5–4.8 s** | **0.87 GB** | ~25 s |
+| LFM2.5-VL-450M Q8 | the app's instruction | 0.63 | 0.91 | 0.95 | 0.34 | 0.14 | 4.5–6.2 s | 0.88 GB | — |
+| granite-docling-258M (332 + 190 MB) | "Convert this page to docling." | 0.87 | 0.53 | 0.85 | 0.54 | 0.13 | 18–25 s | 1.3 GB | ~110 s |
+| SmolVLM-256M Q8 (175 + 190 MB) | either | 0.00–0.06 | 0.65–0.76 | 0.11–0.99 | 0.01–0.07 | — | 2–10 s | 0.74 GB | — |
+
+- **LFM2.5-VL-450M is the phone candidate**: about six times faster than PaddleOCR-VL and under half
+  the memory, with a real Markdown table and `LiFePO4` read correctly. Two errors on five fixtures,
+  both the kind a person must catch: it read `V^2` as `≈2` in the formula, and (*) it kept every
+  word of the pseudocode but **flattened the nesting** (`if` moved out of the `while`), which the
+  whitespace-blind similarity score does not see. Its maker says it is "not well-suited for …
+  fine-grained OCR". Its licence is Liquid's (`lfm1.0`), the same as the phone's current main model.
+- **The prompt decides it.** The app's long instruction drops it from 1.00 to 0.63 on plain notes; a
+  one-line instruction is what works. A reader needs its own prompt, per model.
+- **granite-docling** is barely faster than PaddleOCR-VL (612 image tokens), answers in position tags,
+  and ran a table together under its general prompt.
+- **SmolVLM-256M describes instead of transcribing** and invents content. Not usable for this.
+- Typeset fixtures only; nothing here is measured on handwriting or on the phone itself.
+
+### phone · image → text · LFM2.5-VL-450M Q8 · 2026-10-10 (measured; the estimate above was wrong)
+The app's own runtime (b10081) from `/data/local/tmp`, `-c 4096 -t 4 -ngl 0 --no-mmproj-offload --temp 0`,
+prompt "Transcribe the text in this image exactly.". The app was closed; MemAvailable 3.7 GB before.
+
+| fixture | similarity | tokens in | wall s |
+|---|---|---|---|
+| notes | 1.00 | 256 | 3.8 |
+| math | 0.82 | 274 | 4.9 |
+| code | 1.00 | 256 | 4.0 |
+| table | 0.93 | 274 | 4.9 |
+| chart | 0.44 | 256 | 2.7 |
+
+- **3–5 s per image on the phone, not the ~25 s estimated.** The 5.7× phone-to-laptop ratio measured
+  on PaddleOCR-VL does not carry over: this model's image step runs at about 118 tokens/s on the
+  phone against PaddleOCR-VL's 2.5. **An estimate from another model's ratio is not a measurement.**
+- **Readings identical to the laptop's**, including the same two errors (`V^2` read as `≈2`; the
+  pseudocode's nesting flattened).
+- **Peak RSS 1.2 GB.** Text decodes at about 25 tok/s.
+- **Larger images cap at about 10 s.** The notes fixture enlarged to 2048 px and to 4000 px wide both
+  took 10.5 s and 1027 tokens: the model tiles a large image up to a fixed budget, so a full-size
+  phone photo costs the same as a 2048 px one. (Enlarged typeset, not a real photograph.)
+- Against PaddleOCR-VL on the same phone: **145–224 s → 3–5 s**, and 2.0 GB → 1.2 GB.

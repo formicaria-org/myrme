@@ -22,11 +22,13 @@ pub use fm_agent;
 #[cfg(feature = "download")]
 pub mod fetch;
 pub mod fmserve;
+pub mod installed;
 pub mod manifest;
 /// The meeting pass: email conversations → proposed meetings, on its own (`decisions.md` 2026-10-09).
 pub mod meetings;
 /// Locate the Android native-library dir (where the bundled model runtime lives) in pure Rust.
 pub mod nativelib;
+pub mod replies;
 pub mod watch;
 /// In-process HTTPS web search for the phone (no local SearXNG proxy). Needs the TLS client the
 /// `download` feature carries.
@@ -55,20 +57,24 @@ pub struct Agent<V: VaultAccess> {
     /// Ignored when `searxng_port` is set (an explicit proxy wins) or when the `download` feature that
     /// carries the HTTPS client is off.
     pub web_direct: bool,
-    /// The local `whisper.cpp` server port for audio→transcript, or `None` where transcription is not
-    /// available (mobile v1 — the phone audio path is a later spike). `None` ⇒ `/transcribe` degrades
-    /// to a plain "not on this device" reply rather than failing.
+    /// The local `whisper.cpp` server port for audio→transcript, or `None` where transcription is off
+    /// or not installed. `None` ⇒ `/transcribe` degrades to a plain "not on this device" reply rather
+    /// than failing.
     pub whisper_port: Option<u16>,
     /// The whisper model/weights label, used for transcript provenance (e.g. `"ggml-base.en"`).
     pub whisper_model: String,
     /// Whether the model server was started with a multimodal projector — i.e. whether it can
-    /// actually see an image. `false` ⇒ `/describe` says so plainly instead of asking a text-only
+    /// actually see an image. `false` ⇒ `/transcribe` says so plainly instead of asking a text-only
     /// model to read a picture, which is the one failure mode that would produce a confident,
     /// fluent, entirely invented reading and file it in someone's notes.
     pub vision: bool,
+    /// The main model's own instruction for reading an image, from the catalogue (`read_prompt`).
+    pub read_prompt: Option<String>,
+    /// A **dedicated image reader** running beside the main model, when this device has one. It is
+    /// tried first; see [`Agent::image_reader`]. `None` everywhere today — the slot the rule needs,
+    /// filled when a specialist is adopted.
+    pub image_specialist: Option<ImageReader>,
     pub max_reply_chars: usize,
-    /// How many related notes to retrieve as RAG context.
-    pub retrieve: usize,
     /// History budget (chars). When the discussion overflows it, `history` pins both ends — the first
     /// turn (the original ask) and the latest — and fills the middle with the most recent turns that
     /// fit (plain truncation, not summarized). Cheap, predictable, and it never drops the standing
@@ -76,10 +82,34 @@ pub struct Agent<V: VaultAccess> {
     pub history_budget: usize,
 }
 
+/// A model server that can turn an image into text: where it listens, what it is called (for the
+/// provenance line), and the instruction it wants.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImageReader {
+    pub port: u16,
+    pub model: String,
+    pub prompt: Option<String>,
+}
+
 impl<V: VaultAccess> Agent<V> {
+    /// **Who reads an image on this device** — the owner's rule (2026-10-10), in the order it is
+    /// tried: a dedicated reader if one is running; otherwise the main model, if it can see;
+    /// otherwise nobody, and the person is told so. Nothing here asks which platform this is: a
+    /// device has a reader because one was started, and the main model can see because its
+    /// projector was loaded.
+    pub fn image_reader(&self) -> Option<ImageReader> {
+        self.image_specialist.clone().or_else(|| {
+            self.vision.then(|| ImageReader {
+                port: self.model_port,
+                model: self.model.clone(),
+                prompt: self.read_prompt.clone(),
+            })
+        })
+    }
+
     /// Handle one already-posted user message on `note`'s discussion end to end: gather context (host
     /// note + RAG + web when `/search`), truncate old history if it overflows, run the turn, and POST
-    /// the agent's reply (and a proposal when `allow_propose` and `/propose`). Returns the reply text.
+    /// the agent's reply (and a proposal when `/propose`). Returns the reply text.
     /// The user's own message is assumed already in the discussion (the REPL or the app posted it).
     /// Returns the reply text and, when one was posted, the id of the reply message — so a caller
     /// watching the discussion can mark it seen and never answer the agent's own message.
@@ -91,31 +121,18 @@ impl<V: VaultAccess> Agent<V> {
         &self,
         note: &str,
         intent: &convo::Intent,
-        allow_propose: bool,
         on_stage: &dyn Fn(&str),
     ) -> Result<(String, Option<String>), String> {
-        // In a plain discussion there is nothing to propose an edit to, so propose/research are off
-        // there (both land as a proposal to the host note).
-        let intent = convo::Intent {
-            propose: intent.propose && allow_propose,
-            research: intent.research && allow_propose,
-            // Transcribe, like propose/research, only lands as a proposal to the host note — so in
-            // a plain discussion, which has no host note to propose against, it is off rather than
-            // silently doing nothing.
-            transcribe: intent.transcribe.clone().filter(|_| allow_propose),
-            ..intent.clone()
-        };
-
-        // Grounded research is a distinct pipeline: its only output is a cited proposal to the host
-        // note (insertion-only, human-merged), so it short-circuits the conversational turn.
-        if intent.research {
-            return self.research_turn(note, &intent, on_stage);
-        }
-
-        // Audio→transcript is likewise its own pipeline: read the selected audio blob's bytes, run the
-        // whisper specialist, and propose the provenance-marked transcript into the host note.
-        if let Some(reference) = intent.transcribe.clone() {
-            return self.transcribe_turn(note, &reference, on_stage);
+        // One command per message, and a closed list: research and reading are their own
+        // pipelines, each ending in a proposal a person reviews (insertion-only), so they
+        // short-circuit the conversational turn. Which reader runs is decided inside
+        // `transcribe_turn` by each file's type.
+        match intent.command() {
+            convo::Command::Research => return self.research_turn(note, intent, on_stage),
+            convo::Command::Read(reference) => {
+                return self.transcribe_turn(note, &reference, on_stage)
+            }
+            convo::Command::Chat { .. } | convo::Command::Propose { .. } => {}
         }
 
         on_stage("reading the conversation");
@@ -145,7 +162,7 @@ impl<V: VaultAccess> Agent<V> {
         on_stage("thinking");
         let agent = StudyAssistant::new(self.llm(), NoWeb);
         let turn = agent
-            .turn(&history, &intent, &context, Some(self.max_reply_chars))
+            .turn(&history, intent, &context, Some(self.max_reply_chars))
             .map_err(|e| e.to_string())?;
 
         on_stage("writing the reply");
@@ -155,13 +172,9 @@ impl<V: VaultAccess> Agent<V> {
         // Never post an empty message — the store rejects it (a reply "needs something in it"), which
         // would surface as a 500; say so plainly instead.
         let reply = if reply.trim().is_empty() {
-            "(I couldn't get a usable answer from the model — try rephrasing, or ask something simpler.)"
-                .to_string()
+            replies::NO_USABLE_ANSWER.to_string()
         } else if web_unavailable {
-            format!(
-                "_(Web search was unavailable — answering from your notes and the model's own \
-                 knowledge, which may be unreliable.)_\n\n{reply}"
-            )
+            replies::web_unavailable(&reply)
         } else {
             reply
         };
@@ -193,7 +206,7 @@ impl<V: VaultAccess> Agent<V> {
         let email = format!("{}@fm-agents.local", self.model);
         // Grounded research needs the web; without a backend, say so plainly rather than guessing.
         let Some(web) = self.web_backend() else {
-            let msg = "_(Grounded research needs web search, but it is off — enable it to use /research.)_".to_string();
+            let msg = replies::RESEARCH_NEEDS_WEB.to_string();
             let meta = self.fm.reply_as(note, &msg, &self.model, &email)?;
             return Ok((msg, meta["id"].as_str().map(|s| s.to_string())));
         };
@@ -231,29 +244,12 @@ impl<V: VaultAccess> Agent<V> {
         };
         self.fm.create_proposal(note, &body, &self.model, &email, &origin)?;
 
-        let dropped = if out.grounded.dropped.is_empty() {
-            String::new()
-        } else {
-            format!(
-                " I dropped {} claim(s) the sources didn't support.",
-                out.grounded.dropped.len()
-            )
-        };
-        let reply = if out.grounded.verified.is_empty() {
-            format!(
-                "I researched \u{201c}{}\u{201d} but the sources found didn't support a grounded answer, \
-                 so I proposed a note saying so.{dropped} Review it in Collaboration.",
-                intent.ask.trim()
-            )
-        } else {
-            format!(
-                "I researched \u{201c}{}\u{201d} and proposed a grounded note — {} claim(s), each backed by \
-                 a verbatim quote from {} source(s).{dropped} Review and merge it in Collaboration.",
-                intent.ask.trim(),
-                out.grounded.verified.len(),
-                out.draft.sources.len(),
-            )
-        };
+        let reply = replies::researched(
+            &intent.ask,
+            out.grounded.verified.len(),
+            out.draft.sources.len(),
+            out.grounded.dropped.len(),
+        );
         let meta = self.fm.reply_as(note, &reply, &self.model, &email)?;
         Ok((reply, meta["id"].as_str().map(|s| s.to_string())))
     }
@@ -297,10 +293,10 @@ impl<V: VaultAccess> Agent<V> {
             Some(_) => self.resolve_blobs(asked, &existing, "audio/", "fm:transcript")?,
             None => AudioWork::None,
         };
-        let images = if self.vision {
-            self.resolve_blobs(asked, &existing, "image/", "fm:image-text")?
-        } else {
-            AudioWork::None
+        let reader = self.image_reader();
+        let images = match &reader {
+            Some(_) => self.resolve_blobs(asked, &existing, "image/", "fm:image-text")?,
+            None => AudioWork::None,
         };
         let clips = match &audio {
             AudioWork::Clips(c) => c.clone(),
@@ -314,34 +310,19 @@ impl<V: VaultAccess> Agent<V> {
         if clips.is_empty() && pages.is_empty() {
             // Nothing to do — but *why* is the useful part, and the answers are different.
             if matches!(audio, AudioWork::AllDone) || matches!(images, AudioWork::AllDone) {
-                return say(
-                    "_(Everything in this note is already transcribed — nothing new to do.)_"
-                        .into(),
-                );
+                return say(replies::ALL_TRANSCRIBED.into());
             }
             // With NOTHING available, the missing capability is the whole answer. With one of the
             // two working, it is a footnote: "nothing here to transcribe" is what actually happened,
             // and leading with an unrelated missing projector would answer a question nobody asked.
-            if self.whisper_port.is_none() && !self.vision {
-                return say(
-                    "_(Neither audio transcription nor image reading is available on this device, \
-                     so there was nothing I could transcribe here.)_"
-                        .into(),
-                );
+            if self.whisper_port.is_none() && reader.is_none() {
+                return say(replies::NOTHING_CAN_TRANSCRIBE.into());
             }
-            let aside = match (self.whisper_port.is_none(), !self.vision) {
-                (true, _) => " (Audio transcription isn't available on this device.)",
-                (_, true) => " (Image reading isn't available on this device — the vision projector isn't loaded.)",
-                _ => "",
-            };
-            return if asked.is_empty() {
-                say(format!(
-                    "_(I don't see a recording or an image in this note to transcribe — attach one \
-                     first.){aside}_"
-                ))
-            } else {
-                say(format!("_(That doesn't look like something I can transcribe.){aside}_"))
-            };
+            return say(replies::nothing_to_transcribe(
+                !asked.is_empty(),
+                self.whisper_port.is_none(),
+                reader.is_none(),
+            ));
         }
 
         let mut new_body = existing.clone();
@@ -365,13 +346,14 @@ impl<V: VaultAccess> Agent<V> {
             }
         }
 
-        if !pages.is_empty() {
+        if let (Some(reader), false) = (&reader, pages.is_empty()) {
             on_stage("reading the writing");
-            let vision = fm_agent::openai::OpenAiStep::local(self.model_port, self.model.clone());
+            let vision = OpenAiStep::local(reader.port, &reader.model)
+                .with_image_instruction(reader.prompt.clone());
             for (reference, bytes, mime) in &pages {
                 let prov = fm_agent::adjunct::Provenance {
                     specialist: "vision".into(),
-                    model: self.model.clone(),
+                    model: reader.model.clone(),
                     blob_hash: fm_agent::adjunct::hash_of(reference),
                 };
                 new_body = fm_agent::imagetext::read_into(&vision, &new_body, bytes, mime, &prov)
@@ -384,25 +366,7 @@ impl<V: VaultAccess> Agent<V> {
         let origin = Origin { tool: "transcribe", query: None, sources };
         self.fm.create_proposal(note, &new_body, &self.model, &email, &origin)?;
 
-        let what = match (clips.len(), pages.len()) {
-            (a, 0) => format!("{a} recording{}", if a == 1 { "" } else { "s" }),
-            (0, i) => format!("{i} image{}", if i == 1 { "" } else { "s" }),
-            (a, i) => format!(
-                "{a} recording{} and {i} image{}",
-                if a == 1 { "" } else { "s" },
-                if i == 1 { "" } else { "s" }
-            ),
-        };
-        let caveat = if pages.is_empty() {
-            ""
-        } else {
-            " A model reading handwriting can misread it, so the image stays beside the text — \
-             check the equations."
-        };
-        say(format!(
-            "I transcribed {what} and proposed the text as an addition to this note — review and \
-             merge in Collaboration.{caveat}"
-        ))
+        say(replies::transcribed(clips.len(), pages.len()))
     }
 
     /// Resolve which audio to transcribe and read each clip's bytes ONCE (read-only, by value — the
@@ -436,7 +400,7 @@ impl<V: VaultAccess> Agent<V> {
         }
         let mut clips = Vec::new();
         let mut skipped_done = false;
-        for r in asset_ref_candidates(body) {
+        for r in fm_agent::adjunct::embedded_refs(body) {
             // A missing/unreadable embed just isn't audio — skip it, don't fail the turn.
             let Ok((bytes, mime)) = self.fm.blob_bytes(&r) else {
                 continue;
@@ -459,7 +423,10 @@ impl<V: VaultAccess> Agent<V> {
         })
     }
 
-    fn llm(&self) -> OpenAiStep {
+    /// The client for this agent's model — the **one** place it is built, so the port and the
+    /// model name cannot differ between chat, research, image reading and the meeting pass. A
+    /// caller that needs other sampling settings adjusts the one it is handed.
+    pub fn llm(&self) -> OpenAiStep {
         OpenAiStep::local(self.model_port, &self.model)
     }
 
@@ -613,25 +580,6 @@ fn already_read(body: &str, reference: &str, tag: &str) -> bool {
     body.contains(&format!("{tag} key=\"{hash}|"))
 }
 
-/// The `sha256:<hash>` reference of every asset a note body embeds — both the body form
-/// (`asset:sha256-<hex>`) and the frontmatter form (`sha256:<hex>`) — in order, deduped. Used to find
-/// a note's own audio for a bare `/transcribe`, so the user never types a content hash.
-fn asset_ref_candidates(body: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    for pat in ["asset:sha256-", "sha256:"] {
-        for (i, _) in body.match_indices(pat) {
-            let hex: String =
-                body[i + pat.len()..].chars().take_while(char::is_ascii_hexdigit).collect();
-            // A sha-256 is 64 hex chars; be lenient but reject stray short runs.
-            if hex.len() >= 8 && seen.insert(hex.clone()) {
-                out.push(format!("sha256:{hex}"));
-            }
-        }
-    }
-    out
-}
-
 fn note_refs(body: &str) -> Vec<String> {
     body.match_indices("note:")
         .filter_map(|(i, _)| {
@@ -693,9 +641,6 @@ mod tests {
         fn alive(&self) -> bool {
             self.alive
         }
-        fn search(&self, _: &str) -> Result<Value, String> {
-            Ok(json!([]))
-        }
         fn reply(&self, _: &str, _: &str) -> Result<Value, String> {
             Ok(Value::Null)
         }
@@ -730,10 +675,34 @@ mod tests {
             whisper_port: None,
             whisper_model: "ggml-base.en".into(),
             vision: false,
+            read_prompt: None,
+            image_specialist: None,
             max_reply_chars: 600,
-            retrieve: 3,
             history_budget: 4000,
         }
+    }
+
+    /// The owner's rule for reading an image (2026-10-10): a dedicated reader if there is one, the
+    /// main model if it can see, otherwise nobody. Each step is a fact about what is running, so
+    /// the same three cases hold on a laptop and a phone.
+    #[test]
+    fn an_image_goes_to_the_specialist_then_the_main_model_then_nobody() {
+        let mut a = agent(FakeVault::default());
+        a.model_port = 8081;
+        assert_eq!(a.image_reader(), None, "a blind main model and no reader: nobody");
+
+        a.vision = true;
+        a.read_prompt = Some("Transcribe exactly.".into());
+        let main = a.image_reader().expect("the main model can see");
+        assert_eq!((main.port, main.model.as_str()), (8081, "test"));
+        assert_eq!(main.prompt.as_deref(), Some("Transcribe exactly."), "its own instruction");
+
+        let ocr = ImageReader { port: 8090, model: "reader".into(), prompt: Some("OCR:".into()) };
+        a.image_specialist = Some(ocr.clone());
+        assert_eq!(a.image_reader(), Some(ocr.clone()), "a dedicated reader wins over the model");
+
+        a.vision = false;
+        assert_eq!(a.image_reader(), Some(ocr), "and works beside a main model that cannot see");
     }
 
     #[test]
@@ -849,7 +818,7 @@ mod tests {
         };
         // No whisper runtime on this device → say so, propose nothing (regardless of any asset).
         let off = agent(FakeVault { alive: true, ..Default::default() }); // whisper_port None
-        let (reply, _) = off.handle("note", &intent(""), true, &|_| {}).unwrap();
+        let (reply, _) = off.handle("note", &intent(""), &|_| {}).unwrap();
         // The wording now names *which* capability is missing, because `/transcribe` covers two
         // and a device may have either, both or neither.
         assert!(reply.contains("available on this device"), "no runtime: {reply}");
@@ -858,7 +827,7 @@ mod tests {
         // (whisper is never contacted: resolution fails first on the empty note body.)
         let mut on = agent(FakeVault { alive: true, ..Default::default() });
         on.whisper_port = Some(1);
-        let (reply, _) = on.handle("note", &intent(""), true, &|_| {}).unwrap();
+        let (reply, _) = on.handle("note", &intent(""), &|_| {}).unwrap();
         // `/transcribe` now covers recordings *and* writing, so it asks for either — and still
         // never demands a content hash.
         assert!(reply.contains("don't see a recording or an image"), "no media in note: {reply}");
@@ -922,9 +891,6 @@ mod tests {
             fn alive(&self) -> bool {
                 true
             }
-            fn search(&self, _: &str) -> Result<Value, String> {
-                Ok(json!([]))
-            }
             fn reply(&self, _: &str, _: &str) -> Result<Value, String> {
                 Ok(Value::Null)
             }
@@ -942,8 +908,9 @@ mod tests {
             whisper_port: Some(port),
             whisper_model: "ggml-base.en".into(),
             vision: false,
+            read_prompt: None,
+            image_specialist: None,
             max_reply_chars: 600,
-            retrieve: 3,
             history_budget: 4000,
         };
         let intent = convo::Intent {
@@ -953,7 +920,7 @@ mod tests {
             research: false,
             transcribe: Some("asset:sha256-abc123".into()),
         };
-        let (reply, _) = a.handle("note", &intent, true, &|_| {}).unwrap();
+        let (reply, _) = a.handle("note", &intent, &|_| {}).unwrap();
         assert!(reply.contains("transcribed"), "user is told, got: {reply}");
         let body = a.fm.proposed.borrow().clone().expect("a proposal was created");
         assert!(body.contains("existing note body"), "insertion-only: host body kept: {body}");
@@ -1026,9 +993,6 @@ mod tests {
             fn alive(&self) -> bool {
                 true
             }
-            fn search(&self, _: &str) -> Result<Value, String> {
-                Ok(json!([]))
-            }
             fn reply(&self, _: &str, _: &str) -> Result<Value, String> {
                 Ok(Value::Null)
             }
@@ -1046,8 +1010,9 @@ mod tests {
             whisper_port: Some(port),
             whisper_model: "ggml-base.en".into(),
             vision: false,
+            read_prompt: None,
+            image_specialist: None,
             max_reply_chars: 600,
-            retrieve: 3,
             history_budget: 4000,
         };
         let intent = convo::Intent {
@@ -1057,7 +1022,7 @@ mod tests {
             research: false,
             transcribe: Some(String::new()), // bare /transcribe
         };
-        let (reply, _) = a.handle("note", &intent, true, &|_| {}).unwrap();
+        let (reply, _) = a.handle("note", &intent, &|_| {}).unwrap();
         assert!(reply.contains("1 recording"), "only the one untranscribed clip: {reply}");
         let body = a.fm.proposed.borrow().clone().expect("a proposal was created");
         assert!(body.contains("OLD A TRANSCRIPT"), "the accepted transcript is preserved: {body}");
@@ -1079,7 +1044,7 @@ mod tests {
             research: true,
             transcribe: None,
         };
-        let (reply, _id) = a.handle("note", &intent, true, &|_| {}).unwrap();
+        let (reply, _id) = a.handle("note", &intent, &|_| {}).unwrap();
         assert!(
             reply.contains("web search") && reply.contains("is off"),
             "should explain the web is off, got: {reply}"
@@ -1098,9 +1063,6 @@ mod tests {
         impl VaultAccess for Fm {
             fn alive(&self) -> bool {
                 true
-            }
-            fn search(&self, _: &str) -> Result<Value, String> {
-                Ok(json!([]))
             }
             fn get(&self, _: &str) -> Result<Value, String> {
                 Ok(json!({ "body": "![](asset:sha256-abc)" }))
@@ -1146,8 +1108,9 @@ mod tests {
             whisper_port: None,
             whisper_model: String::new(),
             vision: false,
+            read_prompt: None,
+            image_specialist: None,
             max_reply_chars: 2000,
-            retrieve: 0,
             history_budget: 4000,
         };
         let intent = convo::Intent {
@@ -1157,7 +1120,7 @@ mod tests {
             research: false,
             transcribe: Some(String::new()),
         };
-        let (reply, _) = agent.handle("n1", &intent, true, &|_| {}).unwrap();
+        let (reply, _) = agent.handle("n1", &intent, &|_| {}).unwrap();
         assert!(
             reply.contains("Neither audio transcription nor image reading"),
             "it must name what is missing, got: {reply}"

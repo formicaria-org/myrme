@@ -141,7 +141,7 @@ pub fn serve_loop<V: VaultAccess>(
                 // a note, so a proposal to it is valid, and `handle` only acts on those commands when the
                 // user actually typed them (a plain mention still just chats). This is the path the
                 // frontend uses, so without it `/research` would silently degrade to a chat answer.
-                let result = agent.handle(id, &intent, true, &on_stage);
+                let result = agent.handle(id, &intent, &on_stage);
                 log_timing(runtime, id, &question, &marks.borrow(), Instant::now(), result.is_ok());
                 match result {
                     Ok((reply, reply_id)) => {
@@ -180,7 +180,8 @@ pub fn serve_loop<V: VaultAccess>(
         if force_scan && !worked {
             // The answer is capped so prompt + answer always fit the model's window together
             // (`fm_agent::meetings::TEXT_TOKENS`).
-            let llm = fm_agent::openai::OpenAiStep::local(agent.model_port, &agent.model)
+            let llm = agent
+                .llm()
                 .with_temperature(0.0)
                 .with_max_tokens(fm_agent::meetings::ANSWER_TOKENS);
             // UTC's day: this process cannot read the machine's offset (`fm_core::events`). Within a

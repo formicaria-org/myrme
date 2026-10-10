@@ -28,8 +28,9 @@ fn it_transcribes_through_the_real_fmserve_and_whisper() {
         whisper_port: Some(whisper),
         whisper_model: "ggml-base.en".into(),
         vision: false,
+        read_prompt: None,
+        image_specialist: None,
         max_reply_chars: 2000,
-        retrieve: 3,
         history_budget: 4000,
     };
     let intent = Intent {
@@ -40,7 +41,7 @@ fn it_transcribes_through_the_real_fmserve_and_whisper() {
         transcribe: Some(asset),
     };
     let (reply, _id) = agent
-        .handle(&note, &intent, true, &|s| println!("stage: {s}"))
+        .handle(&note, &intent, &|s| println!("stage: {s}"))
         .expect("the transcribe turn failed");
     println!("REPLY: {reply}");
     assert!(reply.contains("transcribed"), "expected a success reply, got: {reply}");

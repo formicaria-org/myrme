@@ -24,6 +24,8 @@
 
 use std::collections::HashSet;
 
+use crate::textmatch::loose;
+
 use serde_json::Value;
 use time::{Date, Duration, Month, Time, Weekday};
 
@@ -78,19 +80,6 @@ pub enum Dropped {
     /// It is already over.
     Past,
 }
-
-pub const SYSTEM: &str = "You read an email exchange and list the meetings with people that it FIXES — \
-agreed appointments, calls or visits on a day. Ignore proposals that were declined or replaced: if a \
-later message moves or cancels a meeting, report only the final arrangement. Do not report deadlines or \
-tasks. Answer ONLY with a JSON array, no other text. Each item is an object with these keys:\n\
-\"quote\": the sentence from the email that fixes the meeting, copied character for character in its \
-original language — never translated, never reworded;\n\
-\"title\": a short name for the meeting, in the language of the emails;\n\
-\"date\": the words in the email that give the day, copied exactly and untranslated, or \"\";\n\
-\"time\": the words in the email that give the start time, copied exactly, or \"\";\n\
-\"end\": the words that give the end time, copied exactly, or \"\";\n\
-\"place\": where, copied from the email, or \"\".\n\
-If no meeting is fixed, answer [].";
 
 /// Tokens the conversation text may take. The laptop model runs with an 8192-token window
 /// (`agents/models.toml`); the instructions take ~350 and the answer is capped at [`ANSWER_TOKENS`],
@@ -165,25 +154,6 @@ pub fn parse(answer: &str) -> Vec<Found> {
     Vec::new()
 }
 
-/// Lowercase, accents off, every run of whitespace one space — the form quotes are compared in.
-fn norm(s: &str) -> String {
-    let folded: String = s
-        .chars()
-        .flat_map(char::to_lowercase)
-        .map(|c| match c {
-            'à' | 'á' | 'â' => 'a',
-            'è' | 'é' | 'ê' => 'e',
-            'ì' | 'í' | 'î' => 'i',
-            'ò' | 'ó' | 'ô' => 'o',
-            'ù' | 'ú' | 'û' => 'u',
-            '’' | '‘' => '\'',
-            '“' | '”' | '«' | '»' => '"',
-            c => c,
-        })
-        .collect();
-    folded.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
 /// One email in the conversation note: the day it was sent, and its text, normalised.
 struct Block {
     sent: Option<Date>,
@@ -198,7 +168,7 @@ fn blocks(body: &str) -> Vec<Block> {
     for line in body.lines() {
         if let Some(head) = line.strip_prefix("### ") {
             if let Some(b) = out.last_mut() {
-                b.text = norm(&raw);
+                b.text = loose(&raw);
             }
             raw.clear();
             out.push(Block { sent: heading_day(head), text: String::new() });
@@ -208,7 +178,7 @@ fn blocks(body: &str) -> Vec<Block> {
         raw.push('\n');
     }
     if let Some(b) = out.last_mut() {
-        b.text = norm(&raw);
+        b.text = loose(&raw);
     }
     out
 }
@@ -225,7 +195,7 @@ fn heading_day(head: &str) -> Option<Date> {
 
 /// Check one reported meeting against the emails and date it. `body` is the conversation note.
 pub fn resolve(f: &Found, body: &str, today: Date) -> Result<Meeting, Dropped> {
-    let nquote = norm(&f.quote);
+    let nquote = loose(&f.quote);
     if nquote.is_empty() {
         return Err(Dropped::NotInEmail);
     }
@@ -235,7 +205,7 @@ pub fn resolve(f: &Found, body: &str, today: Date) -> Result<Meeting, Dropped> {
         .ok_or(Dropped::NotInEmail)?;
     let anchor = sent.unwrap_or(today);
     let model_words = |w: &str, within: &str| {
-        let n = norm(w);
+        let n = loose(w);
         (!n.is_empty() && within.contains(&n)).then_some(n)
     };
     let day = find_day(&nquote, anchor, false)
@@ -468,7 +438,7 @@ fn next_weekday(from: Date, w: Weekday) -> Date {
     d
 }
 
-/// A day phrase (already [`norm`]ed) → a date, counting from `anchor` (the day the message was sent).
+/// A day phrase (already [`loose`]ed) → a date, counting from `anchor` (the day the message was sent).
 /// `None` for anything not read exactly. European order for numeric dates (`16/10` is 16 October).
 pub fn read_day(phrase: &str, anchor: Date) -> Option<Date> {
     let words: Vec<String> = phrase
@@ -583,7 +553,7 @@ fn add_months(d: Date, k: i32) -> Option<Date> {
     .ok()
 }
 
-/// A time phrase (already [`norm`]ed) → a wall-clock time. `15`, `15:30`, `15.30`, `15h30`, `alle 3`,
+/// A time phrase (already [`loose`]ed) → a wall-clock time. `15`, `15:30`, `15.30`, `15h30`, `alle 3`,
 /// `3pm`, `3:30 pm`, `mezzogiorno`, `noon`.
 ///
 /// **A bare hour from 1 to 7 is read as afternoon** (`alle 3` → 15:00): nobody fixes a meeting at three
@@ -676,7 +646,7 @@ mod tests {
     use time::macros::{date, time};
 
     fn d(p: &str, anchor: Date) -> Option<Date> {
-        read_day(&norm(p), anchor)
+        read_day(&loose(p), anchor)
     }
 
     #[test]
@@ -719,7 +689,7 @@ mod tests {
 
     #[test]
     fn times_in_both_languages() {
-        let t = |p: &str| read_time(&norm(p));
+        let t = |p: &str| read_time(&loose(p));
         assert_eq!(t("alle 15"), Some(time!(15:00)));
         assert_eq!(t("ore 15:30"), Some(time!(15:30)));
         assert_eq!(t("15.30"), Some(time!(15:30)));
@@ -800,22 +770,22 @@ mod tests {
     fn dates_and_times_are_found_in_running_text() {
         let a = date!(2026 - 09 - 18);
         assert_eq!(
-            find_day(&norm("P.s. 2nd of October 2026 at 11:30am Singapore time."), a, false),
+            find_day(&loose("P.s. 2nd of October 2026 at 11:30am Singapore time."), a, false),
             Some(date!(2026 - 10 - 02))
         );
         assert_eq!(
-            find_time(&norm("2nd of October 2026 at 11:30am Singapore time")),
+            find_time(&loose("2nd of October 2026 at 11:30am Singapore time")),
             Some(time!(11:30))
         );
         assert_eq!(
-            find_day(&norm("We can try next week Monday 28th of Sep at Singapore 5pm:"), a, false),
+            find_day(&loose("We can try next week Monday 28th of Sep at Singapore 5pm:"), a, false),
             Some(date!(2026 - 09 - 28))
         );
-        assert_eq!(find_time(&norm("Monday 28th of Sep at Singapore 5pm:")), Some(time!(17:00)));
-        assert_eq!(find_day(&norm("room RM 01-02, project 2999-00001, 15.30"), a, false), None);
-        assert_eq!(find_time(&norm("project AB1234X 2999-00001 for 3 students")), None);
+        assert_eq!(find_time(&loose("Monday 28th of Sep at Singapore 5pm:")), Some(time!(17:00)));
+        assert_eq!(find_day(&loose("room RM 01-02, project 2999-00001, 15.30"), a, false), None);
+        assert_eq!(find_time(&loose("project AB1234X 2999-00001 for 3 students")), None);
         assert_eq!(
-            find_day(&norm("ci vediamo il 16 alle 15"), a, false),
+            find_day(&loose("ci vediamo il 16 alle 15"), a, false),
             Some(date!(2026 - 10 - 16))
         );
     }

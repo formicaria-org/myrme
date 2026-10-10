@@ -23,6 +23,7 @@ pub struct OpenAiStep {
     temperature: f32,
     seed: i64,
     max_tokens: u32,
+    image_instruction: Option<String>,
 }
 
 impl OpenAiStep {
@@ -40,6 +41,7 @@ impl OpenAiStep {
             temperature: 0.2,
             seed: 0,
             max_tokens: 2048,
+            image_instruction: None,
         }
     }
 
@@ -69,36 +71,49 @@ impl OpenAiStep {
         self.max_tokens = max_tokens;
         self
     }
+
+    /// The instruction sent with an image, when this model needs its own; `None` keeps the house
+    /// one. A reader is only as good as the words it is given: the house instruction halves a small
+    /// model's accuracy that a one-line instruction leaves intact (`agents/bench/results.md`,
+    /// 2026-10-10), so the catalogue can name one per model.
+    pub fn with_image_instruction(mut self, instruction: Option<String>) -> Self {
+        self.image_instruction = instruction;
+        self
+    }
 }
 
-impl LlmStep for OpenAiStep {
-    fn complete(&self, system: &str, user: &str) -> Result<LlmResponse, AgentError> {
+impl OpenAiStep {
+    /// One chat-completion call with these `messages` — the single request both the text step and
+    /// the image step make, so the sampling settings and the transport exist once.
+    fn chat(&self, messages: serde_json::Value) -> Result<LlmResponse, AgentError> {
         let body = serde_json::json!({
             "model": self.model,
             "temperature": self.temperature,
             "seed": self.seed,
             "max_tokens": self.max_tokens,
             "stream": false,
-            "messages": [
-                { "role": "system", "content": system },
-                { "role": "user", "content": user },
-            ],
+            "messages": messages,
         })
         .to_string();
+        let raw = http::post(
+            &self.host,
+            self.port,
+            "/v1/chat/completions",
+            "application/json",
+            "",
+            body.as_bytes(),
+            self.timeout,
+        )?;
+        parse_completion(&http::body(&raw)?)
+    }
+}
 
-        let request = format!(
-            "POST /v1/chat/completions HTTP/1.1\r\n\
-             Host: {host}:{port}\r\n\
-             Content-Type: application/json\r\n\
-             Content-Length: {len}\r\n\
-             Connection: close\r\n\r\n{body}",
-            host = self.host,
-            port = self.port,
-            len = body.len(),
-        );
-        let raw = http::send(&self.host, self.port, request.as_bytes(), self.timeout)?;
-        let json = http::body(&raw)?;
-        parse_completion(&json)
+impl LlmStep for OpenAiStep {
+    fn complete(&self, system: &str, user: &str) -> Result<LlmResponse, AgentError> {
+        self.chat(serde_json::json!([
+            { "role": "system", "content": system },
+            { "role": "user", "content": user },
+        ]))
     }
 }
 
@@ -134,88 +149,26 @@ impl crate::imagetext::ReadImage for OpenAiStep {
             return Err(AgentError::new(format!("{mime} is not an image")));
         }
         let url = format!("data:{mime};base64,{}", crate::imagetext::base64(image));
-        let body = serde_json::json!({
-            "model": self.model,
-            "temperature": self.temperature,
-            "seed": self.seed,
-            "max_tokens": self.max_tokens,
-            "stream": false,
-            "messages": [{
-                "role": "user",
-                "content": [
-                    { "type": "text", "text": crate::imagetext::INSTRUCTION },
-                    { "type": "image_url", "image_url": { "url": url } },
-                ],
-            }],
-        })
-        .to_string();
-        let request = format!(
-            "POST /v1/chat/completions HTTP/1.1\r\n\
-             Host: {host}:{port}\r\n\
-             Content-Type: application/json\r\n\
-             Content-Length: {len}\r\n\
-             Connection: close\r\n\r\n{body}",
-            host = self.host,
-            port = self.port,
-            len = body.len(),
-        );
-        let raw = http::send(&self.host, self.port, request.as_bytes(), self.timeout)?;
-        let reply = parse_completion(&http::body(&raw)?)?;
+        let instruction =
+            self.image_instruction.as_deref().unwrap_or(crate::prompts::IMAGE_INSTRUCTION);
+        let reply = self.chat(serde_json::json!([{
+            "role": "user",
+            "content": [
+                { "type": "text", "text": instruction },
+                { "type": "image_url", "image_url": { "url": url } },
+            ],
+        }]))?;
         // Truncation is a hard failure here, as it is on every other path in this crate. A reading
         // cut off at the token cap is a *partial transcription presented as a whole one* — and it
         // would land in a note, fenced and attributed, looking exactly as authoritative as a
         // complete one.
-        if reply.finish_reason.as_deref() == Some("length") {
+        if reply.truncated() {
             return Err(AgentError::new(
                 "the reading was cut off at the token limit — crop the image or raise max_tokens",
             ));
         }
         Ok(reply.content)
     }
-}
-
-impl crate::preference::Embed for OpenAiStep {
-    /// `POST /v1/embeddings`, the OpenAI-compatible shape `llama-server` also serves.
-    ///
-    /// Deliberately the *same* client as the chat step rather than a second one: the host, the port
-    /// and the timeout are already settled here, and a separate embedder would be a second place to
-    /// get them wrong. None of the sampling knobs apply — an embedding has no temperature, no seed
-    /// and no token cap — so the body carries only the model and the input.
-    fn embed(&self, text: &str) -> Result<Vec<f32>, AgentError> {
-        let body = serde_json::json!({ "model": self.model, "input": text }).to_string();
-        let request = format!(
-            "POST /v1/embeddings HTTP/1.1\r\n\
-             Host: {host}:{port}\r\n\
-             Content-Type: application/json\r\n\
-             Content-Length: {len}\r\n\
-             Connection: close\r\n\r\n{body}",
-            host = self.host,
-            port = self.port,
-            len = body.len(),
-        );
-        let raw = http::send(&self.host, self.port, request.as_bytes(), self.timeout)?;
-        parse_embedding(&http::body(&raw)?)
-    }
-}
-
-/// Pull the vector out of an embeddings response. Split out and pure for the same reason
-/// [`parse_completion`] is: the transport stays small and the extraction is trivial to test.
-///
-/// An **empty** vector is an error rather than an empty answer. A zero-length embedding scores 0.0
-/// against everything (see [`crate::preference::cosine`]), so it would silently rank last forever
-/// instead of failing — a shape of bug this project has met before, where a wrong answer arrives
-/// looking exactly like a quiet one.
-fn parse_embedding(json: &str) -> Result<Vec<f32>, AgentError> {
-    let v: serde_json::Value = serde_json::from_str(json.trim())
-        .map_err(|e| AgentError::new(format!("model server response was not JSON: {e}")))?;
-    let arr = v["data"][0]["embedding"]
-        .as_array()
-        .ok_or_else(|| AgentError::new("embeddings response had no data[0].embedding"))?;
-    let out: Vec<f32> = arr.iter().filter_map(|n| n.as_f64().map(|f| f as f32)).collect();
-    if out.is_empty() || out.len() != arr.len() {
-        return Err(AgentError::new("embeddings response held a non-numeric or empty vector"));
-    }
-    Ok(out)
 }
 
 /// Pull the content, `finish_reason`, and `usage` out of a chat-completion JSON body. Split out and
@@ -243,18 +196,6 @@ fn parse_completion(json: &str) -> Result<LlmResponse, AgentError> {
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn an_embedding_is_parsed_and_a_degenerate_one_is_an_error_not_an_empty_answer() {
-        let ok = super::parse_embedding(r#"{"data":[{"embedding":[0.5,-0.25]}]}"#).unwrap();
-        assert_eq!(ok, vec![0.5, -0.25]);
-        // Empty, non-numeric, and missing all fail loudly. A zero-length vector would otherwise
-        // score 0.0 against everything and rank last forever instead of failing.
-        assert!(super::parse_embedding(r#"{"data":[{"embedding":[]}]}"#).is_err());
-        assert!(super::parse_embedding(r#"{"data":[{"embedding":["x"]}]}"#).is_err());
-        assert!(super::parse_embedding(r#"{"data":[]}"#).is_err());
-        assert!(super::parse_embedding("not json").is_err());
-    }
-
     use super::*;
     use std::io::{Read as _, Write as _};
     use std::net::TcpListener;

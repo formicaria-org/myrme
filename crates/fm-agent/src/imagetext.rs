@@ -29,37 +29,6 @@ use crate::AgentError;
 /// truncate each other in a note that has both.
 const TAG: &str = "fm:image-text";
 
-/// What the model is asked to do: **transcribe**, in the target notation for each kind of content.
-///
-/// Math as LaTeX and code as fenced blocks because that is what makes a transcript *usable* — a
-/// photographed equation rendered as prose is no more editable than the photograph was. Figures get
-/// their labels transcribed plus one naming line: the labels are the part you would otherwise
-/// retype, and the interpretation is the part a model gets wrong.
-///
-/// **`[?]` rather than a guess** is the load-bearing clause. A vision model's failure mode is fluent
-/// invention, and in an equation a plausible wrong character is far worse than a visible gap: the
-/// gap you notice and fix, the wrong subscript you carry for a year.
-///
-/// **Prose, and deliberately not a bulleted list — do not "tidy" this into one.** The first version
-/// was a tidy list of rules, and on a hard input (a labelled plot) `qwen3-vl-4b` reproduced *the
-/// list itself* as if it were the image's content, then looped until it hit the context window. This
-/// codebase already knew the shape: the chat path uses no heading scaffolding because a small model
-/// parroted that back too. A list in the prompt is a list the model can mistake for the answer.
-///
-/// **Measured on `qwen3-vl-4b`, 2026-08-30**, against five typeset fixtures: prose transcription and
-/// fenced code come back reliably; a plot's title, axes, ticks and legend come back well. **LaTeX
-/// conversion is inconsistent** — the same model that writes `$$E = \\frac{1}{2}CV^2$$` under a
-/// two-sentence prompt returns `E = 1/2 C V^2` under this one. That is not a bug to prompt away
-/// here: it is precisely the variance the correction corpus exists to record, and a human fixing it
-/// is the signal.
-pub const INSTRUCTION: &str = "Transcribe everything written in this image into Markdown, keeping \
-its original structure and order. Write mathematics as LaTeX ($...$ inline, $$...$$ displayed), and \
-put code or pseudocode in a fenced code block with its indentation. For a plot or diagram, \
-transcribe its title, axis labels, tick values and legend, then one line naming what it is. \
-Transcribe only what is actually there — do not correct, complete, summarise or explain it. Write \
-[?] for anything genuinely unreadable rather than guessing. Reply with the transcription and \
-nothing else.";
-
 /// A specialist that turns image **bytes** into text.
 ///
 /// Takes the image by value and returns text — the whole contract, and the whole reason a broken

@@ -10,10 +10,6 @@ version.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "fm-agent-run"
-path = "src/main.rs"
-
-[[bin]]
 name = "agent-chat"
 path = "src/chat.rs"
 

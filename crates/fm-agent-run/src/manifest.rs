@@ -51,6 +51,11 @@ pub struct Model {
     /// gigabytes; a screen that asks first has to be able to say how many.
     pub bytes: Option<u64>,
     pub mmproj_bytes: Option<u64>,
+    /// This model's own instruction for copying the text out of an image. Unset ⇒ the house one
+    /// (`fm_agent::prompts::IMAGE_INSTRUCTION`). It is per model because it has to be: measured
+    /// 2026-10-10, the house instruction took LFM2.5-VL-450M from 1.00 to 0.63 on plain typed notes,
+    /// where a one-line instruction read them exactly (`agents/bench/results.md`).
+    pub read_prompt: Option<String>,
 }
 
 /// The runtime defaults and the model list from `models.toml`.
@@ -81,7 +86,7 @@ pub struct Manifest {
     /// is on. `None` ⇒ no phone whisper. Read via [`mobile_whisper`](Self::mobile_whisper).
     pub whisper_mobile: Option<String>,
     /// Every catalogued model.
-    models: Vec<Model>,
+    pub(crate) models: Vec<Model>,
     /// The prebuilt runtime archives, keyed by the suffix that names a platform — `linux_x64`,
     /// `linux_x64_gpu`, `whisper_linux_x64`, and in time `macos_arm64` / `windows_x64`.
     ///
@@ -161,6 +166,7 @@ impl Manifest {
                     license: None,
                     bytes: None,
                     mmproj_bytes: None,
+                    read_prompt: None,
                 });
                 continue;
             }
@@ -184,6 +190,7 @@ impl Manifest {
                     "license" => m.license = Some(val.to_string()),
                     "bytes" => m.bytes = val.parse().ok(),
                     "mmproj_bytes" => m.mmproj_bytes = val.parse().ok(),
+                    "read_prompt" => m.read_prompt = Some(val.to_string()),
                     _ => {}
                 },
                 // Top-level (before any [[models]]).
@@ -349,6 +356,39 @@ impl Manifest {
         // pins no checksum either, where a moving target is the stated intent rather than an accident.
         let rev = m.revision.as_deref().unwrap_or("main");
         Some(format!("https://huggingface.co/{}/resolve/{rev}/{}", m.repo, m.file))
+    }
+
+    /// Give a launch command this model's image projector, **if the catalogue names one and the
+    /// file is here**, and return its path. `Some` ⇒ the model can see, and that is the only thing
+    /// that makes it so.
+    ///
+    /// The **one** place a projector reaches a command line, for the desktop supervisor and the
+    /// phone alike. They used to build this separately, and the phone's copy simply did not: it
+    /// hard-coded "cannot see", so a vision model picked for the phone would have been blind there
+    /// for no reason anyone could find in the catalogue. Which device can read an image is now a
+    /// fact about the chosen model, never about the platform.
+    pub fn add_projector(
+        &self,
+        cmd: &mut std::process::Command,
+        name: &str,
+        models_dir: &std::path::Path,
+    ) -> Option<std::path::PathBuf> {
+        let model = self.model(name)?;
+        let proj = models_dir.join(model.mmproj.as_deref()?);
+        if !proj.exists() {
+            return None;
+        }
+        cmd.arg("--mmproj").arg(&proj);
+        // Keep the projector off a small GPU so the context window fits (`models.toml`).
+        if model.mmproj_offload == Some(false) {
+            cmd.arg("--no-mmproj-offload");
+        }
+        Some(proj)
+    }
+
+    /// The model's own image-reading instruction, when the catalogue gives one.
+    pub fn read_prompt(&self, name: &str) -> Option<String> {
+        self.model(name)?.read_prompt.clone()
     }
 
     /// The projector's URL, from the **same pinned commit as the weights**.
@@ -523,5 +563,46 @@ mod tests {
         assert!(rt.url.starts_with("https://"), "{}", rt.url);
         assert_eq!(rt.sha256.len(), 64, "a sha256 is 64 hex characters: {}", rt.sha256);
         assert!(m.runtime("whisper_linux_x64").is_some(), "the audio runtime is pinned too");
+    }
+
+    /// One place puts a projector on a command line, for every device. It does so only when the
+    /// catalogue names one **and the file is here**: a model whose projector was never fetched must
+    /// start text-only, not fail and not pretend.
+    #[test]
+    fn a_projector_reaches_the_command_only_when_named_and_present() {
+        let dir = std::env::temp_dir().join(format!("fm-proj-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let m = Manifest::parse(
+            "[[models]]\nname = \"sees\"\nfile = \"a.gguf\"\nmmproj = \"p.gguf\"\nmmproj_offload = false\n\
+             read_prompt = \"Transcribe the text in this image exactly.\"\n\
+             [[models]]\nname = \"blind\"\nfile = \"b.gguf\"\n",
+        );
+        let args = |c: &std::process::Command| {
+            c.get_args().map(|a| a.to_string_lossy().into_owned()).collect::<Vec<_>>()
+        };
+
+        let mut cmd = std::process::Command::new("x");
+        assert_eq!(m.add_projector(&mut cmd, "sees", &dir), None, "named but not fetched");
+        assert!(args(&cmd).is_empty(), "nothing is passed for a file that is not there");
+
+        std::fs::write(dir.join("p.gguf"), b"x").unwrap();
+        assert_eq!(m.add_projector(&mut cmd, "sees", &dir), Some(dir.join("p.gguf")));
+        let got = args(&cmd);
+        assert_eq!(got[0], "--mmproj");
+        assert!(
+            got.contains(&"--no-mmproj-offload".to_string()),
+            "the catalogue's setting rides along"
+        );
+
+        let mut blind = std::process::Command::new("x");
+        assert_eq!(m.add_projector(&mut blind, "blind", &dir), None, "a text-only model");
+        assert!(args(&blind).is_empty());
+
+        assert_eq!(
+            m.read_prompt("sees").as_deref(),
+            Some("Transcribe the text in this image exactly.")
+        );
+        assert_eq!(m.read_prompt("blind"), None);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

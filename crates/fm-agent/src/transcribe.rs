@@ -146,23 +146,15 @@ impl Transcribe for WhisperServer {
             .as_bytes(),
         );
 
-        let mut request: Vec<u8> = Vec::with_capacity(body.len() + 256);
-        request.extend_from_slice(
-            format!(
-                "POST /inference HTTP/1.1\r\n\
-                 Host: {host}:{port}\r\n\
-                 Content-Type: multipart/form-data; boundary={boundary}\r\n\
-                 Content-Length: {len}\r\n\
-                 Connection: close\r\n\r\n",
-                host = self.host,
-                port = self.port,
-                len = body.len(),
-            )
-            .as_bytes(),
-        );
-        request.extend_from_slice(&body);
-
-        let raw = http::send(&self.host, self.port, &request, self.timeout)?;
+        let raw = http::post(
+            &self.host,
+            self.port,
+            "/inference",
+            &format!("multipart/form-data; boundary={boundary}"),
+            "",
+            &body,
+            self.timeout,
+        )?;
         parse_transcript(&http::body(&raw)?)
     }
 }

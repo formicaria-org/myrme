@@ -67,20 +67,6 @@ impl GroundedNote {
     }
 }
 
-/// The system prompt for the grounded writing step — the *quote-first* contract. Adapted from the
-/// open answer-engine convention (Perplexica/Vane: cite every claim, avoid unsupported assumptions,
-/// say so when nothing supports an answer), sharpened to demand a **verbatim quote** so the claim is
-/// deterministically checkable. Not user-editable; the same literal-free discipline the renderers keep.
-pub const GROUNDED_WRITE_INSTRUCTION: &str = "\
-You write a study note using ONLY the numbered sources provided. Output a list of claims, one per \
-item. For each claim: write ONE sentence on its own line, starting with '- ' and ending with the \
-citation '[n]' of the source it comes from; then on the NEXT line, starting with '> ', copy a SHORT \
-VERBATIM quote from that same source that supports the claim — copy the words EXACTLY, do not \
-paraphrase and do not shorten across gaps. Cite every claim. Use only the numbered sources, never your \
-own knowledge, and never state anything the sources do not. If the sources do not answer the question, \
-reply with a single '- ' line saying so and no citation. Output only the list — no preamble, no \
-headings, no Sources section.";
-
 /// Assemble the numbered source pack that goes into the writing prompt — `[n] Title — URL` followed by
 /// the source text, each truncated to `per_source_chars` so many sources fit a tiny model's context.
 /// The `[n]` numbering here is the contract the model cites against and the verifier checks against.
@@ -232,29 +218,11 @@ fn strip_quote_marks(s: &str) -> String {
 /// straight, non-breaking/thin spaces → space, soft hyphen removed) — so a faithful quote is not
 /// rejected merely because the source's markdown reflowed it. An empty quote is never supported.
 fn quote_supported(quote: &str, source_text: &str) -> bool {
-    let q = normalize_for_match(quote);
+    let q = crate::textmatch::fold(quote);
     if q.is_empty() {
         return false;
     }
-    normalize_for_match(source_text).contains(&q)
-}
-
-/// Normalize text for the substring check: unify the punctuation/space variants extraction introduces,
-/// then collapse whitespace runs to a single space and trim. Case-sensitive otherwise (a quote is meant
-/// to be verbatim).
-fn normalize_for_match(s: &str) -> String {
-    let folded: String = s
-        .chars()
-        .filter_map(|c| match c {
-            '“' | '”' | '„' | '‟' => Some('"'),
-            '‘' | '’' | '‚' | '‛' => Some('\''),
-            '\u{00A0}' | '\u{2009}' | '\u{202F}' | '\u{2007}' => Some(' '), // nbsp / thin / narrow-nbsp / figure
-            '\u{00AD}' => None,                                             // soft hyphen: drop
-            '‐' | '‑' | '–' | '—' => Some('-'),                             // hyphen/dash variants
-            other => Some(other),
-        })
-        .collect();
-    folded.split_whitespace().collect::<Vec<_>>().join(" ")
+    crate::textmatch::fold(source_text).contains(&q)
 }
 
 #[cfg(test)]
