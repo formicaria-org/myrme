@@ -54,11 +54,6 @@ impl SearxngSearch {
         self
     }
 
-    pub fn with_max_results(mut self, max_results: usize) -> Self {
-        self.max_results = max_results;
-        self
-    }
-
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self

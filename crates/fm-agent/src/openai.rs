@@ -60,13 +60,6 @@ impl OpenAiStep {
         self
     }
 
-    /// A fixed seed reproduces the same output for the same input; `-1` asks the server for a random
-    /// one (non-reproducible).
-    pub fn with_seed(mut self, seed: i64) -> Self {
-        self.seed = seed;
-        self
-    }
-
     pub fn with_max_tokens(mut self, max_tokens: u32) -> Self {
         self.max_tokens = max_tokens;
         self
