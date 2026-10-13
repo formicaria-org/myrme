@@ -82,6 +82,23 @@ If no meeting is fixed, answer [].";
 /// two-sentence prompt returns `E = 1/2 C V^2` under this one. That is not a bug to prompt away
 /// here: it is precisely the variance the correction corpus exists to record, and a human fixing it
 /// is the signal.
+/// The instruction for a packet's nutrition label (`fm_agent_run::label`).
+///
+/// **A transcription, like the one below, and nothing more**: the columns kept with their headings,
+/// each number with its unit. Which column is per 100 g, what a serving weighs and what each figure
+/// is are read out of the answer by code, never asked of the model.
+///
+/// **Measured on `qwen3-vl-4b`, 2026-10-13**, on four photographs from Open Food Facts: two upright
+/// tables (per 100 ml with a can, per 100 g with a serving) came back exact at 768 and 1024 pixels;
+/// a table photographed sideways came back as invented figures; one printed as two tables side by
+/// side had its rows crossed even upright. So the person sees the picture beside the form.
+pub const LABEL_INSTRUCTION: &str = "Transcribe the nutrition table printed in this image as a \
+Markdown table, keeping every column and its heading exactly as printed (for example \"per 100 g\", \
+\"per serving 30 g\"). Copy each number with its unit exactly as printed. Transcribe only what is \
+actually there — do not correct, complete, convert, calculate or explain anything. Write [?] for \
+anything unreadable rather than guessing. If there is no nutrition table in the image, reply with \
+exactly: NO TABLE. Reply with the table and nothing else.";
+
 pub const IMAGE_INSTRUCTION: &str = "Transcribe everything written in this image into Markdown, keeping \
 its original structure and order. Write mathematics as LaTeX ($...$ inline, $$...$$ displayed), and \
 put code or pseudocode in a fenced code block with its indentation. For a plot or diagram, \

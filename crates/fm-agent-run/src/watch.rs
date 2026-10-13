@@ -78,7 +78,7 @@ pub fn serve_loop<V: VaultAccess>(
     let poll_max = Duration::from_secs(5);
     let mut interval = poll_min;
     let mut last_full_scan = Instant::now();
-    agent.fm.present(name); // show online at once, before the first heartbeat tick
+    agent.fm.present(name, agent.image_reader().as_ref()); // show online at once, before the first heartbeat tick
     let mut last_hb = Instant::now();
     loop {
         std::thread::sleep(interval);
@@ -92,7 +92,7 @@ pub fn serve_loop<V: VaultAccess>(
 
         // Heartbeat at most every HEARTBEAT, independent of the (backing-off) poll cadence.
         if last_hb.elapsed() >= HEARTBEAT {
-            agent.fm.present(name);
+            agent.fm.present(name, agent.image_reader().as_ref());
             last_hb = Instant::now();
         }
 

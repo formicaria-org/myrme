@@ -75,8 +75,10 @@ pub trait VaultAccess {
     fn activity(&self, disc: &str, stage: &str, question: &str);
     /// Clear a discussion's status — the reply landed, or the turn errored/timed out. Best-effort.
     fn activity_done(&self, disc: &str);
-    /// Heartbeat: "this agent is alive right now," by name. Best-effort.
-    fn present(&self, name: &str);
+    /// Heartbeat: "this agent is alive right now," by name — and, when something here can read a
+    /// picture, which model server that is, so the app can hand it a label (`crate::label`).
+    /// Best-effort.
+    fn present(&self, name: &str, reader: Option<&crate::ImageReader>);
 
     // ── the meeting pass (`decisions.md` 2026-10-09, *the assistant proposes meetings*) ──────────
     // Defaulted, so a vault without mail (the phone, the test fakes) needs nothing and the pass simply
@@ -306,7 +308,9 @@ impl VaultAccess for FmServe {
         let _ = self.call("agent_activity", json!({ "discussion": disc, "done": true }));
     }
 
-    fn present(&self, name: &str) {
-        let _ = self.call("agent_present", json!({ "name": name }));
+    fn present(&self, name: &str, reader: Option<&crate::ImageReader>) {
+        let reader =
+            reader.map(|r| json!({ "port": r.port, "model": r.model, "labels": r.labels }));
+        let _ = self.call("agent_present", json!({ "name": name, "reader": reader }));
     }
 }

@@ -367,3 +367,29 @@ prompt "Transcribe the text in this image exactly.". The app was closed; MemAvai
   took 10.5 s and 1027 tokens: the model tiles a large image up to a fixed budget, so a full-size
   phone photo costs the same as a 2048 px one. (Enlarged typeset, not a real photograph.)
 - Against PaddleOCR-VL on the same phone: **145–224 s → 3–5 s**, and 2.0 GB → 1.2 GB.
+
+### laptop and phone model · nutrition label → table · 2026-10-13 (measured on this laptop)
+Nine photographs of nutrition labels from Open Food Facts (their volunteers' pictures, fetched one
+product at a time and not kept in the repository), each drawn no larger than 1024 px on its long
+side as the app sends it; `LABEL_INSTRUCTION`, `max_tokens` 900, `--no-mmproj-offload`. Scored by the
+app's own reader (`ui/src/lib/food/labelText.ts`) against the figures Open Food Facts holds for the
+product: energy, fat, saturates, carbohydrate, sugars, protein, salt (56 figures; one product has none).
+
+| model | size sent | figures right | wrong | empty | packets wholly right | s per picture |
+|---|---|---|---|---|---|---|
+| qwen3-vl-4b Q4 (RTX 3050, projector on the CPU) | 1024 | 48 | **0** | 8 | 7 of 8 | 12–37 |
+| lfm2.5-vl-450m Q8 (CPU) | 1024 | 25 | 9 | 22 | 2 of 8 | 3–6 |
+| lfm2.5-vl-450m Q8 (CPU) | 1536 | 30 | 4 | 22 | 2 of 8 | 2–22 |
+| lfm2.5-vl-450m Q8 (CPU) | full | 25 | 10 | 21 | 2 of 8 | 3–22 |
+
+- **qwen3-vl-4b put no wrong figure in the form.** Its 8 empty: one can whose table is printed
+  sideways on (nutrients as columns) ran on to the token limit and was refused whole; one line
+  of one label. A table photographed sideways comes back invented or runs on; turned upright it reads.
+- **lfm2.5-vl-450m is not fit for this.** Under its own catalogue instruction it *describes* the
+  packet. Under the label instruction it returns a well-formed table of figures that are often
+  not the packet's (almonds: fat 0.6 g for 53.3 g). Size does not rescue it: more pixels gave
+  different errors, not fewer. Hence `reads_labels` in `models.toml`, set for qwen3-vl-4b only.
+- **Time grows with the picture**: the same label took 17 s at 768 px, 33 s at 1024 and 74 s at
+  1700 on qwen3-vl-4b, all three exact. 1024 is what the page sends.
+- Not measured: a picture taken through the app's own camera button, a phone, handwriting, any
+  label in a script other than Latin.

@@ -23,6 +23,8 @@ pub use fm_agent;
 pub mod fetch;
 pub mod fmserve;
 pub mod installed;
+/// A packet's nutrition label read off a photograph: one transcription, written nowhere.
+pub mod label;
 pub mod manifest;
 /// The meeting pass: email conversations → proposed meetings, on its own (`decisions.md` 2026-10-09).
 pub mod meetings;
@@ -70,6 +72,9 @@ pub struct Agent<V: VaultAccess> {
     pub vision: bool,
     /// The main model's own instruction for reading an image, from the catalogue (`read_prompt`).
     pub read_prompt: Option<String>,
+    /// Whether the main model was measured fit to read a nutrition label (the catalogue's
+    /// `reads_labels`). A model that can see is not thereby one that can read a table of figures.
+    pub reads_labels: bool,
     /// A **dedicated image reader** running beside the main model, when this device has one. It is
     /// tried first; see [`Agent::image_reader`]. `None` everywhere today — the slot the rule needs,
     /// filled when a specialist is adopted.
@@ -89,6 +94,8 @@ pub struct ImageReader {
     pub port: u16,
     pub model: String,
     pub prompt: Option<String>,
+    /// Whether it was measured fit to read a packet's nutrition label ([`label`]).
+    pub labels: bool,
 }
 
 impl<V: VaultAccess> Agent<V> {
@@ -103,6 +110,7 @@ impl<V: VaultAccess> Agent<V> {
                 port: self.model_port,
                 model: self.model.clone(),
                 prompt: self.read_prompt.clone(),
+                labels: self.reads_labels,
             })
         })
     }
@@ -662,7 +670,7 @@ mod tests {
         }
         fn activity(&self, _: &str, _: &str, _: &str) {}
         fn activity_done(&self, _: &str) {}
-        fn present(&self, _: &str) {}
+        fn present(&self, _: &str, _: Option<&crate::ImageReader>) {}
     }
 
     fn agent(fm: FakeVault) -> Agent<FakeVault> {
@@ -676,6 +684,7 @@ mod tests {
             whisper_model: "ggml-base.en".into(),
             vision: false,
             read_prompt: None,
+            reads_labels: false,
             image_specialist: None,
             max_reply_chars: 600,
             history_budget: 4000,
@@ -697,7 +706,13 @@ mod tests {
         assert_eq!((main.port, main.model.as_str()), (8081, "test"));
         assert_eq!(main.prompt.as_deref(), Some("Transcribe exactly."), "its own instruction");
 
-        let ocr = ImageReader { port: 8090, model: "reader".into(), prompt: Some("OCR:".into()) };
+        assert!(!main.labels, "and seeing is not reading labels, until the catalogue says so");
+        let ocr = ImageReader {
+            port: 8090,
+            model: "reader".into(),
+            prompt: Some("OCR:".into()),
+            labels: true,
+        };
         a.image_specialist = Some(ocr.clone());
         assert_eq!(a.image_reader(), Some(ocr.clone()), "a dedicated reader wins over the model");
 
@@ -896,7 +911,7 @@ mod tests {
             }
             fn activity(&self, _: &str, _: &str, _: &str) {}
             fn activity_done(&self, _: &str) {}
-            fn present(&self, _: &str) {}
+            fn present(&self, _: &str, _: Option<&crate::ImageReader>) {}
         }
 
         let a = Agent {
@@ -909,6 +924,7 @@ mod tests {
             whisper_model: "ggml-base.en".into(),
             vision: false,
             read_prompt: None,
+            reads_labels: false,
             image_specialist: None,
             max_reply_chars: 600,
             history_budget: 4000,
@@ -998,7 +1014,7 @@ mod tests {
             }
             fn activity(&self, _: &str, _: &str, _: &str) {}
             fn activity_done(&self, _: &str) {}
-            fn present(&self, _: &str) {}
+            fn present(&self, _: &str, _: Option<&crate::ImageReader>) {}
         }
 
         let a = Agent {
@@ -1011,6 +1027,7 @@ mod tests {
             whisper_model: "ggml-base.en".into(),
             vision: false,
             read_prompt: None,
+            reads_labels: false,
             image_specialist: None,
             max_reply_chars: 600,
             history_budget: 4000,
@@ -1095,7 +1112,7 @@ mod tests {
             }
             fn activity(&self, _: &str, _: &str, _: &str) {}
             fn activity_done(&self, _: &str) {}
-            fn present(&self, _: &str) {}
+            fn present(&self, _: &str, _: Option<&crate::ImageReader>) {}
         }
 
         let fm = Fm(std::cell::RefCell::new(Vec::new()));
@@ -1109,6 +1126,7 @@ mod tests {
             whisper_model: String::new(),
             vision: false,
             read_prompt: None,
+            reads_labels: false,
             image_specialist: None,
             max_reply_chars: 2000,
             history_budget: 4000,

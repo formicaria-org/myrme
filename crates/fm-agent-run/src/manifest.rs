@@ -56,6 +56,10 @@ pub struct Model {
     /// 2026-10-10, the house instruction took LFM2.5-VL-450M from 1.00 to 0.63 on plain typed notes,
     /// where a one-line instruction read them exactly (`agents/bench/results.md`).
     pub read_prompt: Option<String>,
+    /// Whether this model has been **measured** reading packets' nutrition labels and found fit
+    /// for it (`crate::label`). Unset ⇒ no: a model nobody has measured is not handed a label,
+    /// because a small one answers with a table of invented figures that looks like a reading.
+    pub reads_labels: bool,
 }
 
 /// The runtime defaults and the model list from `models.toml`.
@@ -167,6 +171,7 @@ impl Manifest {
                     bytes: None,
                     mmproj_bytes: None,
                     read_prompt: None,
+                    reads_labels: false,
                 });
                 continue;
             }
@@ -191,6 +196,7 @@ impl Manifest {
                     "bytes" => m.bytes = val.parse().ok(),
                     "mmproj_bytes" => m.mmproj_bytes = val.parse().ok(),
                     "read_prompt" => m.read_prompt = Some(val.to_string()),
+                    "reads_labels" => m.reads_labels = val == "true",
                     _ => {}
                 },
                 // Top-level (before any [[models]]).
@@ -391,6 +397,11 @@ impl Manifest {
         self.model(name)?.read_prompt.clone()
     }
 
+    /// Whether the catalogue records this model as fit to read a nutrition label.
+    pub fn reads_labels(&self, name: &str) -> bool {
+        self.model(name).is_some_and(|m| m.reads_labels)
+    }
+
     /// The projector's URL, from the **same pinned commit as the weights**.
     ///
     /// `None` for a text-only model, which is not an error: `/transcribe` reports that images
@@ -437,6 +448,9 @@ mod tests {
         let m = Manifest::parse(include_str!("../../../agents/models.toml"));
         assert_eq!(m.model_ctx("qwen3-vl-4b"), 8192);
         assert_eq!(m.model("qwen3-vl-4b").and_then(|x| x.mmproj_offload), Some(false));
+        // Who may be handed a nutrition label is a measurement, written beside the model it is of.
+        assert!(m.reads_labels("qwen3-vl-4b"), "measured fit, 2026-10-13");
+        assert!(!m.reads_labels("lfm2.5-vl-450m"), "measured unfit: 2 packets of 9");
         assert_eq!(m.model_ctx("lfm2.5-1.2b"), m.ctx, "the phone's model is unchanged");
         assert_eq!(m.ctx, 2048, "the global default is unchanged");
     }
@@ -574,7 +588,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let m = Manifest::parse(
             "[[models]]\nname = \"sees\"\nfile = \"a.gguf\"\nmmproj = \"p.gguf\"\nmmproj_offload = false\n\
-             read_prompt = \"Transcribe the text in this image exactly.\"\n\
+             read_prompt = \"Transcribe the text in this image exactly.\"\nreads_labels = true\n\
              [[models]]\nname = \"blind\"\nfile = \"b.gguf\"\n",
         );
         let args = |c: &std::process::Command| {
@@ -603,6 +617,8 @@ mod tests {
             Some("Transcribe the text in this image exactly.")
         );
         assert_eq!(m.read_prompt("blind"), None);
+        assert!(m.reads_labels("sees"), "marked in the catalogue");
+        assert!(!m.reads_labels("blind") && !m.reads_labels("nobody"), "unmarked means no");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

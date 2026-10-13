@@ -290,7 +290,7 @@ mod tests {
         }
         fn activity(&self, _: &str, _: &str, _: &str) {}
         fn activity_done(&self, _: &str) {}
-        fn present(&self, _: &str) {}
+        fn present(&self, _: &str, _: Option<&crate::ImageReader>) {}
         fn mail_conversations(&self) -> Result<Value, String> {
             Ok(json!({
                 "conversations": [{ "id": "C1", "title": "Revisione", "last": "2026-10-07T11:00", "start": null }],
@@ -345,6 +345,7 @@ mod tests {
             whisper_model: String::new(),
             vision: false,
             read_prompt: None,
+            reads_labels: false,
             image_specialist: None,
             max_reply_chars: 1000,
             history_budget: 1000,

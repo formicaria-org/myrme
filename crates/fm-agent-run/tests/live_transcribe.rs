@@ -29,6 +29,7 @@ fn it_transcribes_through_the_real_fmserve_and_whisper() {
         whisper_model: "ggml-base.en".into(),
         vision: false,
         read_prompt: None,
+        reads_labels: false,
         image_specialist: None,
         max_reply_chars: 2000,
         history_budget: 4000,
