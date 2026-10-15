@@ -32,6 +32,7 @@ pub mod preflight;
 pub mod prompts;
 pub mod search;
 pub mod textmatch;
+pub mod titles;
 pub mod transcribe;
 pub mod watchdog;
 

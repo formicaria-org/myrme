@@ -24,16 +24,29 @@ use crate::Agent;
 
 /// The fence around the assistant's meeting block in a conversation note.
 const TAG: &str = "fm:meeting";
+/// The tag a called-off meeting carries — the same one the calendars give a cancelled event.
+const CANCELLED: &str = "cancelled";
+
+/// A title already in the "Person — who they are" form: given by the assistant, or by the person.
+fn named(title: &str) -> bool {
+    title.contains(" — ")
+}
 
 /// Bumped whenever the way meetings are found changes, so every conversation is read once more under
 /// the new rules. What was already proposed is kept, so nothing is asked twice. 2: the date is found
-/// by Rust in the sentence (or the email before it), not taken from the model (2026-10-09).
-const PASS_VERSION: u64 = 2;
+/// by Rust in the sentence (or the email before it), not taken from the model (2026-10-09). 3: the
+/// question is where the meetings stand now, our box is hidden from the model, and a near-copied quote
+/// stands as the email's own sentence (2026-10-15) — so a reply the old rules misread (a moved meeting
+/// dropped over "16th of October") is read again and proposed. 4: on such a re-read, a call-off that is
+/// still the conversation's latest word is proposed too (2026-10-15).
+const PASS_VERSION: u64 = 4;
 
 #[derive(Default)]
 struct Memory {
     /// conversation id -> (`mail_last` when last read, meeting starts already proposed)
     seen: HashMap<String, (String, HashSet<String>)>,
+    /// Conversations already given a title — asked once, accepted or not (`fm_agent::titles`).
+    titled: HashSet<String>,
 }
 
 impl Memory {
@@ -58,18 +71,27 @@ impl Memory {
                 .filter_map(|s| s.as_str().map(str::to_string))
                 .collect();
             m.seen.insert(id.clone(), (last, proposed));
+            if e["titled"].as_bool() == Some(true) {
+                m.titled.insert(id.clone());
+            }
         }
         m
     }
 
     fn save(&self, path: &Path) {
-        let mut v: serde_json::Map<String, Value> = self
-            .seen
-            .iter()
-            .map(|(id, (last, proposed))| {
+        let empty = (String::new(), HashSet::new());
+        let ids: HashSet<&String> = self.seen.keys().chain(self.titled.iter()).collect();
+        let mut v: serde_json::Map<String, Value> = ids
+            .into_iter()
+            .map(|id| {
+                let (last, proposed) = self.seen.get(id).unwrap_or(&empty);
                 let mut p: Vec<&String> = proposed.iter().collect();
                 p.sort();
-                (id.clone(), json!({ "last": last, "proposed": p }))
+                let mut e = json!({ "last": last, "proposed": p });
+                if self.titled.contains(id) {
+                    e["titled"] = json!(true);
+                }
+                (id.clone(), e)
             })
             .collect();
         v.insert("_version".into(), json!(PASS_VERSION));
@@ -95,8 +117,17 @@ fn block(m: &Meeting, model: &str) -> String {
     };
     let place = m.place.as_deref().map(|p| format!(" · {p}")).unwrap_or_default();
     let quote = fm_agent::adjunct::defang(&m.quote, TAG).replace('\n', " ");
+    // Who said it, and when: "proposed by me, not answered yet" is read at a glance from this.
+    let said = match (&m.said_by, &m.sent_at) {
+        (Some(by), Some(at)) => format!(" — {}, {}", by, at.replace('T', " ")),
+        (Some(by), None) => format!(" — {by}"),
+        _ => String::new(),
+    };
+    let said = fm_agent::adjunct::defang(&said, TAG);
+    let head =
+        if m.cancelled { format!("Called off — {when}") } else { format!("{when}{place}") };
     format!(
-        "{open}\n> [!note] Meeting found by the assistant\n> {when}{place}\n> «{quote}»\n{end}\n",
+        "{open}\n> [!note] Meeting found by the assistant\n> {head}\n> «{quote}»{said}\n{end}\n",
         open = fm_agent::adjunct::open_mark(TAG, model),
         end = fm_agent::adjunct::end_mark(TAG),
     )
@@ -140,6 +171,7 @@ impl<V: VaultAccess> Agent<V> {
                 .collect()
         };
         let taken = strings(&list["taken"]);
+        let me = list["me"].as_str();
         let mut mem = Memory::load(memory);
         let today_s =
             format!("{:04}-{:02}-{:02}", today.year(), u8::from(today.month()), today.day());
@@ -154,11 +186,14 @@ impl<V: VaultAccess> Agent<V> {
             let title = conv["title"].as_str().unwrap_or("");
             let note = self.fm.get(id)?;
             let body = note["body"].as_str().unwrap_or_default().to_string();
+            // The exchange alone: our own box repeats last time's answer, and a small model read it
+            // first and gave it again over a later email that moved the meeting.
+            let emails = meetings::without_box(&body);
 
             let answer = llm
                 .complete(
                     fm_agent::prompts::MEETINGS_INSTRUCTION,
-                    &meetings::user_prompt(title, &body),
+                    &meetings::user_prompt(title, &emails),
                 )
                 .map_err(|e| format!("the model did not answer for \u{201c}{title}\u{201d}: {e}"))?
                 .content;
@@ -166,17 +201,25 @@ impl<V: VaultAccess> Agent<V> {
             let mut ok = Vec::new();
             let mut dropped = 0usize;
             for f in &found {
-                match meetings::resolve(f, &body, today) {
+                match meetings::resolve(f, &emails, today) {
                     Ok(m) => ok.push(m),
                     Err(_) => dropped += 1,
                 }
             }
 
-            let start = conv["start"].as_str();
-            let current = start.map(|s| (s, s >= today_s.as_str()));
+            let current = conv["start"].as_str().map(|s| meetings::Current {
+                start: s,
+                upcoming: s >= today_s.as_str(),
+                place: conv["location"].as_str().filter(|p| !p.is_empty()),
+                latest: Some(last),
+            });
             let linked = strings(&list["linked"][id]);
-            let proposed = mem.seen.get(id).map(|(_, p)| p.clone()).unwrap_or_default();
-            let plan = meetings::plan(ok, current, &taken, &linked, &proposed);
+            let (read_to, proposed) = mem.seen.get(id).cloned().unwrap_or_default();
+            // Where the last read stopped: what came after it is news. Empty after a change of rules,
+            // when the whole conversation is read again as history.
+            let since = Some(read_to.as_str()).filter(|s| !s.is_empty());
+            let plan = meetings::plan(ok, current, since, &taken, &linked, &proposed);
+            let new_title = self.title_once(llm, &mut mem, id, title, &emails, me);
 
             let email = format!("{}@fm-agents.local", self.model);
             let origin = Origin {
@@ -188,17 +231,39 @@ impl<V: VaultAccess> Agent<V> {
             let mut made = 0usize;
             if let Some(m) = &plan.conversation {
                 let new_body = with_block(&body, &block(m, &self.model), &self.model);
+                // A new time also lifts an earlier call-off: the meeting is on again.
                 let mut props = json!({
                     "start": m.start_stamp(),
                     "due": m.due_stamp(),
                     "addTags": ["meeting"],
+                    "removeTags": [CANCELLED],
                 });
                 if let Some(p) = &m.place {
                     props["location"] = json!(p);
                 }
+                if let Some(t) = &new_title {
+                    props["title"] = json!(t);
+                }
                 self.fm.propose_with(id, &new_body, &props, &self.model, &email, &origin)?;
                 now_proposed.insert(m.start_stamp());
                 made += 1;
+            }
+            if let Some(m) = &plan.cancel {
+                // Marked, never deleted — the calendars' rule: the person may have written in the note,
+                // and the date stays readable as the meeting that did not happen.
+                let new_body = with_block(&body, &block(m, &self.model), &self.model);
+                let mut props = json!({ "addTags": [CANCELLED] });
+                if let Some(t) = &new_title {
+                    props["title"] = json!(t);
+                }
+                self.fm.propose_with(id, &new_body, &props, &self.model, &email, &origin)?;
+                made += 1;
+            }
+            if plan.conversation.is_none() && plan.cancel.is_none() {
+                if let Some(t) = &new_title {
+                    self.propose_title(id, &body, t)?;
+                    made += 1;
+                }
             }
             for m in &plan.new {
                 let quote = fm_agent::adjunct::defang(&m.quote, TAG).replace('\n', " ");
@@ -230,7 +295,70 @@ impl<V: VaultAccess> Agent<V> {
                 "read \u{201c}{title}\u{201d}: {made} meeting proposal(s){skipped}"
             )));
         }
+        // No new mail anywhere: give one conversation still without a proper title its title.
+        for conv in list["conversations"].as_array().into_iter().flatten() {
+            let Some(id) = conv["id"].as_str() else { continue };
+            let title = conv["title"].as_str().unwrap_or("");
+            if mem.titled.contains(id) || named(title) {
+                continue;
+            }
+            let note = self.fm.get(id)?;
+            let body = note["body"].as_str().unwrap_or_default().to_string();
+            let emails = meetings::without_box(&body);
+            let new_title = self.title_once(llm, &mut mem, id, title, &emails, me);
+            if let Some(t) = &new_title {
+                self.propose_title(id, &body, t)?;
+            }
+            mem.save(memory);
+            return Ok(Some(match new_title {
+                Some(t) => format!("proposed the title \u{201c}{t}\u{201d}"),
+                None => format!("no title found for \u{201c}{title}\u{201d}"),
+            }));
+        }
         Ok(None)
+    }
+
+    /// Ask once for a conversation's title (`fm_agent::titles`), and remember it was asked, whatever
+    /// the answer: a title is not asked again at every new email. `None` when already asked, when the
+    /// note already reads "Person — …", or when the answer does not pass the checks.
+    fn title_once<L: LlmStep>(
+        &self,
+        llm: &L,
+        mem: &mut Memory,
+        id: &str,
+        title: &str,
+        emails: &str,
+        me: Option<&str>,
+    ) -> Option<String> {
+        if mem.titled.contains(id) || named(title) {
+            return None;
+        }
+        mem.titled.insert(id.to_string());
+        let ask = fm_agent::titles::instruction(me.unwrap_or("the mailbox's owner"));
+        let answer = llm.complete(&ask, &meetings::user_prompt(title, emails)).ok()?.content;
+        let (name, about) = fm_agent::titles::parse(&answer)?;
+        fm_agent::titles::check(&name, &about, emails, me)
+    }
+
+    /// Propose `title` alone — over the conversation's proposal still waiting, if it has one, so its
+    /// date and text are kept (the props of a revision go over the stored ones).
+    fn propose_title(&self, id: &str, body: &str, title: &str) -> Result<(), String> {
+        let body = self.fm.open_proposal_body(id).unwrap_or_else(|| body.to_string());
+        let origin = Origin {
+            tool: "titles",
+            query: Some(format!("a title for \u{201c}{title}\u{201d}")),
+            sources: vec![format!("note:{id}")],
+        };
+        let email = format!("{}@fm-agents.local", self.model);
+        self.fm.propose_with(
+            id,
+            &body,
+            &json!({ "title": title }),
+            &self.model,
+            &email,
+            &origin,
+        )?;
+        Ok(())
     }
 }
 
@@ -392,7 +520,11 @@ mod tests {
         let a = agent();
         let llm = Canned(ANSWER.into(), RefCell::new(0));
         a.meeting_pass(&llm, &mem, date!(2026 - 10 - 06)).unwrap();
-        assert_eq!(*llm.1.borrow(), 1, "read again under the new rules");
+        assert_eq!(
+            *llm.1.borrow(),
+            2,
+            "read again under the new rules (its meetings, and a title)"
+        );
         let calls = a.fm.calls.borrow();
         assert!(
             calls.iter().all(|(_, v)| v["props"]["start"] != "2026-10-08T15:00"),
@@ -407,6 +539,44 @@ mod tests {
         let llm = Canned(ANSWER.into(), RefCell::new(0));
         a.meeting_pass(&llm, &mem, date!(2026 - 10 - 06)).unwrap();
         assert_eq!(a.meeting_pass(&llm, &mem, date!(2026 - 10 - 06)).unwrap(), None);
-        assert_eq!(*llm.1.borrow(), 1, "the model is asked once per new message, not every minute");
+        assert_eq!(
+            *llm.1.borrow(),
+            2,
+            "the meetings once per new message and the title once, not every minute"
+        );
+    }
+
+    /// A model answering the title question one way and the meetings question another.
+    struct ByAsk(RefCell<usize>);
+    impl LlmStep for ByAsk {
+        fn complete(&self, system: &str, _u: &str) -> Result<LlmResponse, AgentError> {
+            *self.0.borrow_mut() += 1;
+            let content = if system.contains("from the mailbox of") {
+                r#"{"name": "Maria", "about": "Master student, robotics project"}"#
+            } else {
+                "[]"
+            };
+            Ok(LlmResponse { content: content.into(), finish_reason: None, usage: None })
+        }
+    }
+
+    #[test]
+    fn a_conversation_is_proposed_a_title_once() {
+        let mem = scratch();
+        let a = agent();
+        let llm = ByAsk(RefCell::new(0));
+        a.meeting_pass(&llm, &mem, date!(2026 - 10 - 06)).unwrap();
+        {
+            let calls = a.fm.calls.borrow();
+            assert_eq!(calls.len(), 1, "no meeting, so the title alone: {calls:?}");
+            assert_eq!(
+                calls[0].1["props"],
+                json!({ "title": "Maria — Master student, robotics project" })
+            );
+            assert_eq!(calls[0].1["body"], BODY, "the text is left as it is");
+        }
+        // Asked once: nothing more, with or without new mail.
+        assert_eq!(a.meeting_pass(&llm, &mem, date!(2026 - 10 - 06)).unwrap(), None);
+        assert_eq!(a.fm.calls.borrow().len(), 1);
     }
 }

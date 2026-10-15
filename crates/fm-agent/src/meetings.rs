@@ -22,9 +22,9 @@
 //!
 //! The person accepts or rejects every one of them. Nothing here writes.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
-use crate::textmatch::loose;
+use crate::textmatch::{fold, loose};
 
 use serde_json::Value;
 use time::{Date, Duration, Month, Time, Weekday};
@@ -32,6 +32,9 @@ use time::{Date, Duration, Month, Time, Weekday};
 /// One meeting as the model reported it: words copied from the email.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Found {
+    /// `"cancelled"` when the exchange calls the meeting off with no new time; anything else is a
+    /// meeting fixed now.
+    pub status: String,
     pub title: String,
     pub date: String,
     pub time: String,
@@ -49,6 +52,32 @@ pub struct Meeting {
     pub end: Option<Time>,
     pub place: Option<String>,
     pub quote: String,
+    /// When the email the sentence is in was sent (`2026-10-15T17:46`, the form `mail_last` takes),
+    /// so a meeting from a message that arrived since the last read can be told from history.
+    pub sent_at: Option<String>,
+    /// Who wrote that email, from its heading — shown with the quote, so the person sees at a glance
+    /// whether a time is theirs and still unanswered, or the other side's.
+    pub said_by: Option<String>,
+    /// The sentence calls the meeting off, with no new time. `day`/`start` then say *which* meeting,
+    /// when the sentence names it ("our meeting at 12 pm" tomorrow); see `dated`.
+    pub cancelled: bool,
+    /// Whether `day` was read from the emails. A cancellation that names no day ("I can't make it")
+    /// is about the meeting the conversation stands for.
+    pub dated: bool,
+}
+
+/// The meeting a conversation note stands for now, as [`plan`] weighs it.
+#[derive(Debug, Clone, Copy)]
+pub struct Current<'a> {
+    /// Its `start`.
+    pub start: &'a str,
+    /// Still ahead of us: a meeting already held is history and is never moved.
+    pub upcoming: bool,
+    /// Its `location`, if it has one.
+    pub place: Option<&'a str>,
+    /// When the conversation's last email was sent (`mail_last`). On a re-read, a call-off counts only
+    /// when it is in that email — the latest word — and that email fixes no other time.
+    pub latest: Option<&'a str>,
 }
 
 impl Meeting {
@@ -105,6 +134,32 @@ fn tokens_of(s: &str) -> usize {
 
 /// The user turn: the conversation's title and its text, cut to [`TEXT_TOKENS`]. The **tail** is kept,
 /// because the final arrangement is what matters and the later messages carry it.
+/// The conversation without the assistant's own box (`<!-- fm:meeting … -->` … `<!-- fm:meeting:end -->`).
+///
+/// **The box is our writing, not the exchange**, and it repeats the arrangement the assistant found
+/// last time. Left in, a small model read its own earlier answer first and reported it again over a
+/// later email that moved the meeting (all three moved meetings, the owner's mail, 2026-10-15); and a
+/// quote matched inside it had no email to date it from. Both the model and [`resolve`] read this.
+pub fn without_box(body: &str) -> String {
+    let mut out = String::with_capacity(body.len());
+    let mut inside = false;
+    for line in body.split_inclusive('\n') {
+        let t = line.trim();
+        if !inside && t.starts_with("<!-- fm:meeting") && !t.starts_with("<!-- fm:meeting:end") {
+            inside = true;
+            continue;
+        }
+        if inside {
+            if t.starts_with("<!-- fm:meeting:end") {
+                inside = false;
+            }
+            continue;
+        }
+        out.push_str(line);
+    }
+    out
+}
+
 pub fn user_prompt(title: &str, body: &str) -> String {
     let mut start = 0;
     while tokens_of(&body[start..]) > TEXT_TOKENS {
@@ -146,6 +201,7 @@ pub fn parse(answer: &str) -> Vec<Found> {
                     end: f("end"),
                     place: f("place"),
                     quote: f("quote"),
+                    status: f("status").to_lowercase(),
                 }
             })
             .filter(|f| !f.quote.is_empty())
@@ -157,21 +213,35 @@ pub fn parse(answer: &str) -> Vec<Found> {
 /// One email in the conversation note: the day it was sent, and its text, normalised.
 struct Block {
     sent: Option<Date>,
+    /// The heading's day and time, `2026-10-07T09:12` — compared with `mail_last` as text.
+    at: Option<String>,
+    /// The heading's sender.
+    by: Option<String>,
     text: String,
+    /// The same email as written (case kept, whitespace folded) — what a near quote is replaced by.
+    raw: String,
 }
 
 /// Split the note into its emails at their `### Name — YYYY-MM-DD HH:MM` headings. Anything above the
 /// first heading (the person's own writing, an assistant box) is a block with no sending day.
 fn blocks(body: &str) -> Vec<Block> {
-    let mut out = vec![Block { sent: None, text: String::new() }];
+    let mut out =
+        vec![Block { sent: None, at: None, by: None, text: String::new(), raw: String::new() }];
     let mut raw = String::new();
     for line in body.lines() {
         if let Some(head) = line.strip_prefix("### ") {
             if let Some(b) = out.last_mut() {
                 b.text = loose(&raw);
+                b.raw = fold(&raw);
             }
             raw.clear();
-            out.push(Block { sent: heading_day(head), text: String::new() });
+            out.push(Block {
+                sent: heading_day(head),
+                at: heading_at(head),
+                by: head.rsplit_once(" — ").map(|(n, _)| n.trim().to_string()),
+                text: String::new(),
+                raw: String::new(),
+            });
             continue;
         }
         raw.push_str(line);
@@ -179,8 +249,59 @@ fn blocks(body: &str) -> Vec<Block> {
     }
     if let Some(b) = out.last_mut() {
         b.text = loose(&raw);
+        b.raw = fold(&raw);
     }
     out
+}
+
+/// The sentences of an email as written, cut after `.`, `!` or `?` followed by a space.
+fn sentences(raw: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut start = 0;
+    let b = raw.as_bytes();
+    for (i, c) in raw.char_indices() {
+        if matches!(c, '.' | '!' | '?') && b.get(i + 1).is_none_or(|n| *n == b' ') {
+            out.push(raw[start..=i].trim());
+            start = i + 1;
+        }
+    }
+    out.push(raw[start..].trim());
+    out.retain(|s| !s.is_empty());
+    out
+}
+
+/// The email sentence a near quote stands for: the model copied a sentence *almost* exactly ("16th
+/// **of** October" for the "16th October" the email says — the owner's mail, 2026-10-15). At least
+/// five words, and at least 80% of the words in common with the closer of the two; the best match
+/// wins, a later email on a tie. Returns the email and the sentence as the email writes it — the
+/// date is then read from **that**, never from the model's version.
+fn near_sentence<'a>(quote: &str, all: &'a [Block]) -> Option<(&'a Block, String)> {
+    let words = |s: &str| -> HashSet<String> {
+        s.split_whitespace()
+            .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()).to_string())
+            .filter(|w| !w.is_empty())
+            .collect()
+    };
+    let q = words(quote);
+    if q.len() < 5 {
+        return None;
+    }
+    let mut best: Option<(f64, &Block, String)> = None;
+    for b in all.iter().filter(|b| b.at.is_some()) {
+        // Runs of one to three sentences: a model's quote often takes the next sentence along too.
+        let ss = sentences(&b.raw);
+        for i in 0..ss.len() {
+            for j in i..ss.len().min(i + 3) {
+                let run = ss[i..=j].join(" ");
+                let w = words(&loose(&run));
+                let score = q.intersection(&w).count() as f64 / q.len().max(w.len()) as f64;
+                if score >= 0.8 && best.as_ref().is_none_or(|(s, _, _)| score >= *s) {
+                    best = Some((score, b, run));
+                }
+            }
+        }
+    }
+    best.map(|(_, b, s)| (b, s))
 }
 
 /// `Maria Rossi — 2026-10-07 09:12` → 7 October 2026.
@@ -193,26 +314,47 @@ fn heading_day(head: &str) -> Option<Date> {
     Date::from_calendar_date(y, Month::try_from(m).ok()?, dd).ok()
 }
 
+/// `Maria Rossi — 2026-10-07 09:12` → `2026-10-07T09:12`, the form `mail_last` takes.
+fn heading_at(head: &str) -> Option<String> {
+    let (_, when) = head.rsplit_once(" — ").or_else(|| head.rsplit_once(" - "))?;
+    let w = when.trim();
+    let (d, t) = (w.get(..10)?, w.get(11..16)?);
+    (heading_day(head).is_some() && t.as_bytes().get(2) == Some(&b':')).then(|| format!("{d}T{t}"))
+}
+
 /// Check one reported meeting against the emails and date it. `body` is the conversation note.
 pub fn resolve(f: &Found, body: &str, today: Date) -> Result<Meeting, Dropped> {
     let nquote = loose(&f.quote);
     if nquote.is_empty() {
         return Err(Dropped::NotInEmail);
     }
-    let (sent, msg, at) = blocks(body)
-        .into_iter()
-        .find_map(|b| b.text.find(&nquote).map(|i| (b.sent, b.text.clone(), i)))
-        .ok_or(Dropped::NotInEmail)?;
+    // The first (oldest) email with the sentence: a later reply quoting it does not make it new.
+    let all = blocks(body);
+    // Exactly as copied, or else the email sentence it nearly copies — which then stands as the quote.
+    let (exact, quote) = match all.iter().find(|b| b.text.contains(&nquote)) {
+        Some(b) => (b, f.quote.clone()),
+        None => near_sentence(&nquote, &all).ok_or(Dropped::NotInEmail)?,
+    };
+    let nquote = loose(&quote);
+    let at = exact.text.find(&nquote).ok_or(Dropped::NotInEmail)?;
+    let (sent, sent_at, said_by, msg) =
+        (exact.sent, exact.at.clone(), exact.by.clone(), exact.text.clone());
     let anchor = sent.unwrap_or(today);
     let model_words = |w: &str, within: &str| {
         let n = loose(w);
         (!n.is_empty() && within.contains(&n)).then_some(n)
     };
+    let cancelled = f.status == "cancelled";
     let day = find_day(&nquote, anchor, false)
         .or_else(|| find_day(&msg[..at], anchor, true))
-        .or_else(|| model_words(&f.date, &msg).and_then(|n| read_day(&n, anchor)))
-        .ok_or(Dropped::NoDate)?;
-    if day < today {
+        .or_else(|| model_words(&f.date, &msg).and_then(|n| read_day(&n, anchor)));
+    // A meeting needs its day; a cancellation may name none ("I can't make it").
+    let (day, dated) = match day {
+        Some(d) => (d, true),
+        None if cancelled => (anchor, false),
+        None => return Err(Dropped::NoDate),
+    };
+    if dated && day < today {
         return Err(Dropped::Past);
     }
     // A time only from the sentence itself; none there → the meeting is for the day, which is true.
@@ -221,7 +363,12 @@ pub fn resolve(f: &Found, body: &str, today: Date) -> Result<Meeting, Dropped> {
     let end = start
         .and(model_words(&f.end, &nquote).and_then(|n| read_time(&n)))
         .filter(|e| Some(*e) > start);
-    let place = model_words(&f.place, &msg).map(|_| f.place.trim().to_string());
+    // The place may be in any email of the exchange — a link sent once, a confirmation that says "via
+    // the link you shared" — but only as copied, character for character.
+    let place = (!cancelled)
+        .then(|| all.iter().find_map(|b| model_words(&f.place, &b.text)))
+        .flatten()
+        .map(|_| f.place.trim().to_string());
     Ok(Meeting {
         title: if f.title.is_empty() {
             f.quote.chars().take(60).collect()
@@ -232,7 +379,11 @@ pub fn resolve(f: &Found, body: &str, today: Date) -> Result<Meeting, Dropped> {
         start,
         end,
         place,
-        quote: f.quote.clone(),
+        quote,
+        sent_at,
+        said_by,
+        cancelled,
+        dated,
     })
 }
 
@@ -247,9 +398,24 @@ fn tokens(text: &str) -> Vec<String> {
         .collect()
 }
 
-const DATE_GLUE: [&str; 14] = [
-    "of", "the", "il", "del", "di", "next", "prossimo", "prossima", "this", "questo", "questa",
-    "on", "lo", "l",
+const DATE_GLUE: [&str; 17] = [
+    "of",
+    "the",
+    "il",
+    "del",
+    "di",
+    "next",
+    "prossimo",
+    "prossima",
+    "this",
+    "questo",
+    "questa",
+    "on",
+    "lo",
+    "l",
+    "week",
+    "settimana",
+    "della",
 ];
 const RELATIVE: [&str; 7] =
     ["oggi", "today", "domani", "tomorrow", "dopodomani", "stasera", "tonight"];
@@ -521,6 +687,17 @@ pub fn read_day(phrase: &str, anchor: Date) -> Option<Date> {
                     .filter(|x| *x >= anchor)
             })
         }
+        // "next week on friday", "venerdì della settimana prossima": that weekday of the FOLLOWING
+        // week — written on Thursday 15 Oct, Friday 23 Oct, not the next day (the owner's mail,
+        // 2026-10-15).
+        (None, None, Some(w))
+            if (has("week") && has("next"))
+                || (has("settimana") && (has("prossima") || has("prossimo"))) =>
+        {
+            let monday =
+                anchor + Duration::days(7 - i64::from(anchor.weekday().number_days_from_monday()));
+            Some(monday + Duration::days(i64::from(w.number_days_from_monday())))
+        }
         // "giovedì", "lunedì prossimo", "next Monday".
         (None, None, Some(w)) => Some(next_weekday(anchor, w)),
         _ => None,
@@ -591,6 +768,14 @@ pub struct Plan {
     pub conversation: Option<Meeting>,
     /// Further meetings, each to become its own proposed meeting note.
     pub new: Vec<Meeting>,
+    /// A new email calls off the meeting the conversation stands for, and fixes no other time: the
+    /// note is proposed marked cancelled — kept, with its date, never deleted.
+    pub cancel: Option<Meeting>,
+}
+
+/// A meeting link — `https://…` — rather than a room or a word like "online".
+fn is_link(place: &str) -> bool {
+    place.starts_with("https://") || place.starts_with("http://")
 }
 
 /// Decide what to propose.
@@ -606,35 +791,89 @@ pub struct Plan {
 /// to the first meeting the exchange now fixes. A time already past is history and is never moved.
 /// Every further meeting becomes a proposed meeting note.
 pub fn plan(
-    mut meetings: Vec<Meeting>,
-    current: Option<(&str, bool)>,
+    meetings: Vec<Meeting>,
+    current: Option<Current<'_>>,
+    since: Option<&str>,
     taken: &HashSet<String>,
     linked: &HashSet<String>,
     proposed: &HashSet<String>,
 ) -> Plan {
+    let is_new =
+        |m: &Meeting| since.is_some_and(|since| m.sent_at.as_deref().is_some_and(|a| a > since));
+    let (cancels, mut meetings): (Vec<Meeting>, Vec<Meeting>) =
+        meetings.into_iter().partition(|m| m.cancelled);
+    // What the emails that arrived since the last read fix, by start — taken before the dedup below,
+    // which keeps whichever copy sorts first and so may keep the older sentence. On a first read
+    // (`since` unknown) nothing counts as new, and the rules are exactly those of the history.
+    // The last email fixes a time of its own ("can't make 12 — Friday?"): then it is a move, never a
+    // call-off.
+    let latest_fixes = current
+        .and_then(|c| c.latest)
+        .is_some_and(|l| meetings.iter().any(|m| m.sent_at.as_deref() == Some(l)));
+    let mut fresh: HashMap<String, Meeting> = HashMap::new();
+    for m in meetings.iter().filter(|m| is_new(m)) {
+        fresh.insert(m.start_stamp(), m.clone());
+    }
     meetings.sort_by_key(|m| (m.day, m.start));
     meetings.dedup_by_key(|m| m.start_stamp());
     let found: HashSet<String> = meetings.iter().map(Meeting::start_stamp).collect();
+    let asked = |s: &str| linked.contains(s) || proposed.contains(s) || taken.contains(s);
+    let mut out = Plan::default();
     // May the conversation note take a meeting? When undated, or when its upcoming time is gone.
     let mut open = match current {
         None => true,
-        Some((c, upcoming)) => upcoming && !found.contains(c),
+        Some(c) => c.upcoming && !found.contains(c.start),
     };
-    let mut out = Plan::default();
+    if let Some(c) = current.filter(|c| c.upcoming) {
+        if let Some(again) = fresh.get(c.start) {
+            // A new email names the same time again. If it gives a place the note does not have (a
+            // meeting link sent later), the note is proposed that place; the time stands. A word like
+            // "online" never replaces a link the note already has.
+            let place = again
+                .place
+                .as_deref()
+                .filter(|p| Some(*p) != c.place)
+                .filter(|p| is_link(p) || !c.place.is_some_and(is_link));
+            if place.is_some() {
+                out.conversation = Some(again.clone());
+            }
+        } else if !open {
+            // A new email fixes another time and does not repeat this one: the meeting moved. The
+            // old sentence is still in the history above it, which is why `found` alone cannot tell.
+            open = fresh.values().any(|m| !asked(&m.start_stamp()));
+        }
+    }
+    let known = |s: &str| current.is_some_and(|c| c.start == s) || asked(s);
+    // When a new email fixes a meeting not yet on the agenda, that is the one the note takes.
+    let prefer_fresh = fresh.keys().any(|s| !known(s));
     for m in meetings {
         let s = m.start_stamp();
-        let known = current.is_some_and(|(c, _)| c == s)
-            || linked.contains(&s)
-            || proposed.contains(&s)
-            || taken.contains(&s);
-        if known {
+        if known(&s) {
             continue;
         }
-        if open {
-            out.conversation = Some(m);
+        if open && (!prefer_fresh || fresh.contains_key(&s)) {
+            // Taken from the fresh copy, so the note quotes the email that moved it.
+            out.conversation = Some(fresh.remove(&s).unwrap_or(m));
             open = false;
         } else {
             out.new.push(m);
+        }
+    }
+    // Called off, with no new time fixed for it: by an email that arrived since the last read — or, on
+    // a re-read with no "since" (a change of rules), by the conversation's LAST email, so a call-off
+    // that is still the latest word is not missed, while an old one followed by more mail never
+    // counts. The sentence must name this meeting's time, or name none ("I can't make it").
+    if let Some(c) = current.filter(|c| c.upcoming) {
+        let latest_word = |m: &Meeting| {
+            since.is_none()
+                && !latest_fixes
+                && c.latest.is_some_and(|l| m.sent_at.as_deref() == Some(l))
+        };
+        if out.conversation.is_none() && fresh.is_empty() {
+            out.cancel = cancels
+                .into_iter()
+                .filter(|m| is_new(m) || latest_word(m))
+                .find(|m| !m.dated || m.start_stamp() == c.start || m.day.to_string() == c.start);
         }
     }
     out
@@ -664,6 +903,11 @@ mod tests {
         assert_eq!(d("domani", sent), Some(date!(2026 - 10 - 07)));
         assert_eq!(d("dopodomani", sent), Some(date!(2026 - 10 - 08)));
         assert_eq!(d("16 ottobre", sent), Some(date!(2026 - 10 - 16)));
+        let thu = date!(2026 - 10 - 15);
+        assert_eq!(d("next week on friday", thu), Some(date!(2026 - 10 - 23)), "not tomorrow");
+        assert_eq!(d("venerdì della settimana prossima", thu), Some(date!(2026 - 10 - 23)));
+        assert_eq!(d("la prossima settimana lunedì", thu), Some(date!(2026 - 10 - 19)));
+        assert_eq!(d("next friday", thu), Some(date!(2026 - 10 - 16)), "as before: the next one");
         assert_eq!(d("venerdì 16 ottobre", sent), Some(date!(2026 - 10 - 16)));
         assert_eq!(d("October 16th", sent), Some(date!(2026 - 10 - 16)));
         assert_eq!(d("16 ott", sent), Some(date!(2026 - 10 - 16)));
@@ -725,6 +969,40 @@ mod tests {
             resolve(&f, BODY, date!(2026 - 10 - 06)).unwrap().start_stamp(),
             "2026-10-28T10:00"
         );
+    }
+
+    /// Paolo's reply, 2026-10-15: the model wrote "16th **of** October" where the email says "16th
+    /// October". The email's own sentence stands; an invented one is still refused.
+    #[test]
+    fn a_near_copy_stands_as_the_emails_own_sentence_and_an_invention_does_not() {
+        let body = "### Anna — 2026-10-15 17:40\n\nI have to move it online tomorrow at 16:30.\n\n\
+                    ### Paolo Conti — 2026-10-15 20:51\n\nThank you. Tomorrow (16th October) at 16:30 \
+                    Singapore time works well for me. I'll join via the Zoom link.\n";
+        let f = found(
+            "Tomorrow (16th of October) at 16:30 Singapore time works well for me. I'll join via the Zoom link.",
+            "16th of October",
+            "16:30",
+        );
+        let m = resolve(&f, body, date!(2026 - 10 - 15)).unwrap();
+        assert_eq!(m.start_stamp(), "2026-10-16T16:30");
+        assert_eq!(
+            m.quote,
+            "Tomorrow (16th October) at 16:30 Singapore time works well for me. I'll join via the Zoom link."
+        );
+        assert_eq!(m.said_by.as_deref(), Some("Paolo Conti"));
+
+        let f = found("Tomorrow at 9 we meet in the library to finish it.", "tomorrow", "9");
+        assert_eq!(resolve(&f, body, date!(2026 - 10 - 15)), Err(Dropped::NotInEmail));
+    }
+
+    #[test]
+    fn a_meeting_carries_when_its_email_was_sent() {
+        let f = found("ci vediamo giovedì alle 15 nel mio ufficio.", "giovedì", "alle 15");
+        let m = resolve(&f, BODY, date!(2026 - 10 - 06)).unwrap();
+        assert_eq!(m.sent_at.as_deref(), Some("2026-10-06T09:12"));
+        let f = found("E il 28 alle 10 facciamo il punto con Anna.", "il 28", "alle 10");
+        let m = resolve(&f, BODY, date!(2026 - 10 - 06)).unwrap();
+        assert_eq!(m.sent_at.as_deref(), Some("2026-10-07T11:00"), "Luca's message, the newer one");
     }
 
     #[test]
@@ -835,7 +1113,235 @@ mod tests {
             end: None,
             place: None,
             quote: "q".into(),
+            sent_at: None,
+            said_by: None,
+            cancelled: false,
+            dated: true,
         }
+    }
+
+    fn cur<'a>(start: &'a str, upcoming: bool, place: Option<&'a str>) -> Option<Current<'a>> {
+        Some(Current { start, upcoming, place, latest: None })
+    }
+
+    /// A meeting from an email sent at `at`.
+    fn said(day: Date, h: u8, at: &str, place: Option<&str>) -> Meeting {
+        Meeting { sent_at: Some(at.into()), place: place.map(Into::into), ..meeting(day, h) }
+    }
+
+    /// The owner's case: 16 Oct 14:00 fixed on 2 Oct, still in the history, and a reply today.
+    const READ: Option<&str> = Some("2026-10-02T17:52");
+    const OLD: &str = "2026-10-02T17:52";
+    const NEW: &str = "2026-10-15T17:46";
+
+    #[test]
+    fn a_new_email_that_moves_the_meeting_moves_the_note_though_the_old_time_is_still_quoted() {
+        let none = HashSet::new();
+        let asked: HashSet<String> = ["2026-10-16T14:00".to_string()].into();
+        let p = plan(
+            vec![
+                said(date!(2026 - 10 - 16), 14, OLD, Some("B2-14")),
+                said(date!(2026 - 10 - 16), 17, NEW, None),
+            ],
+            cur("2026-10-16T14:00", true, Some("B2-14")),
+            READ,
+            &none,
+            &none,
+            &asked,
+        );
+        assert_eq!(
+            p.conversation.unwrap().start_stamp(),
+            "2026-10-16T17:00",
+            "moved, not a 2nd note"
+        );
+        assert!(p.new.is_empty());
+    }
+
+    #[test]
+    fn a_new_email_with_the_same_time_and_a_link_proposes_the_link_as_the_place() {
+        let none = HashSet::new();
+        let asked: HashSet<String> = ["2026-10-16T14:00".to_string()].into();
+        let link = "https://zoom.us/j/1234567890";
+        let p = plan(
+            vec![
+                said(date!(2026 - 10 - 16), 14, OLD, Some("B2-14")),
+                said(date!(2026 - 10 - 16), 14, NEW, Some(link)),
+            ],
+            cur("2026-10-16T14:00", true, Some("B2-14")),
+            READ,
+            &none,
+            &none,
+            &asked,
+        );
+        let m = p.conversation.expect("the note is proposed its new place");
+        assert_eq!(m.start_stamp(), "2026-10-16T14:00", "the time stands");
+        assert_eq!(m.place.as_deref(), Some(link));
+        assert!(p.new.is_empty());
+
+        // The same place again, or none at all, proposes nothing.
+        for place in [Some("B2-14"), None] {
+            let p = plan(
+                vec![said(date!(2026 - 10 - 16), 14, NEW, place)],
+                cur("2026-10-16T14:00", true, Some("B2-14")),
+                READ,
+                &none,
+                &none,
+                &asked,
+            );
+            assert_eq!(p, Plan::default(), "{place:?}");
+        }
+    }
+
+    fn cancelling(day: Date, h: Option<u8>, at: &str) -> Meeting {
+        let mut m = said(day, h.unwrap_or(0), at, None);
+        m.cancelled = true;
+        if h.is_none() {
+            m.start = None;
+            m.dated = false;
+        }
+        m
+    }
+
+    /// Marta, 15 Oct 14:19: "won't be able to make our meeting at 12 pm" tomorrow, no new time yet.
+    #[test]
+    fn a_new_email_calling_the_meeting_off_proposes_marking_it_cancelled() {
+        let none = HashSet::new();
+        let asked: HashSet<String> = ["2026-10-16T12:00".to_string()].into();
+        let cur = || cur("2026-10-16T12:00", true, Some("B2-14"));
+        let p = plan(
+            vec![cancelling(date!(2026 - 10 - 16), Some(12), "2026-10-15T14:19")],
+            cur(),
+            Some("2026-10-02T17:51"),
+            &none,
+            &none,
+            &asked,
+        );
+        assert!(p.conversation.is_none() && p.new.is_empty());
+        assert!(p.cancel.is_some(), "the 12:00 is called off");
+
+        // "I can't make it" names no time: it is about the meeting the note stands for.
+        let p = plan(
+            vec![cancelling(date!(2026 - 10 - 15), None, "2026-10-15T14:19")],
+            cur(),
+            Some("2026-10-02T17:51"),
+            &none,
+            &none,
+            &asked,
+        );
+        assert!(p.cancel.is_some());
+
+        // Calling off ANOTHER meeting, or an old email doing so, changes nothing here.
+        for (m, why) in [
+            (cancelling(date!(2026 - 10 - 20), Some(9), "2026-10-15T14:19"), "another meeting"),
+            (cancelling(date!(2026 - 10 - 16), Some(12), "2026-10-01T09:00"), "history"),
+        ] {
+            let p = plan(vec![m], cur(), Some("2026-10-02T17:51"), &none, &none, &asked);
+            assert!(p.cancel.is_none(), "{why}");
+        }
+    }
+
+    /// A re-read (no "since"): a call-off still counts when it is the conversation's last word, never
+    /// when more mail followed it, nor when that last email also fixes a time.
+    #[test]
+    fn on_a_re_read_a_call_off_counts_only_as_the_latest_word() {
+        let none = HashSet::new();
+        let asked: HashSet<String> = ["2026-10-16T12:00".to_string()].into();
+        let at = |latest: &'static str| {
+            Some(Current {
+                start: "2026-10-16T12:00",
+                upcoming: true,
+                place: None,
+                latest: Some(latest),
+            })
+        };
+        let off = || cancelling(date!(2026 - 10 - 16), Some(12), "2026-10-15T14:19");
+        let p = plan(vec![off()], at("2026-10-15T14:19"), None, &none, &none, &asked);
+        assert!(p.cancel.is_some(), "the last word");
+        let p = plan(vec![off()], at("2026-10-15T15:33"), None, &none, &none, &asked);
+        assert!(p.cancel.is_none(), "more mail came after it");
+        let p = plan(
+            vec![off(), said(date!(2026 - 10 - 23), 16, "2026-10-15T14:19", None)],
+            at("2026-10-15T14:19"),
+            None,
+            &none,
+            &none,
+            &asked,
+        );
+        assert!(p.cancel.is_none(), "the same email fixes another time: a move");
+    }
+
+    /// Marta's whole exchange: she cancels, then a new time is proposed — that is a move, not a cancel.
+    #[test]
+    fn a_cancellation_followed_by_a_new_time_is_a_move() {
+        let none = HashSet::new();
+        let asked: HashSet<String> = ["2026-10-16T12:00".to_string()].into();
+        let p = plan(
+            vec![
+                cancelling(date!(2026 - 10 - 16), Some(12), "2026-10-15T14:19"),
+                said(date!(2026 - 10 - 23), 16, "2026-10-15T15:33", Some("probably online")),
+            ],
+            cur("2026-10-16T12:00", true, Some("B2-14")),
+            Some("2026-10-02T17:51"),
+            &none,
+            &none,
+            &asked,
+        );
+        assert_eq!(p.conversation.unwrap().start_stamp(), "2026-10-23T16:00");
+        assert!(p.cancel.is_none());
+    }
+
+    /// Elena: "Meeting tomorrow at 5 p.m. online is fine" must not replace the Zoom link with "online".
+    #[test]
+    fn a_vaguer_place_never_replaces_a_link() {
+        let none = HashSet::new();
+        let asked: HashSet<String> = ["2026-10-16T17:00".to_string()].into();
+        let link = "https://zoom.us/j/1234567890";
+        let p = plan(
+            vec![said(date!(2026 - 10 - 16), 17, "2026-10-15T17:49", Some("online"))],
+            cur("2026-10-16T17:00", true, Some(link)),
+            Some("2026-10-15T17:44"),
+            &none,
+            &none,
+            &asked,
+        );
+        assert_eq!(p, Plan::default());
+    }
+
+    #[test]
+    fn a_new_email_that_repeats_the_time_and_adds_another_meeting_moves_nothing() {
+        let none = HashSet::new();
+        let p = plan(
+            vec![
+                said(date!(2026 - 10 - 16), 14, NEW, None),
+                said(date!(2026 - 10 - 30), 14, NEW, None),
+            ],
+            cur("2026-10-16T14:00", true, None),
+            READ,
+            &none,
+            &none,
+            &none,
+        );
+        assert!(p.conversation.is_none(), "the 16th still stands");
+        assert_eq!(p.new.len(), 1, "the 30th is a further meeting");
+    }
+
+    #[test]
+    fn history_alone_never_moves_the_note() {
+        // Everything was read before: an older sentence with another time is not a move.
+        let none = HashSet::new();
+        let p = plan(
+            vec![
+                said(date!(2026 - 10 - 16), 14, OLD, None),
+                said(date!(2026 - 10 - 20), 9, OLD, None),
+            ],
+            cur("2026-10-16T14:00", true, None),
+            Some(NEW),
+            &none,
+            &none,
+            &none,
+        );
+        assert!(p.conversation.is_none());
+        assert_eq!(p.new.len(), 1);
     }
 
     #[test]
@@ -843,6 +1349,7 @@ mod tests {
         let none = HashSet::new();
         let p = plan(
             vec![meeting(date!(2026 - 10 - 28), 10), meeting(date!(2026 - 10 - 08), 15)],
+            None,
             None,
             &none,
             &none,
@@ -859,9 +1366,9 @@ mod tests {
         let taken: HashSet<String> = ["2026-10-08T15:00".to_string()].into();
         let asked: HashSet<String> = ["2026-10-28T10:00".to_string()].into();
         let none = HashSet::new();
-        assert_eq!(plan(ms.clone(), None, &taken, &none, &asked), Plan::default());
+        assert_eq!(plan(ms.clone(), None, None, &taken, &none, &asked), Plan::default());
         // The conversation already stands for the first one: only the second is new.
-        let p = plan(ms, Some(("2026-10-08T15:00", true)), &none, &none, &none);
+        let p = plan(ms, cur("2026-10-08T15:00", true, None), None, &none, &none, &none);
         assert!(p.conversation.is_none());
         assert_eq!(p.new.len(), 1);
     }
@@ -871,7 +1378,8 @@ mod tests {
         let none = HashSet::new();
         let p = plan(
             vec![meeting(date!(2026 - 10 - 09), 15)],
-            Some(("2026-10-08T15:00", true)),
+            cur("2026-10-08T15:00", true, None),
+            None,
             &none,
             &none,
             &none,
@@ -885,7 +1393,8 @@ mod tests {
         let none = HashSet::new();
         let p = plan(
             vec![meeting(date!(2026 - 10 - 28), 10)],
-            Some(("2026-10-01T15:00", false)),
+            cur("2026-10-01T15:00", false, None),
+            None,
             &none,
             &none,
             &none,

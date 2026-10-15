@@ -100,6 +100,11 @@ pub trait VaultAccess {
     ) -> Result<Value, String> {
         Err("proposals with dates are not available on this device".into())
     }
+    /// The text of `note`'s proposal still waiting for an answer, if it has one — so a further change
+    /// (a title) revises that proposal without dropping what it already proposes.
+    fn open_proposal_body(&self, _note: &str) -> Option<String> {
+        None
+    }
     /// Propose a **new** note linked to `about` (`propose_note`): it exists only on its proposal branch
     /// until a person accepts it.
     fn propose_note(
@@ -222,6 +227,13 @@ impl VaultAccess for FmServe {
 
     fn mail_conversations(&self) -> Result<Value, String> {
         self.call("mail_conversations", json!({}))
+    }
+
+    fn open_proposal_body(&self, note: &str) -> Option<String> {
+        let pr = self.call("proposal_for", json!({ "id": note })).ok()?;
+        let pr = pr.as_str()?;
+        let c = self.call("proposal_content", json!({ "id": pr })).ok()?;
+        c["body"].as_str().map(str::to_string)
     }
 
     fn propose_with(

@@ -78,6 +78,10 @@ pub fn serve_loop<V: VaultAccess>(
     let poll_max = Duration::from_secs(5);
     let mut interval = poll_min;
     let mut last_full_scan = Instant::now();
+    // The meeting pass found a conversation to read last time, so more may be waiting: read the next
+    // one at the next poll rather than a minute later. Five changed conversations used to take five
+    // minutes to reach Collaboration (2026-10-15).
+    let mut mail_backlog = false;
     agent.fm.present(name, agent.image_reader().as_ref()); // show online at once, before the first heartbeat tick
     let mut last_hb = Instant::now();
     loop {
@@ -173,11 +177,12 @@ pub fn serve_loop<V: VaultAccess>(
             }
             last_count.insert(id.to_string(), count + posted);
         }
-        // **The meeting pass**, on the minute rescan and only when no one was just answered: at most
-        // one email conversation per minute, so a question in a discussion never waits behind mail.
+        // **The meeting pass**, on the minute rescan — or at once while a backlog remains — and only when
+        // no one was just answered: one email conversation per poll, so a question in a discussion is
+        // always looked at first and never waits behind mail.
         // Its failures (the model busy or gone) are logged and retried next minute; they never stop
         // the loop. `decisions.md` 2026-10-09, *the assistant proposes meetings*.
-        if force_scan && !worked {
+        if (force_scan || mail_backlog) && !worked {
             // The answer is capped so prompt + answer always fit the model's window together
             // (`fm_agent::meetings::TEXT_TOKENS`).
             let llm = agent
@@ -187,8 +192,12 @@ pub fn serve_loop<V: VaultAccess>(
             // UTC's day: this process cannot read the machine's offset (`fm_core::events`). Within a
             // few hours of midnight a meeting "today" may be judged by the neighbouring day.
             let today = time::OffsetDateTime::now_utc().date();
+            mail_backlog = false;
             match agent.meeting_pass(&llm, &runtime.join("mail-meetings.json"), today) {
-                Ok(Some(said)) => println!("@{name} {said}"),
+                Ok(Some(said)) => {
+                    println!("@{name} {said}");
+                    mail_backlog = true;
+                }
                 Ok(None) => {}
                 Err(e) => eprintln!("meeting pass: {e}"),
             }

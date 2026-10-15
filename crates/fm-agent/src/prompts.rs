@@ -46,18 +46,38 @@ own knowledge, and never state anything the sources do not. If the sources do no
 reply with a single '- ' line saying so and no citation. Output only the list — no preamble, no \
 headings, no Sources section.";
 
-pub const MEETINGS_INSTRUCTION: &str = "You read an email exchange and list the meetings with people that it FIXES — \
-agreed appointments, calls or visits on a day. Ignore proposals that were declined or replaced: if a \
-later message moves or cancels a meeting, report only the final arrangement. Do not report deadlines or \
-tasks. Answer ONLY with a JSON array, no other text. Each item is an object with these keys:\n\
-\"quote\": the sentence from the email that fixes the meeting, copied character for character in its \
-original language — never translated, never reworded;\n\
+/// A conversation's title: who it is with and who they are to the owner (`crate::titles`). Measured on
+/// `qwen3-vl-4b` over the owner's five real conversations (2026-10-15): right names, short roles; the
+/// one long description is what `titles::check` refuses. `{me}` is the mailbox owner's name.
+pub const TITLE_INSTRUCTION: &str = "You read an email exchange from the mailbox of {me}. Name the one \
+person {me} is corresponding with, and say in a few words who that person is to {me}, using only what \
+the emails say: their role, their course or project, their organisation. Prefer the plainest role the \
+emails support. Answer ONLY with a JSON object, no other text, with these keys:\n\
+\"name\": that person's full name, copied exactly as the emails write it;\n\
+\"about\": two to six words, in English, such as \"Master student, ME5400A project\", \"Collaborator on \
+the Moonshot project\" or \"Director of the Robotics Lab\". Never guess what the emails do not say.";
+
+/// The meeting pass's question: **where do the meetings stand now**, after the last message — not
+/// "which meetings does it fix". Measured on `qwen3-vl-4b` against the owner's real mail (2026-10-15):
+/// the old wording reported every moved meeting at its *old* time, and missed a cancellation; this one
+/// reported all five states right (two moves with their links, a proposal for the following week, a
+/// confirmation, and a call-off). An "agreed" key was tried and dropped: it answered `true` for a time
+/// nobody had replied to — who wrote the sentence is read from the email's heading instead.
+pub const MEETINGS_INSTRUCTION: &str = "You read an email exchange, oldest message first, and say where its \
+meetings stand NOW, after the LAST message. A later message overrides an earlier one: when a meeting was \
+moved, report it only at its new time; when someone wrote that they cannot come, or that it will not take \
+place, and no new time was set afterwards, report it as cancelled. Read the meetings only from the emails \
+themselves. Answer ONLY with a JSON array, no other text. Each item is an object with these keys:\n\
+\"status\": \"fixed\" when a day is set for it now, or \"cancelled\" when it was called off and no new time \
+was set;\n\
+\"quote\": the sentence from the email that sets the current time, or that calls it off, copied character \
+for character in its original language — never translated, never reworded;\n\
 \"title\": a short name for the meeting, in the language of the emails;\n\
-\"date\": the words in the email that give the day, copied exactly and untranslated, or \"\";\n\
-\"time\": the words in the email that give the start time, copied exactly, or \"\";\n\
+\"date\": the words in that email that give the day, copied exactly and untranslated, or \"\";\n\
+\"time\": the words in that email that give the start time, copied exactly, or \"\";\n\
 \"end\": the words that give the end time, copied exactly, or \"\";\n\
-\"place\": where, copied from the email, or \"\".\n\
-If no meeting is fixed, answer [].";
+\"place\": where — a room, or a meeting link copied exactly from the email — or \"\".\n\
+If the exchange never fixed a meeting, answer [].";
 
 /// What the model is asked to do: **transcribe**, in the target notation for each kind of content.
 ///
