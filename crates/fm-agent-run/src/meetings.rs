@@ -38,8 +38,10 @@ fn named(title: &str) -> bool {
 /// question is where the meetings stand now, our box is hidden from the model, and a near-copied quote
 /// stands as the email's own sentence (2026-10-15) — so a reply the old rules misread (a moved meeting
 /// dropped over "16th of October") is read again and proposed. 4: on such a re-read, a call-off that is
-/// still the conversation's latest word is proposed too (2026-10-15).
-const PASS_VERSION: u64 = 4;
+/// still the conversation's latest word is proposed too (2026-10-15). 5: a quote shortened with "…" is
+/// checked piece by piece (2026-10-16) — a move dropped over one is read again and proposed. 6: another
+/// conversation's meeting no longer counts as already on the agenda (`mail_conversations`' `taken`).
+const PASS_VERSION: u64 = 6;
 
 #[derive(Default)]
 struct Memory {
@@ -229,6 +231,8 @@ impl<V: VaultAccess> Agent<V> {
             };
             let mut now_proposed = proposed;
             let mut made = 0usize;
+            // What it made of the conversation, in words, for Collaboration (`mail_heard`).
+            let mut verdict: Vec<String> = Vec::new();
             if let Some(m) = &plan.conversation {
                 let new_body = with_block(&body, &block(m, &self.model), &self.model);
                 // A new time also lifts an earlier call-off: the meeting is on again.
@@ -247,6 +251,8 @@ impl<V: VaultAccess> Agent<V> {
                 self.fm.propose_with(id, &new_body, &props, &self.model, &email, &origin)?;
                 now_proposed.insert(m.start_stamp());
                 made += 1;
+                verdict
+                    .push(format!("proposes the meeting at {}", m.start_stamp().replace('T', " ")));
             }
             if let Some(m) = &plan.cancel {
                 // Marked, never deleted — the calendars' rule: the person may have written in the note,
@@ -258,12 +264,20 @@ impl<V: VaultAccess> Agent<V> {
                 }
                 self.fm.propose_with(id, &new_body, &props, &self.model, &email, &origin)?;
                 made += 1;
+                verdict.push("proposes marking the meeting called off".into());
             }
             if plan.conversation.is_none() && plan.cancel.is_none() {
                 if let Some(t) = &new_title {
                     self.propose_title(id, &body, t)?;
                     made += 1;
+                    verdict.push(format!("proposes the title \u{201c}{t}\u{201d}"));
                 }
+            }
+            if !plan.new.is_empty() {
+                verdict.push(match plan.new.len() {
+                    1 => "proposes one more meeting".to_string(),
+                    n => format!("proposes {n} more meetings"),
+                });
             }
             for m in &plan.new {
                 let quote = fm_agent::adjunct::defang(&m.quote, TAG).replace('\n', " ");
@@ -286,13 +300,25 @@ impl<V: VaultAccess> Agent<V> {
             }
             mem.seen.insert(id.to_string(), (last.to_string(), now_proposed));
             mem.save(memory);
-            let skipped = if dropped > 0 {
-                format!(", {dropped} left out (not checkable)")
+            let mut said = if verdict.is_empty() {
+                match conv["start"].as_str() {
+                    Some(s) => format!(
+                        "nothing to change \u{2014} the meeting stays at {}",
+                        s.replace('T', " ")
+                    ),
+                    None => "no meeting in it".to_string(),
+                }
             } else {
-                String::new()
+                verdict.join("; ")
             };
+            if dropped > 0 {
+                said.push_str(&format!(
+                    " ({dropped} left out: not found in the emails as written)"
+                ));
+            }
+            self.fm.mail_heard(id, new_title.as_deref().unwrap_or(title), last, &said);
             return Ok(Some(format!(
-                "read \u{201c}{title}\u{201d}: {made} meeting proposal(s){skipped}"
+                "read \u{201c}{title}\u{201d}: {made} proposal(s) \u{2014} {said}"
             )));
         }
         // No new mail anywhere: give one conversation still without a proper title its title.
@@ -381,6 +407,10 @@ mod tests {
     #[derive(Default)]
     struct MailVault {
         calls: RefCell<Vec<(String, Value)>>,
+        /// What the pass told the person, per conversation (`mail_heard`).
+        heard: RefCell<Vec<(String, String)>>,
+        /// The conversation's meeting already on the agenda, if any.
+        start: Option<&'static str>,
     }
     const BODY: &str = "### Maria — 2026-10-06 09:12\n\nCi vediamo giovedì alle 15 in aula 3.\n\n\
                         ### Luca — 2026-10-07 11:00\n\nE il 28 alle 10 facciamo il punto.\n";
@@ -421,9 +451,12 @@ mod tests {
         fn present(&self, _: &str, _: Option<&crate::ImageReader>) {}
         fn mail_conversations(&self) -> Result<Value, String> {
             Ok(json!({
-                "conversations": [{ "id": "C1", "title": "Revisione", "last": "2026-10-07T11:00", "start": null }],
+                "conversations": [{ "id": "C1", "title": "Revisione", "last": "2026-10-07T11:00", "start": self.start }],
                 "taken": [], "linked": {}
             }))
+        }
+        fn mail_heard(&self, note: &str, _title: &str, _latest: &str, said: &str) {
+            self.heard.borrow_mut().push((note.to_string(), said.to_string()));
         }
         fn propose_with(
             &self,
@@ -492,7 +525,17 @@ mod tests {
         let a = agent();
         let llm = Canned(ANSWER.into(), RefCell::new(0));
         let said = a.meeting_pass(&llm, &mem, date!(2026 - 10 - 06)).unwrap().unwrap();
-        assert!(said.contains("2 meeting proposal(s)") && said.contains("1 left out"), "{said}");
+        assert!(said.contains("2 proposal(s)") && said.contains("1 left out"), "{said}");
+        let heard = a.fm.heard.borrow();
+        assert_eq!(heard.len(), 1);
+        assert_eq!(heard[0].0, "C1");
+        assert!(
+            heard[0].1.starts_with(
+                "proposes the meeting at 2026-10-08 15:00; proposes one more meeting (1 left out"
+            ),
+            "the person is told what was proposed, in words: {}",
+            heard[0].1
+        );
 
         let calls = a.fm.calls.borrow();
         let (what, update) = &calls[0];
@@ -507,6 +550,28 @@ mod tests {
         assert_eq!(new["start"], "2026-10-28T10:00");
         assert!(new["body"].as_str().unwrap().contains("note:C1"), "linked back");
         assert_eq!(calls.len(), 2, "the invented meeting was not proposed");
+    }
+
+    /// **A reply that only confirms the meeting changes nothing — and says so.** Siyu's "sounds good,
+    /// 16:00 next Friday" (2026-10-16) was read within a minute and rightly proposed nothing, and the
+    /// owner, seeing nothing in Collaboration, took it for the mail never having been read.
+    #[test]
+    fn a_reply_that_changes_nothing_is_still_reported() {
+        let mem = scratch();
+        let a = Agent {
+            fm: MailVault { start: Some("2026-10-23T16:00"), ..Default::default() },
+            ..agent()
+        };
+        let llm = Canned("[]".into(), RefCell::new(0));
+        a.meeting_pass(&llm, &mem, date!(2026 - 10 - 16)).unwrap();
+        assert!(a.fm.calls.borrow().is_empty(), "nothing proposed");
+        assert_eq!(
+            *a.fm.heard.borrow(),
+            vec![(
+                "C1".to_string(),
+                "nothing to change \u{2014} the meeting stays at 2026-10-23 16:00".to_string()
+            )]
+        );
     }
 
     #[test]

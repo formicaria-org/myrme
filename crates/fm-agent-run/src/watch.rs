@@ -82,6 +82,10 @@ pub fn serve_loop<V: VaultAccess>(
     // one at the next poll rather than a minute later. Five changed conversations used to take five
     // minutes to reach Collaboration (2026-10-15).
     let mut mail_backlog = false;
+    // **New mail wakes the pass** (2026-10-16): the mail reader raises a counter whenever it writes
+    // something, and it is asked at every poll — seconds, not the minute rescan — so a reply reaches
+    // the meeting pass as soon as it reaches the vault. `None` until first asked, which counts as new.
+    let mut mail_seen: Option<u64> = None;
     agent.fm.present(name, agent.image_reader().as_ref()); // show online at once, before the first heartbeat tick
     let mut last_hb = Instant::now();
     loop {
@@ -182,7 +186,10 @@ pub fn serve_loop<V: VaultAccess>(
         // always looked at first and never waits behind mail.
         // Its failures (the model busy or gone) are logged and retried next minute; they never stop
         // the loop. `decisions.md` 2026-10-09, *the assistant proposes meetings*.
-        if (force_scan || mail_backlog) && !worked {
+        let novelty = agent.fm.mail_novelty();
+        let mail_new = novelty.is_some() && novelty != mail_seen;
+        if (force_scan || mail_backlog || mail_new) && !worked {
+            mail_seen = novelty;
             // The answer is capped so prompt + answer always fit the model's window together
             // (`fm_agent::meetings::TEXT_TOKENS`).
             let llm = agent

@@ -88,6 +88,13 @@ pub trait VaultAccess {
     fn mail_conversations(&self) -> Result<Value, String> {
         Err("there is no mail on this device".into())
     }
+    /// A number that moves whenever a mail read wrote something new — the cue to run the meeting
+    /// pass at once. `None` where there is no mail reader to ask.
+    fn mail_novelty(&self) -> Option<u64> {
+        None
+    }
+    /// What the meeting pass concluded about one conversation, for the person to see. Best-effort.
+    fn mail_heard(&self, _note: &str, _title: &str, _latest: &str, _said: &str) {}
     /// A proposal that also sets the allowlisted properties (`start`/`due`/`location`, added tags).
     fn propose_with(
         &self,
@@ -227,6 +234,17 @@ impl VaultAccess for FmServe {
 
     fn mail_conversations(&self) -> Result<Value, String> {
         self.call("mail_conversations", json!({}))
+    }
+
+    fn mail_novelty(&self) -> Option<u64> {
+        self.call("mail_novelty", json!({})).ok()?["novelty"].as_u64()
+    }
+
+    fn mail_heard(&self, note: &str, title: &str, latest: &str, said: &str) {
+        let _ = self.call(
+            "mail_heard",
+            json!({ "note": note, "title": title, "latest": latest, "said": said }),
+        );
     }
 
     fn open_proposal_body(&self, note: &str) -> Option<String> {

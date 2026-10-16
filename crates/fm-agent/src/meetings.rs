@@ -322,17 +322,38 @@ fn heading_at(head: &str) -> Option<String> {
     (heading_day(head).is_some() && t.as_bytes().get(2) == Some(&b':')).then(|| format!("{d}T{t}"))
 }
 
+/// **A quote the model shortened with "…"** (2026-10-16, a real email): it copied the opening of a
+/// long email, "...", and the sentence that fixes the meeting — every piece word for word, the whole
+/// in no email, so the meeting was dropped. Each piece must still be in **one** email exactly as
+/// copied; the piece that carries a figure (a day, an hour) then stands as the quote, else the last.
+/// `None` when the quote is not elided, or a piece is not in the emails — the strict check decides.
+fn elided(quote: &str, all: &[Block]) -> Option<String> {
+    let pieces: Vec<&str> = quote
+        .split('…')
+        .flat_map(|p| p.split("..."))
+        .map(str::trim)
+        .filter(|p| !loose(p).is_empty())
+        .collect();
+    if pieces.len() < 2 {
+        return None;
+    }
+    all.iter().find(|b| pieces.iter().all(|p| b.text.contains(&loose(p))))?;
+    let figure = pieces.iter().rev().find(|p| p.chars().any(|c| c.is_ascii_digit()));
+    Some(figure.unwrap_or(pieces.last()?).to_string())
+}
+
 /// Check one reported meeting against the emails and date it. `body` is the conversation note.
 pub fn resolve(f: &Found, body: &str, today: Date) -> Result<Meeting, Dropped> {
-    let nquote = loose(&f.quote);
+    // The first (oldest) email with the sentence: a later reply quoting it does not make it new.
+    let all = blocks(body);
+    let copied = elided(&f.quote, &all).unwrap_or_else(|| f.quote.clone());
+    let nquote = loose(&copied);
     if nquote.is_empty() {
         return Err(Dropped::NotInEmail);
     }
-    // The first (oldest) email with the sentence: a later reply quoting it does not make it new.
-    let all = blocks(body);
     // Exactly as copied, or else the email sentence it nearly copies — which then stands as the quote.
     let (exact, quote) = match all.iter().find(|b| b.text.contains(&nquote)) {
-        Some(b) => (b, f.quote.clone()),
+        Some(b) => (b, copied.clone()),
         None => near_sentence(&nquote, &all).ok_or(Dropped::NotInEmail)?,
     };
     let nquote = loose(&quote);
@@ -370,11 +391,7 @@ pub fn resolve(f: &Found, body: &str, today: Date) -> Result<Meeting, Dropped> {
         .flatten()
         .map(|_| f.place.trim().to_string());
     Ok(Meeting {
-        title: if f.title.is_empty() {
-            f.quote.chars().take(60).collect()
-        } else {
-            f.title.clone()
-        },
+        title: if f.title.is_empty() { quote.chars().take(60).collect() } else { f.title.clone() },
         day,
         start,
         end,
@@ -969,6 +986,36 @@ mod tests {
             resolve(&f, BODY, date!(2026 - 10 - 06)).unwrap().start_stamp(),
             "2026-10-28T10:00"
         );
+    }
+
+    /// 2026-10-16, a real email: the model quoted the opening of a long email, "...", and the sentence
+    /// that fixes the meeting. Each piece is in the email as written; the whole is not — so the meeting
+    /// was dropped and a move never proposed. The dated piece stands; an invented piece still fails.
+    #[test]
+    fn a_quote_shortened_with_dots_stands_on_its_dated_piece() {
+        let body = "### Anna — 2026-10-16 17:34\n\nDear Kai,\n\nas discussed f2f, I suggest the following \
+                    for the next steps.\n\nThanks and see you on the 30th of Friday at 16:30 Singapore \
+                    time online.\n";
+        let f = found(
+            "as discussed f2f, I suggest the following ... Thanks and see you on the 30th of Friday at 16:30 Singapore time online.",
+            "30th of October",
+            "16:30",
+        );
+        let m = resolve(&f, body, date!(2026 - 10 - 16)).unwrap();
+        assert_eq!(m.start_stamp(), "2026-10-30T16:30");
+        assert_eq!(
+            m.quote,
+            "Thanks and see you on the 30th of Friday at 16:30 Singapore time online."
+        );
+        // The same, with "…".
+        let f = found("as discussed f2f … see you on the 30th of Friday at 16:30", "", "");
+        assert_eq!(
+            resolve(&f, body, date!(2026 - 10 - 16)).unwrap().start_stamp(),
+            "2026-10-30T16:30"
+        );
+        // A piece that is in no email sinks the whole quote, as before.
+        let f = found("as discussed f2f ... see you on the 2nd at 9 in the library", "", "");
+        assert_eq!(resolve(&f, body, date!(2026 - 10 - 16)), Err(Dropped::NotInEmail));
     }
 
     /// Paolo's reply, 2026-10-15: the model wrote "16th **of** October" where the email says "16th
