@@ -552,7 +552,7 @@ mod tests {
         assert_eq!(calls.len(), 2, "the invented meeting was not proposed");
     }
 
-    /// **A reply that only confirms the meeting changes nothing — and says so.** Siyu's "sounds good,
+    /// **A reply that only confirms the meeting changes nothing — and says so.** A collaborator's "sounds good,
     /// 16:00 next Friday" (2026-10-16) was read within a minute and rightly proposed nothing, and the
     /// owner, seeing nothing in Collaboration, took it for the mail never having been read.
     #[test]
