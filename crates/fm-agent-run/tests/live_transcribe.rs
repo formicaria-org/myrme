@@ -33,6 +33,7 @@ fn it_transcribes_through_the_real_fmserve_and_whisper() {
         image_specialist: None,
         max_reply_chars: 2000,
         history_budget: 4000,
+        device: "laptop".into(),
     };
     let intent = Intent {
         ask: String::new(),
@@ -40,6 +41,7 @@ fn it_transcribes_through_the_real_fmserve_and_whisper() {
         propose: false,
         research: false,
         transcribe: Some(asset),
+        recipe: false,
     };
     let (reply, _id) = agent
         .handle(&note, &intent, &|s| println!("stage: {s}"))

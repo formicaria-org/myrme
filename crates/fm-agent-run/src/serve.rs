@@ -52,11 +52,15 @@ struct Args {
     #[arg(long)]
     whisper_port: Option<u16>,
     /// The whisper weights label — the file `models/<whisper-model>.bin` and the transcript provenance.
-    #[arg(long, default_value = "ggml-base.en")]
+    #[arg(long, default_value = "ggml-base")]
     whisper_model: String,
     /// The name users address it by (`@name`) and the git author of its proposals; defaults to the model.
     #[arg(long)]
     name: Option<String>,
+    /// This device's name for its Myrme (`@Myrme-<device>`; 2026-10-18). The app passes what the
+    /// person set in Settings; `laptop` when nothing was.
+    #[arg(long, default_value = "laptop")]
+    device: String,
     /// Context window; defaults to the manifest's `ctx`.
     #[arg(long)]
     ctx: Option<u32>,
@@ -168,6 +172,8 @@ fn run() -> Result<(), String> {
             wmodel.to_str().unwrap_or_default(),
             "-t",
             &threads.to_string(),
+            "-l",
+            fm_agent_run::manifest::whisper_language(&a.whisper_model),
         ]);
         let wbytes = std::fs::metadata(&wmodel).map(|m| m.len()).unwrap_or(200_000_000);
         let w = SupervisedModel::launch(
@@ -205,6 +211,7 @@ fn run() -> Result<(), String> {
         whisper_model: a.whisper_model.clone(),
         max_reply_chars: a.max_reply_chars.unwrap_or(manifest.max_reply_chars),
         history_budget: a.history_budget,
+        device: fm_agent::convo::device_word(&a.device).unwrap_or_else(|| "laptop".into()),
     };
     println!(
         "agent '@{}' listening — model warm on :{}, watching fm-serve :{}{}{}. Mention @{} in a discussion.",

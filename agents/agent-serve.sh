@@ -29,7 +29,7 @@ if [ -x "$BIN" ]; then RUN=("$BIN"); else RUN=(cargo run -q -p fm-agent-run --bi
 # remember. A dev running `pixi run agent-serve` can set FM_TRANSCRIBE=1 or pass --whisper-port. Default
 # port 8082 (model 8081, searxng 8888 are the neighbours); an explicit --whisper-port always wins.
 WHISPER_ARGS=()
-if [ -n "${FM_TRANSCRIBE:-}" ] && [ -x "$HERE/runtime/whisper-server" ] && [ -f "$HERE/models/ggml-base.en.bin" ]; then
+if [ -n "${FM_TRANSCRIBE:-}" ] && [ -x "$HERE/runtime/whisper-server" ] && [ -f "$HERE/models/ggml-base.bin" ]; then
   case " $* " in
     *" --whisper-port "*) : ;; # caller set it explicitly — don't second-guess
     *) WHISPER_ARGS=(--whisper-port 8082) ;;

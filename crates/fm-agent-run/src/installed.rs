@@ -116,9 +116,16 @@ pub fn files_of(manifest: &Manifest, models_dir: &Path, names: &[&str]) -> Vec<P
 
 /// Delete weights that belong to neither the running model nor the offered one. Returns what was
 /// removed. Only `.gguf` and `.part` files directly inside `models_dir`; the speech weights are
-/// `.bin` and are never touched.
+/// `.bin` and are never touched — nor is a half-downloaded one (`.bin.part`); [`sweep_whisper`]
+/// is theirs.
 pub fn sweep(manifest: &Manifest, models_dir: &Path, keep: &[&str]) -> Vec<PathBuf> {
-    let spare = files_of(manifest, models_dir, keep);
+    let ears = manifest.whisper_names();
+    let mut spare = files_of(manifest, models_dir, keep);
+    spare.extend(files_of(
+        manifest,
+        models_dir,
+        &ears.iter().map(String::as_str).collect::<Vec<_>>(),
+    ));
     let mut gone = Vec::new();
     let Ok(entries) = std::fs::read_dir(models_dir) else { return gone };
     for p in entries.flatten().map(|e| e.path()) {
@@ -128,6 +135,36 @@ pub fn sweep(manifest: &Manifest, models_dir: &Path, keep: &[&str]) -> Vec<PathB
             && std::fs::remove_file(&p).is_ok()
         {
             gone.push(p);
+        }
+    }
+    gone
+}
+
+/// The speech weights to run: the chosen ones when they are here, else any catalogued speech
+/// weights still on disk from an earlier choice — so a device keeps transcribing while the chosen
+/// ones download, rather than going quiet (2026-10-18, base.en → base). `None` when there are none.
+pub fn whisper_on_disk(manifest: &Manifest, models_dir: &Path, chosen: &str) -> Option<String> {
+    let here = |n: &str| manifest.model(n).is_some_and(|m| models_dir.join(&m.file).is_file());
+    if here(chosen) {
+        return Some(chosen.to_string());
+    }
+    manifest.whisper_names().into_iter().find(|n| here(n))
+}
+
+/// Once the chosen speech weights are here, delete the other catalogued ones — base.en after the
+/// move to base, small after going back to everyday listening. Never the chosen ones, never a file
+/// the catalogue does not name. Returns what was removed.
+pub fn sweep_whisper(manifest: &Manifest, models_dir: &Path, chosen: &str) -> Vec<PathBuf> {
+    let Some(keep) = manifest.model(chosen) else { return Vec::new() };
+    if !models_dir.join(&keep.file).is_file() {
+        return Vec::new();
+    }
+    let mut gone = Vec::new();
+    for name in manifest.whisper_names().iter().filter(|n| *n != chosen) {
+        for p in files_of(manifest, models_dir, &[name]) {
+            if p.is_file() && std::fs::remove_file(&p).is_ok() {
+                gone.push(p);
+            }
         }
     }
     gone
@@ -229,5 +266,34 @@ mod tests {
         for kept in ["old.gguf", "new.gguf.part", "new-proj.gguf", "speech.bin"] {
             assert!(d.join(kept).exists(), "{kept} must survive");
         }
+    }
+
+    #[test]
+    fn speech_weights_fall_back_while_the_chosen_ones_download_then_the_old_ones_go() {
+        let m = Manifest::parse(
+            "[[models]]\nname = \"old\"\nrepo = \"x/whisper.cpp\"\nfile = \"old.bin\"\n\
+             [[models]]\nname = \"new\"\nrepo = \"x/whisper.cpp\"\nfile = \"new.bin\"\n\
+             [[models]]\nname = \"llm\"\nfile = \"llm.gguf\"\n",
+        );
+        let d = dir("speech-fallback", &["old.bin", "new.bin.part", "llm.gguf", "mine.bin"]);
+        assert_eq!(
+            whisper_on_disk(&m, &d, "new").as_deref(),
+            Some("old"),
+            "the old ones meanwhile"
+        );
+        assert!(
+            sweep_whisper(&m, &d, "new").is_empty(),
+            "nothing goes before the new ones are here"
+        );
+        let swept = sweep(&m, &d, &["llm"]);
+        assert!(swept.is_empty(), "a half-downloaded speech file is not swept: {swept:?}");
+        std::fs::rename(d.join("new.bin.part"), d.join("new.bin")).unwrap();
+        assert_eq!(whisper_on_disk(&m, &d, "new").as_deref(), Some("new"));
+        assert_eq!(sweep_whisper(&m, &d, "new"), vec![d.join("old.bin")]);
+        assert!(
+            d.join("mine.bin").is_file() && d.join("llm.gguf").is_file(),
+            "only catalogued speech"
+        );
+        let _ = std::fs::remove_dir_all(&d);
     }
 }

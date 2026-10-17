@@ -30,6 +30,7 @@ pub mod meetings;
 pub mod openai;
 pub mod preflight;
 pub mod prompts;
+pub mod recipe;
 pub mod search;
 pub mod textmatch;
 pub mod titles;
@@ -466,6 +467,7 @@ mod tests {
             propose: true,
             research: false,
             transcribe: None,
+            recipe: false,
         }
     }
 
@@ -522,6 +524,7 @@ mod tests {
             propose: false,
             research: false,
             transcribe: None,
+            recipe: false,
         };
         let ctx = [InputDoc { label: "note".into(), text: "the note body".into() }];
         let turn = agent.turn("earlier: hi", &intent, &ctx, Some(200)).unwrap();
@@ -545,6 +548,7 @@ mod tests {
             propose: true,
             research: false,
             transcribe: None,
+            recipe: false,
         };
         let turn = agent.turn("", &intent, &[], Some(200)).unwrap();
         assert_eq!(turn.proposal.as_deref(), Some("# Clean note\n\n- point"));
@@ -566,6 +570,7 @@ mod tests {
             propose: false,
             research: false,
             transcribe: None,
+            recipe: false,
         };
         let turn = agent.turn("", &intent, &[], Some(12)).unwrap();
         assert!(turn.reply.unwrap().chars().count() <= 12);

@@ -85,6 +85,11 @@ pub struct Agent<V: VaultAccess> {
     /// fit (plain truncation, not summarized). Cheap, predictable, and it never drops the standing
     /// constraints the opener carries.
     pub history_budget: usize,
+    /// **Which copy of Myrme this is** — `laptop` on a computer, `phone` on a phone (owner,
+    /// 2026-10-18; `agent-simplification-plan-2026-10-09.md` P2). The assistant has one name on every
+    /// device; this word is what keeps two devices from both answering one synced message, and what
+    /// its replies and proposals are signed with.
+    pub device: String,
 }
 
 /// A model server that can turn an image into text: where it listens, what it is called (for the
@@ -99,6 +104,12 @@ pub struct ImageReader {
 }
 
 impl<V: VaultAccess> Agent<V> {
+    /// Who signs this copy's replies and proposals: *Myrme (phone)*, `myrme+phone@fm-agents.local`.
+    /// One name for the person, one identity per device in history, so the two copies are told apart.
+    pub fn author(&self) -> (String, String) {
+        (format!("Myrme ({})", self.device), format!("myrme+{}@fm-agents.local", self.device))
+    }
+
     /// **Who reads an image on this device** — the owner's rule (2026-10-10), in the order it is
     /// tried: a dedicated reader if one is running; otherwise the main model, if it can see;
     /// otherwise nobody, and the person is told so. Nothing here asks which platform this is: a
@@ -140,6 +151,7 @@ impl<V: VaultAccess> Agent<V> {
             convo::Command::Read(reference) => {
                 return self.transcribe_turn(note, &reference, on_stage)
             }
+            convo::Command::Recipe => return self.recipe_turn(&self.llm(), note, on_stage),
             convo::Command::Chat { .. } | convo::Command::Propose { .. } => {}
         }
 
@@ -186,17 +198,17 @@ impl<V: VaultAccess> Agent<V> {
         } else {
             reply
         };
-        let email = format!("{}@fm-agents.local", self.model);
+        let (who, email) = self.author();
         let mut reply_id = None;
         if turn.reply.is_some() {
             // Attributed to the model, so the discussion labels who said it.
-            let meta = self.fm.reply_as(note, &reply, &self.model, &email)?;
+            let meta = self.fm.reply_as(note, &reply, &who, &email)?;
             reply_id = meta["id"].as_str().map(|s| s.to_string());
         }
         if let Some(body) = &turn.proposal {
             let origin =
                 Origin { tool: "propose", query: Some(intent.ask.clone()), sources: Vec::new() };
-            self.fm.create_proposal(note, body, &self.model, &email, &origin)?;
+            self.fm.create_proposal(note, body, &who, &email, &origin)?;
         }
         Ok((reply, reply_id))
     }
@@ -211,11 +223,11 @@ impl<V: VaultAccess> Agent<V> {
         intent: &convo::Intent,
         on_stage: &dyn Fn(&str),
     ) -> Result<(String, Option<String>), String> {
-        let email = format!("{}@fm-agents.local", self.model);
+        let (who, email) = self.author();
         // Grounded research needs the web; without a backend, say so plainly rather than guessing.
         let Some(web) = self.web_backend() else {
             let msg = replies::RESEARCH_NEEDS_WEB.to_string();
-            let meta = self.fm.reply_as(note, &msg, &self.model, &email)?;
+            let meta = self.fm.reply_as(note, &msg, &who, &email)?;
             return Ok((msg, meta["id"].as_str().map(|s| s.to_string())));
         };
 
@@ -250,7 +262,7 @@ impl<V: VaultAccess> Agent<V> {
             query: Some(intent.ask.clone()),
             sources: out.draft.sources.clone(),
         };
-        self.fm.create_proposal(note, &body, &self.model, &email, &origin)?;
+        self.fm.create_proposal(note, &body, &who, &email, &origin)?;
 
         let reply = replies::researched(
             &intent.ask,
@@ -258,7 +270,7 @@ impl<V: VaultAccess> Agent<V> {
             out.draft.sources.len(),
             out.grounded.dropped.len(),
         );
-        let meta = self.fm.reply_as(note, &reply, &self.model, &email)?;
+        let meta = self.fm.reply_as(note, &reply, &who, &email)?;
         Ok((reply, meta["id"].as_str().map(|s| s.to_string())))
     }
 
@@ -277,15 +289,110 @@ impl<V: VaultAccess> Agent<V> {
     ///
     /// Insertion-only throughout: every reading lands as its own provenance-marked adjunct beside
     /// the source it came from, and the human sees the diff before anything is merged.
+    /// **`/recipe`: a recipe of the note, proposed as a new recipe note** (2026-10-18). Its recording
+    /// is transcribed (or its written text taken as it is), the model shapes the words into
+    /// ingredients, steps and times, `fm_agent::recipe` drops anything that was not said, and the
+    /// result is proposed — a new note tagged `recipe`, with a word and servings, so once accepted
+    /// it is a recipe like any other and its ingredient lines can be matched to foods.
+    fn recipe_turn(
+        &self,
+        llm: &dyn fm_agent::LlmStep,
+        note: &str,
+        on_stage: &dyn Fn(&str),
+    ) -> Result<(String, Option<String>), String> {
+        use fm_agent::transcribe::Transcribe;
+        let (who, email) = self.author();
+        let say = |msg: String| -> Result<(String, Option<String>), String> {
+            let meta = self.fm.reply_as(note, &msg, &who, &email)?;
+            Ok((msg, meta["id"].as_str().map(|s| s.to_string())))
+        };
+
+        on_stage("reading what was said");
+        let cur = self.fm.get(note)?;
+        let existing = cur["body"].as_str().unwrap_or_default().to_string();
+        // What was written, without the files embedded in it; a transcript already accepted is text.
+        let mut said: String = existing
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("!["))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let from_title = cur["title"]
+            .as_str()
+            .filter(|t| !t.trim().is_empty())
+            .map(str::to_owned)
+            .or_else(|| said.lines().map(str::trim).find(|l| !l.is_empty()).map(str::to_owned))
+            .unwrap_or_else(|| "a note".into());
+        let audio = match self.whisper_port {
+            Some(_) => self.resolve_blobs("", &existing, "audio/", "fm:transcript")?,
+            None => AudioWork::None,
+        };
+        let mut recordings = 0;
+        if let AudioWork::Clips(clips) = &audio {
+            on_stage("transcribing the recording");
+            let whisper = fm_agent::transcribe::WhisperServer::local(
+                self.whisper_port.unwrap_or_default(),
+                self.whisper_model.clone(),
+            );
+            for (_, bytes, mime) in clips {
+                let text = whisper.transcribe(bytes, mime).map_err(|e| e.to_string())?;
+                said.push('\n');
+                said.push_str(text.trim());
+                recordings += 1;
+            }
+        }
+        let said = said.trim().to_string();
+        if said.split_whitespace().count() < 8 {
+            let has_audio = existing.contains("](asset:");
+            return say(if has_audio && self.whisper_port.is_none() {
+                replies::RECIPE_CANNOT_HEAR.into()
+            } else {
+                replies::RECIPE_NOTHING_TO_READ.into()
+            });
+        }
+
+        on_stage("shaping the recipe");
+        let answer =
+            llm.complete(fm_agent::recipe::INSTRUCTION, &said).map_err(|e| e.to_string())?.content;
+        let Some(parts) = fm_agent::recipe::read(&answer) else {
+            return say(replies::RECIPE_NOT_FOUND.into());
+        };
+        let (mut parts, dropped) = fm_agent::recipe::keep_what_was_said(parts, &said);
+        if parts.ingredients.is_empty() && parts.steps.is_empty() {
+            return say(replies::RECIPE_NOT_FOUND.into());
+        }
+        if parts.title.is_empty() {
+            parts.title = from_title.clone();
+        }
+        let body = fm_agent::recipe::body(&parts, &from_title, note, &said);
+        // A word of its own, which its ingredients will share once they are matched to foods.
+        let word = format!(
+            "{:x}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or_default()
+        );
+        let draft = serde_json::json!({
+            "title": parts.title,
+            "body": body,
+            "tags": ["recipe"],
+            "props": { "recipe": word, "servings": parts.servings.unwrap_or(1) },
+        });
+        on_stage("proposing the recipe");
+        let origin = Origin { tool: "recipe", query: None, sources: vec![format!("note:{note}")] };
+        self.fm.propose_note(note, &draft, &who, &email, &origin)?;
+        say(replies::recipe_proposed(&parts.title, recordings, dropped))
+    }
+
     fn transcribe_turn(
         &self,
         note: &str,
         reference: &str,
         on_stage: &dyn Fn(&str),
     ) -> Result<(String, Option<String>), String> {
-        let email = format!("{}@fm-agents.local", self.model);
+        let (who, email) = self.author();
         let say = |msg: String| -> Result<(String, Option<String>), String> {
-            let meta = self.fm.reply_as(note, &msg, &self.model, &email)?;
+            let meta = self.fm.reply_as(note, &msg, &who, &email)?;
             Ok((msg, meta["id"].as_str().map(|s| s.to_string())))
         };
 
@@ -372,7 +479,7 @@ impl<V: VaultAccess> Agent<V> {
 
         on_stage("proposing the transcript");
         let origin = Origin { tool: "transcribe", query: None, sources };
-        self.fm.create_proposal(note, &new_body, &self.model, &email, &origin)?;
+        self.fm.create_proposal(note, &new_body, &who, &email, &origin)?;
 
         say(replies::transcribed(clips.len(), pages.len()))
     }
@@ -688,6 +795,7 @@ mod tests {
             image_specialist: None,
             max_reply_chars: 600,
             history_budget: 4000,
+            device: "laptop".into(),
         }
     }
 
@@ -830,6 +938,7 @@ mod tests {
             propose: false,
             research: false,
             transcribe: Some(src.to_string()),
+            recipe: false,
         };
         // No whisper runtime on this device → say so, propose nothing (regardless of any asset).
         let off = agent(FakeVault { alive: true, ..Default::default() }); // whisper_port None
@@ -928,6 +1037,7 @@ mod tests {
             image_specialist: None,
             max_reply_chars: 600,
             history_budget: 4000,
+            device: "laptop".into(),
         };
         let intent = convo::Intent {
             ask: String::new(),
@@ -935,6 +1045,7 @@ mod tests {
             propose: false,
             research: false,
             transcribe: Some("asset:sha256-abc123".into()),
+            recipe: false,
         };
         let (reply, _) = a.handle("note", &intent, &|_| {}).unwrap();
         assert!(reply.contains("transcribed"), "user is told, got: {reply}");
@@ -1031,13 +1142,15 @@ mod tests {
             image_specialist: None,
             max_reply_chars: 600,
             history_budget: 4000,
+            device: "laptop".into(),
         };
         let intent = convo::Intent {
             ask: String::new(),
             search: false,
             propose: false,
             research: false,
-            transcribe: Some(String::new()), // bare /transcribe
+            transcribe: Some(String::new()), // bare /transcribe,
+            recipe: false,
         };
         let (reply, _) = a.handle("note", &intent, &|_| {}).unwrap();
         assert!(reply.contains("1 recording"), "only the one untranscribed clip: {reply}");
@@ -1060,6 +1173,7 @@ mod tests {
             propose: false,
             research: true,
             transcribe: None,
+            recipe: false,
         };
         let (reply, _id) = a.handle("note", &intent, &|_| {}).unwrap();
         assert!(
@@ -1130,6 +1244,7 @@ mod tests {
             image_specialist: None,
             max_reply_chars: 2000,
             history_budget: 4000,
+            device: "laptop".into(),
         };
         let intent = convo::Intent {
             ask: String::new(),
@@ -1137,11 +1252,116 @@ mod tests {
             propose: false,
             research: false,
             transcribe: Some(String::new()),
+            recipe: false,
         };
         let (reply, _) = agent.handle("n1", &intent, &|_| {}).unwrap();
         assert!(
             reply.contains("Neither audio transcription nor image reading"),
             "it must name what is missing, got: {reply}"
         );
+    }
+
+    /// **`/recipe` on a written note proposes a recipe of only what was written** (2026-10-18).
+    #[test]
+    fn a_recipe_is_proposed_from_what_the_note_says_and_nothing_else() {
+        struct Notebook {
+            proposed: std::cell::RefCell<Vec<Value>>,
+            said: std::cell::RefCell<Vec<String>>,
+        }
+        impl VaultAccess for Notebook {
+            fn get(&self, _: &str) -> Result<Value, String> {
+                Ok(json!({ "title": "Ricetta tiramisù", "body": "Per sei persone servono \
+                    cinquecento grammi di mascarpone, quattro uova e cento grammi di zucchero. \
+                    Montate i tuorli con lo zucchero e unite il mascarpone." }))
+            }
+            fn thread(&self, _: &str) -> Result<Value, String> {
+                Ok(json!({ "messages": [] }))
+            }
+            fn discussions(&self) -> Result<Value, String> {
+                Ok(json!([]))
+            }
+            fn alive(&self) -> bool {
+                true
+            }
+            fn reply(&self, _: &str, _: &str) -> Result<Value, String> {
+                Ok(Value::Null)
+            }
+            fn reply_as(&self, _: &str, body: &str, _: &str, _: &str) -> Result<Value, String> {
+                self.said.borrow_mut().push(body.to_string());
+                Ok(json!({ "id": "R1" }))
+            }
+            fn create_proposal(
+                &self,
+                _: &str,
+                _: &str,
+                _: &str,
+                _: &str,
+                _: &Origin,
+            ) -> Result<Value, String> {
+                Ok(Value::Null)
+            }
+            fn propose_note(
+                &self,
+                _: &str,
+                note: &Value,
+                name: &str,
+                _: &str,
+                origin: &Origin,
+            ) -> Result<Value, String> {
+                assert_eq!(origin.tool, "recipe");
+                assert_eq!(name, "Myrme (laptop)");
+                self.proposed.borrow_mut().push(note.clone());
+                Ok(json!({ "id": "P1" }))
+            }
+            fn blob_bytes(&self, _: &str) -> Result<(Vec<u8>, String), String> {
+                Err("none".into())
+            }
+            fn activity(&self, _: &str, _: &str, _: &str) {}
+            fn activity_done(&self, _: &str) {}
+            fn present(&self, _: &str, _: Option<&crate::ImageReader>) {}
+        }
+        struct Says(&'static str);
+        impl fm_agent::LlmStep for Says {
+            fn complete(&self, _: &str, _: &str) -> Result<fm_agent::LlmResponse, AgentError> {
+                Ok(fm_agent::LlmResponse::complete(self.0))
+            }
+        }
+        let fm = Notebook {
+            proposed: std::cell::RefCell::new(vec![]),
+            said: std::cell::RefCell::new(vec![]),
+        };
+        let a = Agent {
+            fm,
+            model_port: 0,
+            model: "test".into(),
+            searxng_port: None,
+            web_direct: false,
+            whisper_port: None,
+            whisper_model: String::new(),
+            vision: false,
+            read_prompt: None,
+            reads_labels: false,
+            image_specialist: None,
+            max_reply_chars: 600,
+            history_budget: 4000,
+            device: "laptop".into(),
+        };
+        let model = Says(
+            r#"{"title":"Tiramisù","servings":6,"ingredients":["500 g di mascarpone","4 uova","100 g di zucchero","Cacao amaro"],"steps":["Montate i tuorli con lo zucchero.","Unite il mascarpone."],"times":{},"notes":[]}"#,
+        );
+        let (said, _) = a.recipe_turn(&model, "N1", &|_| {}).unwrap();
+
+        let proposed = a.fm.proposed.borrow();
+        assert_eq!(proposed.len(), 1);
+        let p = &proposed[0];
+        assert_eq!(p["title"], "Tiramisù");
+        assert_eq!(p["tags"], json!(["recipe"]));
+        assert_eq!(p["props"]["servings"], 6);
+        assert!(p["props"]["recipe"].as_str().is_some_and(|w| !w.is_empty()));
+        let body = p["body"].as_str().unwrap();
+        assert!(body.starts_with("## Ingredients\n\n- 500 g di mascarpone\n- 4 uova\n- 100 g di zucchero\n\n## Method"), "{body}");
+        assert!(!body.contains("Cacao"), "never said, so not in it: {body}");
+        assert!(body.contains("From [Ricetta tiramisù](note:N1)."));
+        assert!(said.contains("“Tiramisù”") && said.contains("one line"), "{said}");
     }
 }

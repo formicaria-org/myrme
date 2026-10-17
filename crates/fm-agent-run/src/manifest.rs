@@ -89,6 +89,10 @@ pub struct Manifest {
     /// The phone's whisper model name (a `[[models]]` entry), fetched on demand when Audio transcription
     /// is on. `None` ⇒ no phone whisper. Read via [`mobile_whisper`](Self::mobile_whisper).
     pub whisper_mobile: Option<String>,
+    /// The *better listening* pick (2026-10-18) — a larger `[[models]]` whisper entry a person may
+    /// choose in Settings, on any device. `None` ⇒ no such choice offered. Read via
+    /// [`whisper_for`](Self::whisper_for).
+    pub whisper_better: Option<String>,
     /// Every catalogued model.
     pub(crate) models: Vec<Model>,
     /// The prebuilt runtime archives, keyed by the suffix that names a platform — `linux_x64`,
@@ -132,6 +136,7 @@ impl Manifest {
         let mut gpu = String::from("auto");
         let mut max_reply_chars = 2000usize;
         let mut whisper_mobile: Option<String> = None;
+        let mut whisper_better: Option<String> = None;
         let mut models: Vec<Model> = Vec::new();
         // `runtime_url_<platform>` and `runtime_sha256_<platform>` arrive in either order, so they
         // are gathered by suffix and paired at the end. A URL without a checksum is **dropped**,
@@ -210,6 +215,7 @@ impl Manifest {
                     "gpu" => gpu = val.to_string(),
                     "max_reply_chars" => max_reply_chars = val.parse().unwrap_or(max_reply_chars),
                     "whisper_mobile" => whisper_mobile = Some(val.to_string()),
+                    "whisper_better" => whisper_better = Some(val.to_string()),
                     k if k.starts_with("runtime_url_") => {
                         rt_url.insert(k["runtime_url_".len()..].to_string(), val.to_string());
                     }
@@ -241,6 +247,7 @@ impl Manifest {
             gpu,
             max_reply_chars,
             whisper_mobile,
+            whisper_better,
             models,
             runtimes,
         }
@@ -305,8 +312,25 @@ impl Manifest {
     /// audio transcription is switched on. Falls back to the phone's pick, then to `ggml-base.en`,
     /// so a catalogue that names neither still resolves to the entry both platforms have used.
     pub fn whisper_desktop(&self) -> Option<String> {
+        self.whisper_for(false)
+    }
+
+    /// The speech-to-text weights for a device: the *better listening* pick when it was chosen and
+    /// is catalogued, else the everyday one (the same on every device, 2026-10-18).
+    pub fn whisper_for(&self, better: bool) -> Option<String> {
+        if better {
+            if let Some(name) = self.whisper_better.clone().filter(|n| self.model(n).is_some()) {
+                return Some(name);
+            }
+        }
         let name = self.whisper_mobile.clone().unwrap_or_else(|| "ggml-base.en".to_string());
         self.model(&name).map(|_| name)
+    }
+
+    /// Every catalogued speech-to-text entry, in file order — what may be on disk from an earlier
+    /// choice, so a device can fall back to one while the chosen one downloads, and remove the rest.
+    pub fn whisper_names(&self) -> Vec<String> {
+        self.models.iter().filter(|m| m.repo.contains("whisper")).map(|m| m.name.clone()).collect()
     }
 
     /// The context window for `name` — the model's own `ctx` override, else the manifest default.
@@ -415,6 +439,18 @@ impl Manifest {
         }
         let rev = m.revision.as_deref().unwrap_or("main");
         Some(format!("https://huggingface.co/{}/resolve/{rev}/{file}", m.repo))
+    }
+}
+
+/// The language to tell `whisper-server` (`-l`) for a set of weights: English-only weights (`.en`)
+/// are told English; every other set listens for the language and transcribes in it. Without this
+/// a multilingual model is told English — its server's default — and translates an Italian recording
+/// instead of writing down what was said (2026-10-18, the tiramisù recording).
+pub fn whisper_language(name: &str) -> &'static str {
+    if name.ends_with(".en") {
+        "en"
+    } else {
+        "auto"
     }
 }
 
@@ -535,6 +571,22 @@ mod tests {
         let m = Manifest::parse("ctx = not-a-number\nthreads = 8");
         assert_eq!(m.ctx, 2048);
         assert_eq!(m.threads, 8);
+    }
+
+    #[test]
+    fn every_device_hears_any_language_and_may_choose_to_listen_better() {
+        let m = Manifest::parse(include_str!("../../../agents/models.toml"));
+        let everyday = m.whisper_for(false).expect("an everyday speech model is catalogued");
+        assert_eq!(whisper_language(&everyday), "auto", "{everyday} must not be English-only");
+        assert_eq!(m.whisper_desktop().as_deref(), Some(everyday.as_str()), "the same everywhere");
+        let better = m.whisper_for(true).expect("the better choice resolves");
+        assert_ne!(better, everyday);
+        assert!(m.model(&better).unwrap().sha256.is_some(), "pinned and verified");
+        assert!(m.whisper_names().contains(&"ggml-base.en".to_string()), "the old one stays known");
+        assert_eq!(whisper_language("ggml-base.en"), "en");
+        // A catalogue without the better entry still answers the everyday one.
+        let plain = Manifest::parse("whisper_mobile = \"w\"\nwhisper_better = \"gone\"\n[[models]]\nname = \"w\"\nrepo = \"x/whisper.cpp\"\nfile = \"w.bin\"\n");
+        assert_eq!(plain.whisper_for(true).as_deref(), Some("w"));
     }
 
     #[test]

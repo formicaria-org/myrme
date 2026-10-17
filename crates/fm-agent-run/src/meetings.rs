@@ -223,7 +223,7 @@ impl<V: VaultAccess> Agent<V> {
             let plan = meetings::plan(ok, current, since, &taken, &linked, &proposed);
             let new_title = self.title_once(llm, &mut mem, id, title, &emails, me);
 
-            let email = format!("{}@fm-agents.local", self.model);
+            let (who, email) = self.author();
             let origin = Origin {
                 tool: "meetings",
                 query: Some(format!("the meetings fixed in \u{201c}{title}\u{201d}")),
@@ -248,7 +248,7 @@ impl<V: VaultAccess> Agent<V> {
                 if let Some(t) = &new_title {
                     props["title"] = json!(t);
                 }
-                self.fm.propose_with(id, &new_body, &props, &self.model, &email, &origin)?;
+                self.fm.propose_with(id, &new_body, &props, &who, &email, &origin)?;
                 now_proposed.insert(m.start_stamp());
                 made += 1;
                 verdict
@@ -262,7 +262,7 @@ impl<V: VaultAccess> Agent<V> {
                 if let Some(t) = &new_title {
                     props["title"] = json!(t);
                 }
-                self.fm.propose_with(id, &new_body, &props, &self.model, &email, &origin)?;
+                self.fm.propose_with(id, &new_body, &props, &who, &email, &origin)?;
                 made += 1;
                 verdict.push("proposes marking the meeting called off".into());
             }
@@ -294,7 +294,7 @@ impl<V: VaultAccess> Agent<V> {
                 if let Some(p) = &m.place {
                     note["location"] = json!(p);
                 }
-                self.fm.propose_note(id, &note, &self.model, &email, &origin)?;
+                self.fm.propose_note(id, &note, &who, &email, &origin)?;
                 now_proposed.insert(m.start_stamp());
                 made += 1;
             }
@@ -375,15 +375,8 @@ impl<V: VaultAccess> Agent<V> {
             query: Some(format!("a title for \u{201c}{title}\u{201d}")),
             sources: vec![format!("note:{id}")],
         };
-        let email = format!("{}@fm-agents.local", self.model);
-        self.fm.propose_with(
-            id,
-            &body,
-            &json!({ "title": title }),
-            &self.model,
-            &email,
-            &origin,
-        )?;
+        let (who, email) = self.author();
+        self.fm.propose_with(id, &body, &json!({ "title": title }), &who, &email, &origin)?;
         Ok(())
     }
 }
@@ -510,6 +503,7 @@ mod tests {
             image_specialist: None,
             max_reply_chars: 1000,
             history_budget: 1000,
+            device: "laptop".into(),
         }
     }
 

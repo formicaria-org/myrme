@@ -25,6 +25,10 @@ pub struct Intent {
     /// read (e.g. `asset:sha256-<hash>`); an empty string means the command was given with no asset,
     /// which the runner reports back rather than guessing.
     pub transcribe: Option<String>,
+    /// `/recipe` was present — make a **recipe** of the note: its recording transcribed (or its text
+    /// as it is), shaped into ingredients, method and times, and proposed as a new recipe note
+    /// (2026-10-18). Only words that were said or written go in it.
+    pub recipe: bool,
 }
 
 /// The **one** thing a message asks the assistant to do — a closed list, so adding an ability is a
@@ -44,6 +48,8 @@ pub enum Command {
     /// Turn the note's media into text. The reference names one file, or is empty for "everything
     /// in this note not read yet"; which reader runs is decided by each file's type, not here.
     Read(String),
+    /// Make a recipe of the note — said or written — proposed as a new recipe note.
+    Recipe,
 }
 
 impl Intent {
@@ -52,6 +58,8 @@ impl Intent {
     pub fn command(&self) -> Command {
         if self.research {
             Command::Research
+        } else if self.recipe {
+            Command::Recipe
         } else if let Some(reference) = &self.transcribe {
             Command::Read(reference.clone())
         } else if self.propose {
@@ -63,7 +71,7 @@ impl Intent {
 
     /// A plain conversation turn — no command, just talk.
     pub fn is_chat(&self) -> bool {
-        !self.search && !self.propose && !self.research && self.transcribe.is_none()
+        !self.search && !self.propose && !self.research && self.transcribe.is_none() && !self.recipe
     }
 }
 
@@ -75,6 +83,7 @@ pub fn parse(message: &str) -> Intent {
     let mut propose = false;
     let mut research = false;
     let mut want_transcribe = false;
+    let mut recipe = false;
     let mut rest = Vec::new();
     for tok in message.split_whitespace() {
         match tok {
@@ -82,6 +91,7 @@ pub fn parse(message: &str) -> Intent {
             "/propose" => propose = true,
             "/research" => research = true,
             "/transcribe" => want_transcribe = true,
+            "/recipe" | "/ricetta" => recipe = true,
             other => rest.push(other),
         }
     }
@@ -96,7 +106,7 @@ pub fn parse(message: &str) -> Intent {
             String::new()
         }
     });
-    Intent { ask: rest.join(" "), search, propose, research, transcribe }
+    Intent { ask: rest.join(" "), search, propose, research, transcribe, recipe }
 }
 
 /// Which agent, if any, a message addresses — so an agent responds **only when called by name**
@@ -111,6 +121,66 @@ pub fn addressed<'a>(message: &str, agents: &'a [&str]) -> Option<(&'a str, Inte
                 let rest: Vec<&str> = message.split_whitespace().filter(|t| *t != tok).collect();
                 return Some((agent, parse(&rest.join(" "))));
             }
+        }
+    }
+    None
+}
+
+/// The assistant's one name, on every device (owner, 2026-10-18; plan P2). The model is configuration.
+pub const MYRME: &str = "Myrme";
+
+/// **A device's name for its Myrme**, as a person typed it ("Office desktop") made into the word a
+/// mention can carry (`office-desktop`, so `@Myrme-office-desktop`): lower case, letters and digits,
+/// a dash for anything else, at most 24 characters. `None` when nothing usable is left — the device
+/// then keeps its default, `laptop` or `phone`.
+pub fn device_word(typed: &str) -> Option<String> {
+    let mut w = String::new();
+    for c in typed.trim().to_lowercase().chars() {
+        if c.is_alphanumeric() {
+            w.push(c);
+        } else if !w.ends_with('-') && !w.is_empty() {
+            w.push('-');
+        }
+    }
+    let w: String = w.trim_end_matches('-').chars().take(24).collect();
+    let w = w.trim_end_matches('-').to_string();
+    (!w.is_empty()).then_some(w)
+}
+
+/// **Whether this copy of Myrme is the one a message asks** — and what it asks.
+///
+/// - `@Myrme` is answered by the device the message was **written on** (`written_on`, the `device`
+///   the app stamps on a message), so a message synced to a phone and a computer is answered once.
+///   A message with no stamp — written before there was one — is answered by whoever sees it.
+/// - `@Myrme·phone`, `@Myrme-phone` or `@Myrme_phone` asks that device's copy, wherever it was
+///   written: for work only one device can do.
+/// - `@<model>` keeps working as an alias for the copy running that model.
+///
+/// Case-insensitive throughout.
+pub fn addressed_here(
+    message: &str,
+    model: &str,
+    device: &str,
+    written_on: Option<&str>,
+) -> Option<Intent> {
+    let me = MYRME.to_lowercase();
+    let here = |name: &str| -> bool {
+        let name = name.to_lowercase();
+        if name == model.to_lowercase() {
+            return true;
+        }
+        if name == me {
+            return written_on.is_none_or(|d| d.eq_ignore_ascii_case(device));
+        }
+        ['·', '-', '_'].iter().any(|sep| name == format!("{me}{sep}{}", device.to_lowercase()))
+    };
+    for tok in message.split_whitespace() {
+        // A mention may end a sentence: `@Myrme,` or `@Myrme?` still names it.
+        let Some(raw) = tok.strip_prefix('@') else { continue };
+        let name = raw.trim_end_matches(|c: char| ",.;:!?".contains(c));
+        if here(name) {
+            let rest: Vec<&str> = message.split_whitespace().filter(|t| *t != tok).collect();
+            return Some(parse(&rest.join(" ")));
         }
     }
     None
@@ -264,5 +334,51 @@ mod tests {
         assert!(out.chars().count() <= 9, "over cap: {out:?}");
         assert!(out.ends_with('…') && !out.contains("wor"), "cut mid-word: {out:?}");
         assert_eq!(out, "hello…");
+    }
+
+    /// **The gate the plan set: one message reaching two devices is answered by exactly one.**
+    #[test]
+    fn myrme_is_answered_once_by_the_device_it_was_written_on() {
+        let laptop = |m: &str, on: Option<&str>| addressed_here(m, "qwen3-vl-4b", "laptop", on);
+        let phone = |m: &str, on: Option<&str>| addressed_here(m, "lfm2.5-1.2b", "phone", on);
+
+        // Written on the phone, synced to both: only the phone answers.
+        let m = "@Myrme /transcribe asset:sha256-ab";
+        assert!(phone(m, Some("phone")).is_some());
+        assert!(laptop(m, Some("phone")).is_none());
+        // Written on the laptop: only the laptop.
+        assert!(laptop("@myrme, summarise this", Some("laptop")).is_some());
+        assert!(phone("@myrme, summarise this", Some("laptop")).is_none());
+
+        // Asking one copy by name, wherever it was written.
+        for spelled in ["@Myrme·laptop", "@Myrme-laptop", "@myrme_LAPTOP"] {
+            let m = format!("{spelled} read this page");
+            assert!(laptop(&m, Some("phone")).is_some(), "{spelled}");
+            assert!(phone(&m, Some("phone")).is_none(), "{spelled}");
+        }
+
+        // The model's own name still works, and only where that model runs.
+        assert!(laptop("@qwen3-vl-4b hi", Some("phone")).is_some());
+        assert!(phone("@qwen3-vl-4b hi", Some("phone")).is_none());
+
+        // What it asks survives, mention removed.
+        let i = phone("@Myrme /transcribe asset:sha256-ab", Some("phone")).unwrap();
+        assert_eq!(i.transcribe.as_deref(), Some("asset:sha256-ab"));
+
+        // A message from before there was a stamp is answered by whoever sees it.
+        assert!(phone("@Myrme hello", None).is_some());
+        // And no mention, no answer.
+        assert!(phone("Myrme is a nice name", Some("phone")).is_none());
+    }
+
+    #[test]
+    fn a_device_s_name_becomes_a_word_a_mention_can_carry() {
+        assert_eq!(device_word("Office desktop").as_deref(), Some("office-desktop"));
+        assert_eq!(device_word("  Tablet di Maria! ").as_deref(), Some("tablet-di-maria"));
+        assert_eq!(device_word("—").as_deref(), None);
+        assert!(device_word(&"x".repeat(40)).unwrap().len() <= 24);
+        // And it is what `@Myrme-<word>` asks.
+        assert!(addressed_here("@Myrme-office-desktop hi", "m", "office-desktop", Some("phone"))
+            .is_some());
     }
 }

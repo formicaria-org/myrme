@@ -159,6 +159,47 @@ impl Transcribe for WhisperServer {
     }
 }
 
+/// What dictation says when it cannot listen — one wording for the desktop and the phone.
+pub const DICTATE_OFF: &str = "Dictation uses the assistant's audio transcription. Turn it on in \
+    Settings → Study assistant → Audio transcription, then try again once the assistant has started.";
+pub const DICTATE_NOT_YET: &str = "Couldn't write it down — the assistant isn't listening yet (it \
+    may still be starting).";
+
+/// **Dictated words, ready to go into a note** (`decisions.md` 2026-10-18, *dictation*). The
+/// recogniser's segments become one paragraph; its annotations of sounds — `[BLANK_AUDIO]`,
+/// `(music)`, `[Musica]` — go, since they were not said; and a segment repeated straight after itself
+/// is kept once, because whisper loops on its last words and the speaker did not. Nothing else is
+/// changed: no word is corrected, added or reordered. Empty when nothing was said.
+pub fn dictation_text(raw: &str) -> String {
+    // whisper starts a segment with a space when it starts a word; one that does not finishes the
+    // word the last segment broke off ("gi" + "uttiero"), so it is joined without one.
+    let mut out: Vec<String> = Vec::new();
+    let mut whole = String::new();
+    for seg in raw.lines() {
+        let continues = !seg.starts_with(char::is_whitespace) && !whole.is_empty();
+        let mut kept = String::new();
+        let mut depth = 0usize;
+        for c in seg.chars() {
+            match c {
+                '[' | '(' => depth += 1,
+                ']' | ')' if depth > 0 => depth -= 1,
+                c if depth == 0 => kept.push(c),
+                _ => {}
+            }
+        }
+        let seg = kept.split_whitespace().collect::<Vec<_>>().join(" ");
+        if seg.is_empty() || out.last().is_some_and(|l| l.eq_ignore_ascii_case(&seg)) {
+            continue;
+        }
+        if !whole.is_empty() && !continues {
+            whole.push(' ');
+        }
+        whole.push_str(&seg);
+        out.push(seg);
+    }
+    whole
+}
+
 /// Pull the transcript out of whisper-server's JSON reply (`{"text": "…"}`). Pure, so it is tested
 /// directly.
 fn parse_transcript(json: &str) -> Result<String, AgentError> {
@@ -173,6 +214,22 @@ fn parse_transcript(json: &str) -> Result<String, AgentError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dictation_is_what_was_said_as_one_paragraph() {
+        let raw = " Cinque uova,\n [BLANK_AUDIO]\n 500 grammi di mascarpone.\n (music)\n Un pizzico di sale.\n Un pizzico di sale.\n";
+        assert_eq!(
+            dictation_text(raw),
+            "Cinque uova, 500 grammi di mascarpone. Un pizzico di sale."
+        );
+        assert_eq!(dictation_text(" [BLANK_AUDIO]\n"), "");
+        // A word the recogniser broke between two segments is one word again.
+        assert_eq!(
+            dictation_text(" tre cucchiai di zuc\nchero di semola.\n Basta."),
+            "tre cucchiai di zucchero di semola. Basta."
+        );
+        assert_eq!(dictation_text("(speaking in foreign language)"), "");
+    }
 
     /// A canned transcriber for the hermetic tests — returns a fixed string, touches nothing.
     struct Canned(&'static str);

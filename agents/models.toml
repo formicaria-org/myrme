@@ -68,15 +68,18 @@ gpu = "auto"
 # are fetched when Audio transcription is switched on (Linux and Windows; see the `runtime_url_whisper_*`
 # keys below), or by `pixi run fetch-whisper` in a checkout. `agent-serve` errors clearly if either is
 # missing, so nothing silently half-works.
-whisper_model = "ggml-base.en"
+whisper_model = "ggml-base"
 whisper_model_repo = "ggerganov/whisper.cpp"
-whisper_model_file = "ggml-base.en.bin"
-# The PHONE whisper pick — a `[[models]]` name (below) fetched on demand by the mobile app when Audio
-# transcription is on. Moved tiny.en → base.en (2026-07-24): base is ~148 MB (vs tiny ~75 MB), still
-# tiny beside the 1.4 GB llama, and it matches the desktop for materially better accuracy on real
-# speech. The admission gate (model file + 300 MB headroom ≈ 450 MB) fits with room to spare on the
-# 7.4 GB phone. tiny.en stays defined below as the fall-back if RAM ever gets tight.
-whisper_mobile = "ggml-base.en"
+whisper_model_file = "ggml-base.bin"
+# The EVERYDAY whisper pick, on every device (the name is historical: the desktop reads it too, via
+# `whisper_desktop`) — a `[[models]]` name fetched on demand when Audio transcription is on.
+# tiny.en → base.en (2026-07-24) for accuracy; base.en → **base** (2026-10-18): the same size and
+# memory, but it hears any language. base.en wrote "(speaking in foreign language)" for an Italian
+# recipe recording; base wrote it down in Italian (decisions.md 2026-10-18, *listening in any language*).
+whisper_mobile = "ggml-base"
+# The BETTER LISTENING pick a person may choose in Settings on any device: small, ~488 MB, about
+# 1.5× slower on the laptop (61 s for a 2-minute recording) and markedly closer to what was said.
+whisper_better = "ggml-small"
 # whisper.cpp DOES ship a prebuilt, CPU-only, portable Linux x64 server tarball (verified: it unpacks
 # `whisper-server` + `libwhisper.so` + `libggml-cpu-*` micro-arch variants, ~24 MB, no CUDA, links only
 # stock system libs). So `fetch-whisper` stages it automatically, exactly like the llama.cpp runtime —
@@ -181,6 +184,26 @@ sha256 = "b1b3de114215d9507409a662a501a631095a479a419584e8a2ded6304b19b4f5"
 note = "PHONE pick until 2026-10-10, kept as the text-only fallback — IFEval 86.2 / BFCL-v3 49.1, top of its size tier; measured 15.9 tok/s, ~1.4 GB resident on the Dimensity 7300. Runs smoothly at 4 threads without blocking the UI."
 
 [[models]]
+name = "ggml-base"
+license = "MIT"
+bytes = 147951465
+repo = "ggerganov/whisper.cpp"
+file = "ggml-base.bin"
+revision = "5359861c739e955e79d9a303bcbc70fb988958b1"
+sha256 = "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe"
+note = "EVERYDAY whisper on every device (2026-10-18) — base, any language, ~148 MB: the same size and memory as base.en, which it replaces. Checksum verified against the pinned commit."
+
+[[models]]
+name = "ggml-small"
+license = "MIT"
+bytes = 487601967
+repo = "ggerganov/whisper.cpp"
+file = "ggml-small.bin"
+revision = "5359861c739e955e79d9a303bcbc70fb988958b1"
+sha256 = "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b"
+note = "BETTER LISTENING whisper (2026-10-18), chosen in Settings — small, any language, ~488 MB. Measured on a 2-minute Italian recording: 61 s on the laptop CPU, near-verbatim where base misheard."
+
+[[models]]
 name = "ggml-base.en"
 license = "MIT"
 bytes = 147964211
@@ -188,7 +211,7 @@ repo = "ggerganov/whisper.cpp"
 file = "ggml-base.en.bin"
 revision = "5359861c739e955e79d9a303bcbc70fb988958b1"
 sha256 = "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002"
-note = "PHONE whisper (current) — base English, ~148 MB. Same weights as the desktop; better than tiny on accents/noise, still fits beside the 1.4 GB llama on an 8 GB phone. Fetched on demand when Audio transcription is enabled; served by the bundled arm64 whisper-server."
+note = "Whisper until 2026-10-18 — base English, ~148 MB. Same weights as the desktop; better than tiny on accents/noise, still fits beside the 1.4 GB llama on an 8 GB phone. Fetched on demand when Audio transcription is enabled; served by the bundled arm64 whisper-server."
 
 [[models]]
 name = "ggml-tiny.en"

@@ -91,3 +91,32 @@ pub fn transcribed(recordings: usize, images: usize) -> String {
          merge in Collaboration.{caveat}"
     )
 }
+
+/// `/recipe` on a note with a recording, where this device has nothing to hear it with.
+pub const RECIPE_CANNOT_HEAR: &str = "I can't listen to recordings on this device — turn on audio \
+    transcription in Settings → Study assistant, or ask from the device that can.";
+/// `/recipe` on a note with too little in it to be a recipe.
+pub const RECIPE_NOTHING_TO_READ: &str = "There isn't a recipe in this note for me to work from — \
+    record it, or write it, and ask again.";
+/// The words did not make a recipe.
+pub const RECIPE_NOT_FOUND: &str =
+    "I couldn't find a recipe in what this note says, so I proposed \
+    nothing. Say the ingredients and the steps, and ask again.";
+
+/// A recipe was proposed: what it is called, what it was made from, and anything left out.
+pub fn recipe_proposed(title: &str, recordings: usize, dropped: usize) -> String {
+    let from = match recordings {
+        0 => "from what this note says".to_string(),
+        1 => "from the recording".to_string(),
+        n => format!("from the {n} recordings"),
+    };
+    let left = match dropped {
+        0 => String::new(),
+        1 => " I left out one line that wasn't in what was said.".to_string(),
+        n => format!(" I left out {n} lines that weren't in what was said."),
+    };
+    format!(
+        "I've proposed the recipe “{title}”, {from}. Accept it in Collaboration, or change it first; \
+         then in Food its ingredients can be matched to foods so it counts.{left}"
+    )
+}

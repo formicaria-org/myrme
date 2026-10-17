@@ -86,7 +86,9 @@ pub fn serve_loop<V: VaultAccess>(
     // something, and it is asked at every poll — seconds, not the minute rescan — so a reply reaches
     // the meeting pass as soon as it reaches the vault. `None` until first asked, which counts as new.
     let mut mail_seen: Option<u64> = None;
-    agent.fm.present(name, agent.image_reader().as_ref()); // show online at once, before the first heartbeat tick
+    // Present as **Myrme**, the one name a person types on every device (2026-10-18); the model's
+    // name still addresses it (`convo::addressed_here`), it is just not what the `@` list offers.
+    agent.fm.present(convo::MYRME, agent.image_reader().as_ref()); // show online at once, before the first heartbeat tick
     let mut last_hb = Instant::now();
     loop {
         std::thread::sleep(interval);
@@ -100,7 +102,7 @@ pub fn serve_loop<V: VaultAccess>(
 
         // Heartbeat at most every HEARTBEAT, independent of the (backing-off) poll cadence.
         if last_hb.elapsed() >= HEARTBEAT {
-            agent.fm.present(name, agent.image_reader().as_ref());
+            agent.fm.present(convo::MYRME, agent.image_reader().as_ref());
             last_hb = Instant::now();
         }
 
@@ -131,7 +133,11 @@ pub fn serve_loop<V: VaultAccess>(
                 if !handled.insert(mid.to_string()) {
                     continue;
                 }
-                let Some((_who, intent)) = convo::addressed(body, &[name]) else {
+                // `@Myrme` asks the copy on the device the message was written on; `@Myrme·phone`
+                // asks one by name; the model's own name still works (`convo::addressed_here`).
+                let written_on = m["props"]["device"].as_str();
+                let Some(intent) = convo::addressed_here(body, name, &agent.device, written_on)
+                else {
                     continue;
                 };
                 if !asked_this_pass.insert(intent.ask.clone()) {
@@ -168,8 +174,8 @@ pub fn serve_loop<V: VaultAccess>(
                         let notice = format!(
                             "⚠️ I couldn't finish that one — {e}. Try again, or simplify it."
                         );
-                        let email = format!("{name}@fm-agents.local");
-                        if let Ok(meta) = agent.fm.reply_as(id, &notice, name, &email) {
+                        let (who, email) = agent.author();
+                        if let Ok(meta) = agent.fm.reply_as(id, &notice, &who, &email) {
                             posted += 1;
                             if let Some(rid) = meta["id"].as_str() {
                                 handled.insert(rid.to_string());
