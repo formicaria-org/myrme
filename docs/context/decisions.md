@@ -349,6 +349,23 @@ works for all the OS and fix missing points."*
 - **Contract 1.3**, still an addition. The 1.0 items formicaria no longer uses are listed in
   `contract.md` for contract 2.0.
 
+## 2026-10-19 — a version is released when its GitHub Release page is published `#contract`
+
+**The owner:** *"I still see no release of myrme"* — *"which is wrong if one wants to ship based on
+its releases."*
+
+**Decision.**
+- **A published GitHub Release page is what makes a Myrme version a release**, not the tag alone.
+- CI publishes it (`agents/release-pages.sh`, the `release` job in `ci.yml`) only after the gate and
+  the integration test pass on the tag. A tag whose CI fails gets no page.
+- formicaria's `myrme-bump` and its release check take only versions with a published,
+  non-prerelease page.
+- The pages for v0.1.0 to v0.4.1, which were tags only, are filled in by the same job on `main`.
+  Every one of those tags had passed CI.
+
+**Why.** Tags alone left nothing visible on the Releases tab, and nothing to tell a version that
+passed from one that was pushed and then failed.
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading

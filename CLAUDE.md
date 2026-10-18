@@ -23,7 +23,7 @@ Its router names the file to open before you touch each area. The working plan i
 - **formicaria carries no copy of these crates any more** (cutover, 2026-10-18). It links a
   Myrme release by tag and checks the contract version at compile time; `releases.md` says which
   formicaria links which release.
-- **A release** follows `docs/context/releases.md`. An addition to the contract is a new minor; a
+- **A release** follows `docs/context/releases.md`; it is released once CI publishes its GitHub Release page. An addition to the contract is a new minor; a
   removal, rename or change of meaning is a new major, and needs formicaria's change ready first.
 - **formicaria pins Myrme by tag, never by branch.** A tag formicaria pins is never moved or
   deleted.

@@ -41,3 +41,20 @@ jobs:
             .
             .fm/* -> target
       - run: pixi run integration
+  # **A version is released when its page is published** (decisions.md, 2026-10-19): only after the
+  # gate and the integration test pass. On a tag it publishes that tag's page; on `main` it only fills
+  # in pages missing for earlier tags (seconds, and nothing to do once they exist).
+  release:
+    if: github.event_name == 'push'
+    needs: [ci, integration]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: git fetch --force --tags origin
+      - run: sh agents/release-pages.sh
+        env:
+          GH_TOKEN: ${{ github.token }}

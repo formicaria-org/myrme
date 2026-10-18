@@ -22,6 +22,9 @@ Releases before 0.2.0 had no contract number; their surface is what contract 1.0
    meaning; minor for an addition.
 3. Add a row here.
 4. Run `pixi run ci` and `pixi run integration`.
-5. Tag `v<version>`, annotated. CI refuses a tag that differs from `Cargo.toml`.
-6. In formicaria, `pixi run myrme-bump` moves the pin to the newest release of the contract it
+5. Tag `v<version>`, annotated, and push it. CI refuses a tag that differs from `Cargo.toml`.
+6. **CI publishes the GitHub Release page once the gate and the integration test pass on the tag**
+   (`agents/release-pages.sh`). That page is what makes it a release: a tag without one is not
+   linked by formicaria. A tag whose CI failed gets no page; delete it and tag again.
+7. In formicaria, `pixi run myrme-bump` moves the pin to the newest release of the contract it
    builds for and runs its gate.
