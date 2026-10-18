@@ -125,6 +125,38 @@ maps), so their order is not something this decision controls.
 - **`pixi run integration` is a CI job.** It builds `fm-serve` from the pin and checks a
   `/propose` round trip, an unplaceable edit and the recipe headings, with a stand-in model.
 
+## 2026-10-18 (night) — the faster grammar engine on every platform: Myrme builds its own runtime `#model` `#repo`
+
+> Reverses the llguidance point of *the open items* (same day): "No llguidance build".
+
+**The owner:** *"I would like also to adopt the faster options if possible for all the platforms."*
+
+**What was measured.** qwen3-4b-2507, 17 meeting cases, CPU, llama.cpp b10076: llguidance took
+92 s against the stock engine's 115 s, about 20% faster, and scored 16/17 against 17/17. The one
+difference was a judgment the model made either way, not a grammar failure. Speed matters most on
+the phone, which runs on the CPU.
+
+**Decision.**
+- **Myrme publishes its own model runtime.** `.github/workflows/runtime.yml` rebuilds llama.cpp's
+  release archives with `-DLLAMA_LLGUIDANCE=ON`, using upstream's own flags for each platform.
+  - Files: Linux x64 (CPU, Vulkan), macOS arm64, Windows x64 (CPU, Vulkan), Android arm64.
+  - **Upstream's file names and layout** are kept, so the catalogue and formicaria's Android
+    staging change only a URL.
+  - Each platform keeps its current version: b10076 on the desktops, b10081 on Android.
+  - The Vulkan archives are the CPU archive plus upstream's unchanged Vulkan backend from the same
+    tag. That is upstream's own composition for Windows, and it works because a backend is a
+    separate library under `GGML_BACKEND_DL`.
+  - Each build fails unless the llguidance symbols are linked.
+  - Android needs a two-line patch: llama.cpp's `cargo build` of llguidance names no target.
+- A `runtime-*` tag publishes a GitHub release with `SHA256SUMS`.
+- **The catalogue switches only after measuring.** The eval is re-run here on the published Linux
+  archives, on the CPU and on the Vulkan GPU, against upstream's. `runtime_url_*` and
+  `runtime_sha256_*` then point at the release. formicaria gets it at the cutover, or earlier by
+  moving its own pin.
+
+**Cost, stated.** One more thing to maintain: a llama.cpp bump is now a Myrme release, not a URL
+change. The build machines are GitHub's free public runners.
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading
