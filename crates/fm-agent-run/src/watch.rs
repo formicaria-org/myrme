@@ -19,18 +19,29 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 /// Wait for the model server to answer `/health` (up to ~40 s). Shared by the desktop binary and the
 /// in-process app — both launch a local `llama-server` and talk to it over `127.0.0.1`.
 pub fn wait_ready(port: u16) {
+    ready_unless_gone(port, &|| false);
+}
+
+/// [`wait_ready`], but giving up as soon as `gone` says the model process has ended — a model that
+/// failed to load answers nothing, and waiting the full 40 s for it only to call it warm misleads.
+/// True when the server answered.
+pub(crate) fn ready_unless_gone(port: u16, gone: &dyn Fn() -> bool) -> bool {
     let req =
         format!("GET /health HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n");
     for _ in 0..40 {
+        if gone() {
+            return false;
+        }
         if let Ok(raw) =
             fm_agent::http::send("127.0.0.1", port, req.as_bytes(), Duration::from_secs(2))
         {
             if String::from_utf8_lossy(&raw).contains("\"status\":\"ok\"") {
-                return;
+                return true;
             }
         }
         std::thread::sleep(Duration::from_secs(1));
     }
+    false
 }
 
 /// Watch a vault's discussions and answer `@name` mentions until the model goes away.

@@ -176,7 +176,12 @@ fn run() -> Result<(), String> {
         &Need::new(model_bytes, a.headroom),
         Limits::resident(),
     )?;
-    crate::watch::wait_ready(model_port);
+    if !crate::watch::ready_unless_gone(model_port, &|| model.finished()) && model.finished() {
+        return Err(format!(
+            "the model server exited before it was ready — see the lines above (model {})",
+            model_gguf.display()
+        ));
+    }
 
     // Optional audio→transcript runtime: a second supervised process (`whisper-server`), launched only
     // when `--whisper-port` is given, killed on exit like the model. (The phone launches its own bundled

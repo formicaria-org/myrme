@@ -715,7 +715,14 @@ impl Tools {
             history_budget: 4000,
             device: job.device,
         };
-        crate::watch::wait_ready(port);
+        if !crate::watch::ready_unless_gone(port, &|| model.finished()) && model.finished() {
+            let _ = model.wait();
+            if let Some(w) = _whisper {
+                w.stopper().stop();
+                let _ = w.wait();
+            }
+            return Err(format!("the model server for @{model_name} exited before it was ready"));
+        }
         (h.log)(&format!("study agent listening in-process — @{model_name}"));
         (h.present)(true);
         let stopper = model.stopper();

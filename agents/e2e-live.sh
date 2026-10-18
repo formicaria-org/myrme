@@ -15,6 +15,8 @@ set -euo pipefail
 : "${MODELS:?the folder holding the model files}"
 : "${RUNTIME:?an extracted llama.cpp runtime}"
 MODEL="${1:-qwen3-4b-2507}"
+# Absolute, so the links below still resolve from the temporary folder.
+MODELS="$(cd "$MODELS" && pwd)"; RUNTIME="$(cd "$RUNTIME" && pwd)"; FM_CHECKOUT="$(cd "$FM_CHECKOUT" && pwd)"
 FM="$FM_CHECKOUT/target/release/fm-serve"; AGENT="$FM_CHECKOUT/target/release/agent-serve"
 PORT="${E2E_PORT:-18765}"; MPORT="${E2E_MODEL_PORT:-18081}"
 T="$(mktemp -d)"; mkdir -p "$T/home" "$T/vault" "$T/agents"
