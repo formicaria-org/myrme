@@ -257,6 +257,17 @@ On branch `myrme-cutover` (worktree `~/fm-myrme`, local only):
 - Per-method LoRA adapters distilled from accepted proposals (NVIDIA's loop). This needs enough
   records first; formicaria counted 23 in August.
 
+## Phase D is done (2026-10-18)
+
+formicaria `main` links Myrme from this repository; the owner merged the cutover on 2026-10-18.
+From then on:
+- **formicaria pins a Myrme release** and checks its contract at compile time
+  (`MYRME_CONTRACT`; contract 1.0 since Myrme 0.2.0).
+- **`pixi run myrme-bump`** in formicaria moves to the newest compatible release.
+- **formicaria's release notes name the Myrme they carry.**
+- **A Myrme release** follows `releases.md`. A change formicaria must make first (a new contract
+  major) is a formicaria change before it is a Myrme release.
+
 ## Hand-off: what is the owner's (2026-10-18)
 
 1. **Merge `myrme-cutover` into formicaria `main`** for the next release.

@@ -6,7 +6,7 @@ major N whose minor is at least the one it needs.
 
 | Myrme | Contract | Linked by formicaria | What changed for users |
 |---|---|---|---|
-| **0.2.0** | **1.0** | the release after 0.9.2 | The first versioned release: the contract is numbered, and formicaria checks it at build time. Everything below, unchanged |
+| **0.2.0** | **1.0** | formicaria `main` from 2026-10-18, so its next release (after 0.9.2) | The first versioned release: the contract is numbered, and formicaria checks it at build time. Everything below, unchanged |
 | 0.1.2 | — | `main` after the cutover (2026-10-18) | Discussion history without Myrme's own mention and commands |
 | 0.1.1 | — | — | An edit's kind is decided from the request alone |
 | 0.1.0 | — | — | Every method measured; runtime with llguidance; research says whether it can answer; anchored note edits |
