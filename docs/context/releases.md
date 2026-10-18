@@ -6,7 +6,8 @@ major N whose minor is at least the one it needs.
 
 | Myrme | Contract | Linked by formicaria | What changed for users |
 |---|---|---|---|
-| **0.3.0** | **1.1** | formicaria `main` from 2026-10-18 (after its push of the cutover) | The desktop host's facade, `fm_agent_run::host`: formicaria asks Myrme what is installed, fetches it, removes it and starts it, without reaching into Myrme's insides. Fixes removing the downloaded model from Settings, which an installed copy refused |
+| **0.4.0** | **1.3** | formicaria 0.9.3 | **The phone hosts Myrme through the facade too** (`Bundled`, `Tools::provision_weights`, `installed_for`, `run_in_process`): formicaria's phone host lost about 250 lines of Myrme's insides. **An app update brings the runtime its catalogue pins** (`runtime_outdated`, `refresh_runtime`): the faster runtime reaches people who already had the assistant |
+| 0.3.0 | 1.1 | formicaria `main` from 2026-10-18 (after its push of the cutover) | The desktop host's facade, `fm_agent_run::host`: formicaria asks Myrme what is installed, fetches it, removes it and starts it, without reaching into Myrme's insides. Fixes removing the downloaded model from Settings, which an installed copy refused |
 | 0.2.0 | 1.0 | formicaria `main` briefly, 2026-10-18 | The first versioned release: the contract is numbered, and formicaria checks it at build time. Everything below, unchanged |
 | 0.1.2 | — | `main` after the cutover (2026-10-18) | Discussion history without Myrme's own mention and commands |
 | 0.1.1 | — | — | An edit's kind is decided from the request alone |

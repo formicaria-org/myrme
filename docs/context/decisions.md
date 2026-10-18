@@ -322,6 +322,33 @@ severely changed) … the user should not need to think about it and have the fe
 - **`pixi run integration` builds formicaria from inside its checkout**, so that checkout's own
   Cargo configuration applies, a developer's local `[patch]` of Myrme included.
 
+## 2026-10-18 (night) — the phone's facade, and the runtime an update brings, contract 1.3 `#contract` `#model`
+
+**The owner:** *"make sure formicaria is as lean as possible regarding the agentic features and relies
+on myrme; make sure that we can update the formicaria easily for users as before … make sure it
+works for all the OS and fix missing points."*
+
+**Decision.**
+- **The phone hosts Myrme through `host` too.** The phone shell can be built here after all:
+  formicaria's pixi `android` environment carries the NDK in `.android/`.
+  - `Bundled` is the APK's runtime and what Settings says about it.
+  - `Tools::provision_weights` fetches the weights without a runtime.
+  - `Tools::installed_for` resolves against the phone's default.
+  - `Tools::run_in_process` is the whole launch: weights, best-effort projector, sweep, the model
+    under the watchdog, speech beside it, the run loop. Its log lines are unchanged.
+  - formicaria keeps its generation, stop switches, presence board and settings, passed as `Hooks`.
+- **An app update brings the runtime its catalogue pins.**
+  - A runtime on disk was never fetched again, so the llguidance runtime would never have reached
+    anyone who had the assistant before it.
+  - The model runtime now carries a record of its archive (`runtime/.runtime-sha256`). One with
+    none, or another, is outdated (`Tools::runtime_outdated`).
+  - `Tools::refresh_runtime` fetches and checks the new archive into `runtime-next/`, and only
+    then copies it over and writes the record. A failure leaves the old runtime working.
+  - formicaria runs it before the assistant starts. Checked live: a real download, the server
+    replaced, the log kept.
+- **Contract 1.3**, still an addition. The 1.0 items formicaria no longer uses are listed in
+  `contract.md` for contract 2.0.
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading

@@ -34,16 +34,16 @@ use fm_agent_run::fetch::{ensure_mmproj, ensure_model, ensure_runtime};
 /// items above that a desktop host needs (the phone still uses them; they stay until it moves).
 #[cfg(feature = "download")]
 use fm_agent_run::host::{
-    unsupported, whisper_runtime_key, Launch, Progress, Stage, Tools, SERVER_BIN, WHISPER_BIN,
-    WHISPER_PORT,
+    unsupported, whisper_runtime_key, Bundled, Hooks, InProcess, Launch, Progress, Stage, Tools,
+    BUNDLED_SERVER, BUNDLED_WHISPER, SERVER_BIN, WHISPER_BIN, WHISPER_PORT,
 };
 
-/// The contract this file checks is 1.1 (`CONTRACT_MAJOR`/`CONTRACT_MINOR`). Changing what it names
+/// The contract this file checks is 1.3 (`CONTRACT_MAJOR`/`CONTRACT_MINOR`). Changing what it names
 /// means changing the contract version too — a removal or rename is a new major, an addition a new
 /// minor — and the two are compared here so one cannot move without the other.
 #[test]
-fn this_list_is_contract_1_1() {
-    assert_eq!((fm_agent_run::CONTRACT_MAJOR, fm_agent_run::CONTRACT_MINOR), (1, 1));
+fn this_list_is_contract_1_3() {
+    assert_eq!((fm_agent_run::CONTRACT_MAJOR, fm_agent_run::CONTRACT_MINOR), (1, 3));
     assert!(
         fm_agent_run::VERSION.split('.').count() == 3,
         "a release version is MAJOR.MINOR.PATCH"
@@ -53,6 +53,16 @@ fn this_list_is_contract_1_1() {
 /// Associated functions formicaria calls by path.
 #[test]
 fn associated_items_formicaria_calls_exist() {
+    // Contract 1.2: an app update brings the runtime the new catalogue pins.
+    #[cfg(feature = "download")]
+    {
+        let _ = Tools::runtime_outdated;
+        let _ = Tools::refresh_runtime;
+        // Contract 1.3: the phone's host — a bundled runtime, weights alone, a run in-process.
+        let _ = Tools::provision_weights;
+        let _ = Tools::installed_for;
+        let _ = Bundled::availability;
+    }
     let _ = Manifest::read;
     let _ = Manifest::platform_key;
     let _ = <SystemMonitor as ResourceMonitor>::sample;

@@ -261,8 +261,10 @@ On branch `myrme-cutover` (worktree `~/fm-myrme`, local only):
 
 **Its last step, the facade:**
 - **Desktop: done** (Myrme 0.3.0, contract 1.1, `fm_agent_run::host`).
-- **Phone: open.** It needs its own facade, built and checked through formicaria's `android`
-  workflow. Then the 1.0 items nobody uses are removed: contract 2.0.
+- **Phone: done** (Myrme 0.4.0, contract 1.3, `Tools::run_in_process`). It was built here with
+  formicaria's NDK; it was not run with a model, because the emulator is x86_64 and the runtime is
+  arm64.
+- **Contract 2.0 (next breaking release):** remove the 1.0 items nothing uses (`contract.md`).
 
 formicaria `main` links Myrme from this repository; the owner merged the cutover on 2026-10-18.
 From then on:

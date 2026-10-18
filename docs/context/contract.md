@@ -13,7 +13,7 @@ _Taken from formicaria at tag v0.9.2 (commit e670190) on 2026-10-18; the Rust it
 Two numbers, kept apart:
 - **The release version** (`fm_agent_run::VERSION`, `Cargo.toml`, the `v…` tag) changes with
   every release.
-- **The contract version** (`fm_agent_run::CONTRACT_MAJOR`.`CONTRACT_MINOR`, now **1.1**) changes
+- **The contract version** (`fm_agent_run::CONTRACT_MAJOR`.`CONTRACT_MINOR`, now **1.3**) changes
   only when this document does.
   - **Major:** anything listed below is renamed, removed or changes meaning. formicaria checks the
     major at compile time, so an app written for another major refuses to build and says why. It
@@ -24,7 +24,7 @@ So formicaria can take any newer Myrme release of the same contract major by cha
 nothing else. That is how methods, prompts, evals, models and the runtime reach users without a
 formicaria code change. `docs/context/releases.md` lists every release with its contract version.
 
-The list in part 1 is compile-checked as contract 1.1 (`tests/fm_contract.rs`). Changing it means
+The list in part 1 is compile-checked as contract 1.3 (`tests/fm_contract.rs`). Changing it means
 changing the contract version in the same commit.
 
 ## 1. Rust items formicaria names
@@ -50,6 +50,22 @@ git grep -hoE "fm_agent(_run)?::[A-Za-z_]+(::[A-Za-z_]+)*(::\{[^}]*\})?" <tag> -
 | `fm_agent_run::manifest::{Manifest, Manifest::read, Manifest::platform_key, whisper_language}` | the catalogue |
 | `fm_agent_run::nativelib::native_lib_dir` (Android only) | phone: where the bundled runtime lives |
 | `fm_agent_run::watch::{serve_loop, wait_ready}` | phone: the watch loop |
+
+**Contract 1.3 adds the phone's host and the runtime refresh** (Myrme 0.4.0):
+- `Bundled`, with `availability`, `BUNDLED_SERVER` and `BUNDLED_WHISPER`: a runtime an APK
+  carries.
+- `Tools::provision_weights`: weights and projector, no runtime.
+- `Tools::installed_for`: against a phone's default.
+- `Tools::run_in_process` with `InProcess` and `Hooks`: the phone's whole launch.
+- `Tools::runtime_outdated` and `Tools::refresh_runtime` (1.2): an app update brings the runtime
+  its catalogue pins.
+
+With these, formicaria uses no 1.0 item for downloads, installs, launches or the run loop. What it
+still names is the catalogue (`Manifest`), its vault seam (`fmserve`), the label reader and image
+reader record, dictation (`transcribe`), `device_word`/`MYRME`, `StopFlag` (in `Hooks`), and one
+memory-reading test. The 1.0 items nothing uses now — `fetch::*`, `installed::{sweep, sweep_whisper,
+whisper_on_disk}`, `watch::*`, `nativelib`, `launch`, `preflight` — can go in **contract 2.0**,
+the next breaking release.
 
 **Contract 1.1 adds the desktop host's facade, `fm_agent_run::host`** (feature `download`):
 - `Tools` over the one folder the app gives Myrme: `catalogue`, `installed`, `is_provisioned`,

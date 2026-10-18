@@ -137,6 +137,17 @@ impl Tools {
         installed::resolve(manifest, &self.models(), &manifest.default, chosen, seen)
     }
 
+    /// [`Tools::installed`] against another default — a phone's (`Manifest::mobile_default`).
+    pub fn installed_for(
+        &self,
+        manifest: &Manifest,
+        default: &str,
+        chosen: Option<&str>,
+        seen: Option<&str>,
+    ) -> Installed {
+        installed::resolve(manifest, &self.models(), default, chosen, seen)
+    }
+
     /// Is the assistant's stack here — the runtime **and** a model the catalogue still lists? With no
     /// catalogue in the folder, any `.gguf` counts: a moved default never costs a download.
     pub fn is_provisioned(&self, chosen: Option<&str>, seen: Option<&str>) -> bool {
@@ -219,7 +230,23 @@ impl Tools {
                 &|d, t| (p.bytes)(Stage::Runtime, d, t),
                 cancelled,
             )?;
+            self.stamp_runtime(&rt.sha256);
         }
+        self.provision_weights(manifest, model, vision, p)
+    }
+
+    /// The weights of `model`, and its projector when `vision` — no runtime. What a phone fetches
+    /// (its runtime is bundled), and the second half of [`Tools::provision`].
+    pub fn provision_weights(
+        &self,
+        manifest: &Manifest,
+        model: &str,
+        vision: bool,
+        p: &Progress,
+    ) -> Result<(), String> {
+        std::fs::create_dir_all(self.models())
+            .map_err(|e| format!("cannot create {}: {e}", self.dir.display()))?;
+        let cancelled = p.cancelled;
         if !(p.step)(Stage::Model) {
             return Err(CANCELLED.into());
         }
@@ -242,6 +269,76 @@ impl Tools {
                 cancelled,
             )?;
         }
+        Ok(())
+    }
+
+    /// Where the record of which archive the model runtime came from is kept.
+    fn runtime_stamp(&self) -> PathBuf {
+        self.dir.join("runtime").join(".runtime-sha256")
+    }
+
+    fn stamp_runtime(&self, sha256: &str) {
+        let _ = std::fs::write(self.runtime_stamp(), format!("{sha256}\n"));
+    }
+
+    /// **Is the model runtime here older than the one the catalogue pins?** A runtime with no record
+    /// of where it came from (every install before Myrme 0.4.0) counts as older, once. `false` when
+    /// there is no runtime yet (that is provisioning's job), when this platform has no pinned
+    /// archive, or in a checkout, whose runtime is a developer's.
+    ///
+    /// Why it matters: an app update brings a new catalogue, and a runtime already on disk was never
+    /// fetched again — so the faster runtime of 2026-10-18 (llguidance) would never have reached
+    /// anyone who had the assistant before it.
+    pub fn runtime_outdated(&self, manifest: &Manifest) -> bool {
+        if self.checkout || !self.dir.join("runtime").join(SERVER_BIN).exists() {
+            return false;
+        }
+        let Some(rt) = Manifest::platform_key().and_then(|k| manifest.runtime(k)) else {
+            return false;
+        };
+        std::fs::read_to_string(self.runtime_stamp()).map(|s| s.trim().to_string()).ok().as_deref()
+            != Some(rt.sha256.as_str())
+    }
+
+    /// **Bring the model runtime up to the catalogue's pin**, without ever leaving none: the archive
+    /// is fetched and checked into `runtime-next/`, and only when that is complete are its files
+    /// copied over the old ones and the record written. A failed or cancelled fetch leaves the old
+    /// runtime as it was, and working. Call it while the assistant is not running.
+    pub fn refresh_runtime(&self, manifest: &Manifest, p: &Progress) -> Result<(), String> {
+        let key = Manifest::platform_key().ok_or(
+            "no model runtime has been published for this kind of computer yet".to_string(),
+        )?;
+        let rt = manifest
+            .runtime(key)
+            .ok_or_else(|| format!("no verified model runtime is pinned for {key} yet"))?;
+        if !(p.step)(Stage::Runtime) {
+            return Err(CANCELLED.into());
+        }
+        let next = self.dir.join("runtime-next");
+        let _ = std::fs::remove_dir_all(&next);
+        crate::fetch::ensure_runtime(
+            &next,
+            rt,
+            SERVER_BIN,
+            &|d, t| (p.bytes)(Stage::Runtime, d, t),
+            p.cancelled,
+        )?;
+        if (p.cancelled)() {
+            let _ = std::fs::remove_dir_all(&next);
+            return Err(CANCELLED.into());
+        }
+        let runtime = self.dir.join("runtime");
+        std::fs::create_dir_all(&runtime).map_err(|e| e.to_string())?;
+        for entry in std::fs::read_dir(&next).map_err(|e| e.to_string())? {
+            let from = entry.map_err(|e| e.to_string())?.path();
+            if from.is_file() {
+                let to = runtime.join(from.file_name().unwrap_or_default());
+                std::fs::copy(&from, &to)
+                    .map_err(|e| format!("could not update {}: {e}", to.display()))?;
+            }
+        }
+        let _ = std::fs::remove_dir_all(&next);
+        self.stamp_runtime(&rt.sha256);
         Ok(())
     }
 
@@ -348,6 +445,290 @@ impl Tools {
     }
 }
 
+/// **A runtime an app bundles** — on Android, the APK's `jniLibs`, which Android extracts to the
+/// app's native-library directory, the one place an app may execute from. The servers ride there
+/// renamed as libraries ([`BUNDLED_SERVER`], [`BUNDLED_WHISPER`]).
+#[derive(Debug, Clone)]
+pub struct Bundled {
+    dir: PathBuf,
+}
+
+/// The model server, as an APK carries it.
+pub const BUNDLED_SERVER: &str = "libllama-server.so";
+/// The speech server, as an APK carries it.
+pub const BUNDLED_WHISPER: &str = "libwhisper-server.so";
+
+impl Bundled {
+    /// The native-library directory, found from where `own_lib` (the app's own library) is mapped.
+    #[cfg(target_os = "android")]
+    pub fn locate(own_lib: &str) -> Option<Self> {
+        crate::nativelib::native_lib_dir(own_lib).map(|dir| Self { dir })
+    }
+
+    /// A bundle at `dir` (tests; a platform that bundles elsewhere).
+    pub fn at(dir: impl Into<PathBuf>) -> Self {
+        Self { dir: dir.into() }
+    }
+
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+
+    /// What the app's Settings needs: `(installed, why, speech available)`, in the shape a desktop
+    /// answers. `None` means the app could not find its own library directory.
+    pub fn availability(bundle: Option<&Bundled>) -> (bool, String, bool) {
+        let Some(b) = bundle else {
+            return (
+                false,
+                "The assistant cannot locate this app's own library directory, so it cannot start a \
+                 model. Everything else in formicaria works normally."
+                    .into(),
+                false,
+            );
+        };
+        let installed = b.dir.join(BUNDLED_SERVER).exists();
+        let why = if installed {
+            String::new()
+        } else {
+            "This build of the app does not carry the model runtime, so the assistant cannot be turned \
+             on. Everything else in formicaria works normally."
+                .to_string()
+        };
+        (installed, why, installed && b.dir.join(BUNDLED_WHISPER).exists())
+    }
+}
+
+/// What an app asks [`Tools::run_in_process`] to run.
+pub struct InProcess<V: crate::fmserve::VaultAccess> {
+    /// The app's way into its notes.
+    pub vault: V,
+    /// The model to run (from [`Tools::installed`], or the catalogue's default on a first enable).
+    pub model: String,
+    /// The model on offer, whose weights are kept while their download may be half done.
+    pub offered: String,
+    /// The chosen speech weights, when the person turned speech on.
+    pub speech: Option<String>,
+    /// This device's name for its Myrme.
+    pub device: String,
+}
+
+/// How the app follows an in-process run. Each `*_up` registers a server's stop switch; answering
+/// `false` means the app retired this launch meanwhile, and the server is stopped at once.
+pub struct Hooks<'a> {
+    pub cancelled: &'a dyn Fn() -> bool,
+    pub model_up: &'a dyn Fn(fm_agent::watchdog::StopFlag) -> bool,
+    pub speech_up: &'a dyn Fn(fm_agent::watchdog::StopFlag, u16) -> bool,
+    /// Myrme is answering (`true`) or has stopped (`false`) — for the app's `@`-mention picker.
+    pub present: &'a dyn Fn(bool),
+    pub log: &'a dyn Fn(&str),
+}
+
+impl Tools {
+    /// **Run Myrme inside the app**, on a bundled runtime, until it is stopped — what a phone does,
+    /// having no separate server process to host it. Fetches the weights when missing (resumable;
+    /// offline is "not yet"), the projector best-effort (without it the model starts text-only),
+    /// sweeps unused weights, starts the model under the memory watchdog, starts speech beside it
+    /// when asked and when it fits, then answers `@Myrme` until stopped.
+    ///
+    /// `Err` only for "nothing was started" (no weights yet, the model refused or failed to start);
+    /// everything after that is logged. Moved from formicaria's `mobile/src-tauri/src/agent.rs`
+    /// (2026-10-18) with its log lines unchanged.
+    pub fn run_in_process<V: crate::fmserve::VaultAccess>(
+        &self,
+        bundle: &Bundled,
+        manifest: &Manifest,
+        job: InProcess<V>,
+        h: &Hooks,
+    ) -> Result<(), String> {
+        use fm_agent::launch::SupervisedModel;
+        use fm_agent::preflight::Need;
+        use fm_agent::watchdog::{Limits, SystemMonitor};
+        let models_dir = self.models();
+        let logs_dir = self.dir.join("runtime");
+        let _ = std::fs::create_dir_all(&logs_dir);
+        let server_bin = bundle.dir.join(BUNDLED_SERVER);
+        let (port, ctx, threads) = (manifest.port, manifest.ctx, manifest.mobile_threads());
+        let model_name = job.model.clone();
+
+        // The weights (a first enable fetches them), logged once per MB.
+        let last_mb = std::cell::Cell::new(u64::MAX);
+        let progress = |done: u64, total: Option<u64>| {
+            let mb = done / 1_000_000;
+            if last_mb.replace(mb) != mb {
+                match total {
+                    Some(t) => (h.log)(&format!(
+                        "study agent: fetching {model_name} {mb}/{} MB",
+                        t / 1_000_000
+                    )),
+                    None => (h.log)(&format!("study agent: fetching {model_name} {mb} MB")),
+                }
+            }
+        };
+        let model_gguf =
+            crate::fetch::ensure_model(&models_dir, manifest, &model_name, &progress, h.cancelled)
+                .map_err(|e| format!("no model yet ({e})"))?;
+        if let Err(e) =
+            crate::fetch::ensure_mmproj(&models_dir, manifest, &model_name, &progress, h.cancelled)
+        {
+            (h.log)(&format!("study agent: no image projector yet ({e}) — starting text-only"));
+        }
+        for gone in installed::sweep(manifest, &models_dir, &[&model_name, &job.offered]) {
+            (h.log)(&format!("study agent: removed unused model {}", gone.display()));
+        }
+        if (h.cancelled)() {
+            (h.log)("study agent: cancelled before the model was started");
+            return Ok(());
+        }
+
+        let mut cmd = Command::new(&server_bin);
+        cmd.env("LD_LIBRARY_PATH", &bundle.dir).arg("-m").arg(&model_gguf).args([
+            "--host",
+            "127.0.0.1",
+            "--port",
+            &port.to_string(),
+            "-c",
+            &ctx.to_string(),
+            "-t",
+            &threads.to_string(),
+            "--no-warmup",
+        ]);
+        let sees = manifest.add_projector(&mut cmd, &model_name, &models_dir);
+        let model_bytes = std::fs::metadata(&model_gguf).map(|m| m.len()).unwrap_or(500_000_000)
+            + sees.as_ref().and_then(|p| std::fs::metadata(p).ok()).map(|m| m.len()).unwrap_or(0);
+        let model = SupervisedModel::launch(
+            cmd,
+            SystemMonitor,
+            &Need::new(model_bytes, 1_000_000_000),
+            Limits::resident(),
+        )
+        .map_err(|e| format!("model failed to launch: {e}"))?;
+        if !(h.model_up)(model.stopper()) {
+            (h.log)("study agent: cancelled as the model came up — stopping it");
+            model.stopper().stop();
+            let _ = model.wait();
+            return Ok(());
+        }
+
+        // Speech beside the text model, when on, bundled and fitting.
+        let mut whisper_port = None;
+        let mut heard_with = job.speech.clone().unwrap_or_else(|| "ggml-base".into());
+        let _whisper = match &job.speech {
+            None => None,
+            Some(_) if !bundle.dir.join(BUNDLED_WHISPER).exists() => {
+                (h.log)("study agent: transcription runtime not bundled — skipping");
+                None
+            }
+            Some(chosen) => {
+                let ears = match crate::fetch::ensure_model(
+                    &models_dir,
+                    manifest,
+                    chosen,
+                    &|_, _| {},
+                    h.cancelled,
+                ) {
+                    Ok(path) => {
+                        for gone in installed::sweep_whisper(manifest, &models_dir, chosen) {
+                            (h.log)(&format!(
+                                "study agent: removed unused speech model {}",
+                                gone.display()
+                            ));
+                        }
+                        Ok((path, chosen.clone()))
+                    }
+                    Err(e) => match installed::whisper_on_disk(manifest, &models_dir, chosen)
+                        .and_then(|n| Some((models_dir.join(&manifest.model(&n)?.file), n)))
+                    {
+                        Some(found) => {
+                            (h.log)(&format!(
+                                "study agent: {chosen} not here yet ({e}) — using {}",
+                                found.1
+                            ));
+                            Ok(found)
+                        }
+                        None => Err(e),
+                    },
+                };
+                match ears {
+                    Ok((wmodel, wname)) => {
+                        heard_with = wname;
+                        let wport = port + 1;
+                        let mut wcmd = Command::new(bundle.dir.join(BUNDLED_WHISPER));
+                        wcmd.arg("-m").arg(&wmodel).args([
+                            "--host",
+                            "127.0.0.1",
+                            "--port",
+                            &wport.to_string(),
+                            "-t",
+                            &threads.to_string(),
+                            "-l",
+                            crate::manifest::whisper_language(&heard_with),
+                        ]);
+                        let wbytes =
+                            std::fs::metadata(&wmodel).map(|m| m.len()).unwrap_or(80_000_000);
+                        match SupervisedModel::launch(
+                            wcmd,
+                            SystemMonitor,
+                            &Need::new(wbytes, 300_000_000),
+                            Limits::resident(),
+                        ) {
+                            Ok(wm) => {
+                                if (h.speech_up)(wm.stopper(), wport) {
+                                    whisper_port = Some(wport);
+                                    (h.log)(&format!(
+                                        "study agent: audio transcription on (whisper :{wport}, {heard_with})"
+                                    ));
+                                } else {
+                                    (h.log)("study agent: cancelled — stopping whisper");
+                                    wm.stopper().stop();
+                                }
+                                Some(wm)
+                            }
+                            Err(e) => {
+                                (h.log)(&format!("study agent: transcription off — {e}"));
+                                None
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        (h.log)(&format!(
+                            "study agent: transcription off — no whisper model yet ({e})"
+                        ));
+                        None
+                    }
+                }
+            }
+        };
+
+        let agent = crate::Agent {
+            fm: job.vault,
+            model_port: port,
+            model: model_name.clone(),
+            searxng_port: None,
+            web_direct: true,
+            whisper_port,
+            whisper_model: heard_with,
+            vision: sees.is_some(),
+            read_prompt: manifest.read_prompt(&model_name),
+            reads_labels: manifest.reads_labels(&model_name),
+            image_specialist: None,
+            max_reply_chars: manifest.max_reply_chars,
+            history_budget: 4000,
+            device: job.device,
+        };
+        crate::watch::wait_ready(port);
+        (h.log)(&format!("study agent listening in-process — @{model_name}"));
+        (h.present)(true);
+        let stopper = model.stopper();
+        crate::watch::serve_loop(&agent, &model_name, &logs_dir, 1, &|| model.finished(), &|| {
+            stopper.stop()
+        });
+        (h.present)(false);
+        let _ = model.wait();
+        (h.log)("study agent stopped");
+        Ok(())
+    }
+}
+
 /// What a provisioning stopped by the app answers with. The app tells a stop from a failure by its
 /// own cancel state, not by this text.
 const CANCELLED: &str = "cancelled";
@@ -445,6 +826,60 @@ mod tests {
                 "{name} is named on one side only"
             );
         }
+    }
+
+    /// A runtime with no record of its archive is outdated once; a recorded pin is current; a
+    /// checkout is never refreshed; and no runtime at all is provisioning's business, not this.
+    #[test]
+    fn a_runtime_without_a_record_or_with_another_pin_is_outdated() {
+        let d = temp("rt");
+        let m = Tools::new(&d, false).catalogue();
+        let Some(rt) = Manifest::platform_key().and_then(|k| m.runtime(k)) else {
+            return; // a platform with no pinned runtime has nothing to compare
+        };
+        let tools = Tools::new(&d, false);
+        assert!(!tools.runtime_outdated(&m), "no runtime yet: provisioning's job");
+        std::fs::write(d.join("runtime").join(SERVER_BIN), b"x").unwrap();
+        assert!(tools.runtime_outdated(&m), "an install from before records were kept");
+        tools.stamp_runtime(&rt.sha256);
+        assert!(!tools.runtime_outdated(&m), "the pinned archive");
+        tools.stamp_runtime("an-older-archive");
+        assert!(tools.runtime_outdated(&m), "another archive");
+        assert!(!Tools::new(&d, true).runtime_outdated(&m), "a checkout is a developer's");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// **Live:** an old runtime with no record is brought up to the pinned archive, downloaded for
+    /// real (tens of MB). `cargo test -p fm-agent-run --features download -- --ignored refresh_live`
+    #[test]
+    #[ignore = "downloads the pinned runtime"]
+    fn refresh_live() {
+        let d = temp("refresh-live");
+        std::fs::write(d.join("runtime").join(SERVER_BIN), b"an old server").unwrap();
+        std::fs::write(d.join("runtime").join("agent.log"), b"kept").unwrap();
+        let tools = Tools::new(&d, false);
+        let m = tools.catalogue();
+        assert!(tools.runtime_outdated(&m));
+        let p = Progress { step: &|_| true, bytes: &|_, _, _| {}, cancelled: &|| false };
+        tools.refresh_runtime(&m, &p).unwrap();
+        assert!(!tools.runtime_outdated(&m), "the record now names the pinned archive");
+        let server = std::fs::read(d.join("runtime").join(SERVER_BIN)).unwrap();
+        assert!(server.len() > 1000, "the server is the downloaded one");
+        assert_eq!(std::fs::read(d.join("runtime").join("agent.log")).unwrap(), b"kept");
+        assert!(!d.join("runtime-next").exists(), "the side folder is gone");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_bundle_without_its_server_says_why_and_offers_no_switch() {
+        let d = temp("bundle");
+        assert!(!Bundled::availability(None).0, "no library directory: nothing to offer");
+        let (on, why, speech) = Bundled::availability(Some(&Bundled::at(&d)));
+        assert!(!on && !speech && why.contains("does not carry the model runtime"));
+        std::fs::write(d.join(BUNDLED_SERVER), b"x").unwrap();
+        std::fs::write(d.join(BUNDLED_WHISPER), b"x").unwrap();
+        assert_eq!(Bundled::availability(Some(&Bundled::at(&d))), (true, String::new(), true));
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]
