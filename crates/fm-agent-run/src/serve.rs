@@ -34,6 +34,11 @@ struct Args {
     /// The fm-serve port to serve/watch.
     #[arg(long, default_value_t = 8765)]
     serve_port: u16,
+    /// The formicaria this assistant belongs to — its `/api/alive` `instance`, passed by the app
+    /// that starts it (2026-10-18). Another app answering on the port means ours is gone. Left out
+    /// (a dev run), the instance answering at start is adopted.
+    #[arg(long)]
+    serve_instance: Option<String>,
     /// The local web-search proxy port (enables /search); omit to run without the web.
     #[arg(long)]
     searxng_port: Option<u16>,
@@ -96,6 +101,10 @@ fn run() -> Result<(), String> {
 
     // The manifest is the single source for which model, and the runtime defaults; flags override.
     let manifest = Manifest::read(&a.agents_dir.join("models.toml"))?;
+    let instance = a
+        .serve_instance
+        .clone()
+        .or_else(|| FmServe::local(a.serve_port).answering_instance().ok().flatten());
     let model_name = a.model.clone().unwrap_or_else(|| manifest.default.clone());
     let file = manifest.file(&model_name).ok_or_else(|| {
         format!("model '{model_name}' is not in {}/models.toml", a.agents_dir.display())
@@ -117,6 +126,9 @@ fn run() -> Result<(), String> {
     // `EXE_SUFFIX` because the staged file is `llama-server.exe` on Windows, and the `exists()`
     // check below on the whisper binary would otherwise never pass there.
     let bin = runtime.join(format!("llama-server{}", std::env::consts::EXE_SUFFIX));
+    // An assistant left by an app that has just gone takes a moment to notice and let the port
+    // go (its watchdog checks every two seconds); wait for that rather than failing to bind.
+    wait_until_free(model_port);
     let mut cmd = Command::new(&bin);
     cmd.env("LD_LIBRARY_PATH", &runtime).arg("-m").arg(&model_gguf).args([
         "--host",
@@ -162,6 +174,7 @@ fn run() -> Result<(), String> {
                 wmodel.display()
             ));
         }
+        wait_until_free(wport);
         let mut wcmd = Command::new(&wbin);
         wcmd.env("LD_LIBRARY_PATH", &runtime).args([
             "--host",
@@ -195,8 +208,29 @@ fn run() -> Result<(), String> {
         None
     };
 
+    // **The watchdog** (2026-10-18): every two seconds, is the app answering still ours? Its own
+    // thread, so an assistant busy in a long turn still notices; on another app it stops its
+    // models and leaves. Only a *different* answer counts — a slow or missing one is left to the
+    // loop, exactly as before, so a busy app is never mistaken for a gone one.
+    if let Some(ours) = instance.clone() {
+        let probe = FmServe::local(a.serve_port).with_timeout(std::time::Duration::from_secs(5));
+        let stops: Vec<_> =
+            std::iter::once(model.stopper()).chain(whisper.as_ref().map(|w| w.stopper())).collect();
+        std::thread::spawn(move || loop {
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            if let Ok(Some(here)) = probe.answering_instance() {
+                if !fm_agent_run::fmserve::same_app(Some(&ours), Some(&here)) {
+                    eprintln!("agent-serve: another formicaria is answering — this one has gone; stopping");
+                    stops.iter().for_each(|s| s.stop());
+                    std::thread::sleep(std::time::Duration::from_secs(2));
+                    std::process::exit(0);
+                }
+            }
+        });
+    }
+
     let agent = Agent {
-        fm: FmServe::local(a.serve_port),
+        fm: FmServe::local(a.serve_port).with_instance(instance.clone()),
         model_port,
         model: name.clone(),
         searxng_port: a.searxng_port,
@@ -243,4 +277,17 @@ fn run() -> Result<(), String> {
     let outcome = model.wait();
     println!("model stopped: {outcome:?}");
     Ok(())
+}
+
+/// Wait, up to 30 s, for `port` on loopback to be free to bind — logged once if it is not yet.
+fn wait_until_free(port: u16) {
+    for i in 0..60 {
+        if std::net::TcpListener::bind(("127.0.0.1", port)).is_ok() {
+            return;
+        }
+        if i == 0 {
+            eprintln!("agent-serve: port {port} is still in use — waiting for it to be released");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
 }

@@ -103,11 +103,17 @@ pub struct ImageReader {
     pub labels: bool,
 }
 
+/// What the assistant on `device` signs its writing with: `Myrme (device)` on the agents' domain —
+/// which `fm_app::thread::shown_author` reads back as Myrme.
+pub fn signature(device: &str) -> (String, String) {
+    (format!("{} ({device})", fm_agent::convo::MYRME), format!("myrme+{device}@fm-agents.local"))
+}
+
 impl<V: VaultAccess> Agent<V> {
     /// Who signs this copy's replies and proposals: *Myrme (phone)*, `myrme+phone@fm-agents.local`.
     /// One name for the person, one identity per device in history, so the two copies are told apart.
     pub fn author(&self) -> (String, String) {
-        (format!("Myrme ({})", self.device), format!("myrme+{}@fm-agents.local", self.device))
+        signature(&self.device)
     }
 
     /// **Who reads an image on this device** — the owner's rule (2026-10-10), in the order it is
@@ -350,12 +356,15 @@ impl<V: VaultAccess> Agent<V> {
             .map(str::to_owned)
             .or_else(|| said.lines().map(str::trim).find(|l| !l.is_empty()).map(str::to_owned))
             .unwrap_or_else(|| "a note".into());
-        let audio = match self.whisper_port {
-            Some(_) => self.resolve_blobs("", &existing, "audio/", "fm:transcript")?,
-            None => AudioWork::None,
+        // The recordings are found whether or not this device can listen, so a recipe made from
+        // the text alone can say what it did not hear — and a photo is never taken for a recording.
+        let audio = self.resolve_blobs("", &existing, "audio/", "fm:transcript")?;
+        let unheard = match (&audio, self.whisper_port) {
+            (AudioWork::Clips(clips), None) => clips.len(),
+            _ => 0,
         };
         let mut recordings = 0;
-        if let AudioWork::Clips(clips) = &audio {
+        if let (AudioWork::Clips(clips), Some(_)) = (&audio, self.whisper_port) {
             on_stage("transcribing the recording");
             let whisper = fm_agent::transcribe::WhisperServer::local(
                 self.whisper_port.unwrap_or_default(),
@@ -370,8 +379,7 @@ impl<V: VaultAccess> Agent<V> {
         }
         let said = said.trim().to_string();
         if said.split_whitespace().count() < 8 {
-            let has_audio = existing.contains("](asset:");
-            return say(if has_audio && self.whisper_port.is_none() {
+            return say(if unheard > 0 {
                 replies::RECIPE_CANNOT_HEAR.into()
             } else {
                 replies::RECIPE_NOTHING_TO_READ.into()
@@ -391,7 +399,20 @@ impl<V: VaultAccess> Agent<V> {
         if parts.title.is_empty() {
             parts.title = from_title.clone();
         }
-        let body = fm_agent::recipe::body(&parts, &from_title, note, &said);
+        // **Already a recipe** (Food → Dictate a recipe, or one started by hand): the sorted recipe is
+        // proposed *in that note*, its recordings and pictures kept and all its text quoted under
+        // *What was said* — never a second recipe beside it.
+        if cur["props"]["recipe"].as_str().is_some_and(|w| !w.is_empty()) {
+            let kept: Vec<&str> =
+                existing.lines().filter(|l| l.trim_start().starts_with("![")).collect();
+            let body = fm_agent::recipe::body(&parts, None, &said, &kept);
+            on_stage("proposing the recipe");
+            let origin =
+                Origin { tool: "recipe", query: None, sources: vec![format!("note:{note}")] };
+            self.fm.create_proposal(note, &body, &who, &email, &origin)?;
+            return say(replies::recipe_proposed(&parts.title, recordings, dropped, unheard));
+        }
+        let body = fm_agent::recipe::body(&parts, Some((&from_title, note)), &said, &[]);
         // A word of its own, which its ingredients will share once they are matched to foods.
         let word = format!(
             "{:x}",
@@ -409,7 +430,7 @@ impl<V: VaultAccess> Agent<V> {
         on_stage("proposing the recipe");
         let origin = Origin { tool: "recipe", query: None, sources: vec![format!("note:{note}")] };
         self.fm.propose_note(note, &draft, &who, &email, &origin)?;
-        say(replies::recipe_proposed(&parts.title, recordings, dropped))
+        say(replies::recipe_proposed(&parts.title, recordings, dropped, unheard))
     }
 
     fn transcribe_turn(
@@ -761,6 +782,16 @@ impl WebSearch for NoWeb {
 
 #[cfg(test)]
 mod tests {
+    /// What `fm_app::thread::shown_author` relies on to show the assistant as Myrme: its name and
+    /// the domain it signs with. The two crates share no dependency, so the spelling is pinned here.
+    #[test]
+    fn the_assistant_signs_as_myrme_on_the_agents_domain() {
+        assert_eq!(fm_agent::convo::MYRME, "Myrme");
+        let (who, email) = signature("office");
+        assert_eq!(who, "Myrme (office)");
+        assert!(email.ends_with("@fm-agents.local"), "{email}");
+    }
+
     use super::*;
     use serde_json::{json, Value};
 
@@ -1398,13 +1429,20 @@ mod tests {
     fn a_recipe_is_proposed_from_what_the_note_says_and_nothing_else() {
         struct Notebook {
             proposed: std::cell::RefCell<Vec<Value>>,
+            edited: std::cell::RefCell<Vec<String>>,
             said: std::cell::RefCell<Vec<String>>,
+            props: Value,
+            extra: &'static str,
         }
         impl VaultAccess for Notebook {
             fn get(&self, _: &str) -> Result<Value, String> {
-                Ok(json!({ "title": "Ricetta tiramisù", "body": "Per sei persone servono \
-                    cinquecento grammi di mascarpone, quattro uova e cento grammi di zucchero. \
-                    Montate i tuorli con lo zucchero e unite il mascarpone." }))
+                let body = format!(
+                    "Per sei persone servono cinquecento grammi di mascarpone, quattro uova e \
+                     cento grammi di zucchero. Montate i tuorli con lo zucchero e unite il \
+                     mascarpone.\n{}",
+                    self.extra
+                );
+                Ok(json!({ "title": "Ricetta tiramisù", "body": body, "props": self.props }))
             }
             fn thread(&self, _: &str) -> Result<Value, String> {
                 Ok(json!({ "messages": [] }))
@@ -1425,11 +1463,13 @@ mod tests {
             fn create_proposal(
                 &self,
                 _: &str,
+                body: &str,
                 _: &str,
                 _: &str,
-                _: &str,
-                _: &Origin,
+                origin: &Origin,
             ) -> Result<Value, String> {
+                assert_eq!(origin.tool, "recipe");
+                self.edited.borrow_mut().push(body.to_string());
                 Ok(Value::Null)
             }
             fn propose_note(
@@ -1458,11 +1498,14 @@ mod tests {
                 Ok(fm_agent::LlmResponse::complete(self.0))
             }
         }
-        let fm = Notebook {
+        let notebook = |props: Value, extra: &'static str| Notebook {
             proposed: std::cell::RefCell::new(vec![]),
+            edited: std::cell::RefCell::new(vec![]),
             said: std::cell::RefCell::new(vec![]),
+            props,
+            extra,
         };
-        let a = Agent {
+        let agent = |fm: Notebook| Agent {
             fm,
             model_port: 0,
             model: "test".into(),
@@ -1478,6 +1521,7 @@ mod tests {
             history_budget: 4000,
             device: "laptop".into(),
         };
+        let a = agent(notebook(json!({}), ""));
         let model = Says(
             r#"{"title":"Tiramisù","servings":6,"ingredients":["500 g di mascarpone","4 uova","100 g di zucchero","Cacao amaro"],"steps":["Montate i tuorli con lo zucchero.","Unite il mascarpone."],"times":{},"notes":[]}"#,
         );
@@ -1495,5 +1539,20 @@ mod tests {
         assert!(!body.contains("Cacao"), "never said, so not in it: {body}");
         assert!(body.contains("From [Ricetta tiramisù](note:N1)."));
         assert!(said.contains("“Tiramisù”") && said.contains("one line"), "{said}");
+
+        // **Already a recipe** — as Food's *Dictate a recipe* makes one: the sorted recipe is
+        // proposed in that note, never a second one, and what it embedded stays.
+        let b = agent(notebook(
+            json!({ "recipe": "w1", "servings": 1 }),
+            "![Ricetta](asset:sha256-ab)",
+        ));
+        b.recipe_turn(&model, "N1", &|_| {}).unwrap();
+        assert!(b.fm.proposed.borrow().is_empty(), "no second recipe");
+        let edited = b.fm.edited.borrow();
+        assert_eq!(edited.len(), 1);
+        assert!(edited[0].starts_with("## Ingredients\n\n- 500 g di mascarpone"), "{}", edited[0]);
+        assert!(edited[0].contains("![Ricetta](asset:sha256-ab)"), "the recording stays");
+        assert!(!edited[0].contains("From ["), "it is this note, not another");
+        assert!(edited[0].contains("> Per sei persone"), "what it said is quoted");
     }
 }

@@ -129,7 +129,11 @@ pub fn keep_what_was_said(mut p: Parts, said: &str) -> (Parts, usize) {
 
 /// The recipe note's text — the same shape as every recipe's (`ui/src/lib/food/recipeText.ts`):
 /// *Ingredients*, *Method*, *Times*, *Notes*, then where it came from and what was said.
-pub fn body(p: &Parts, from_title: &str, from_id: &str, said: &str) -> String {
+///
+/// `from` is the note it was made from, when that is another note; `kept` are the lines the note
+/// already embeds (its recordings, its pictures), carried into *Notes* — a recipe made in its own
+/// note never proposes losing what was in it.
+pub fn body(p: &Parts, from: Option<(&str, &str)>, said: &str, kept: &[&str]) -> String {
     let mut out = String::from("## Ingredients\n\n");
     for i in &p.ingredients {
         out.push_str(&format!("- {i}\n"));
@@ -145,7 +149,13 @@ pub fn body(p: &Parts, from_title: &str, from_id: &str, said: &str) -> String {
     for n in &p.notes {
         out.push_str(&format!("{n}\n\n"));
     }
-    out.push_str(&format!("---\n\nFrom [{from_title}](note:{from_id}).\n\n"));
+    for k in kept {
+        out.push_str(&format!("{k}\n\n"));
+    }
+    out.push_str("---\n\n");
+    if let Some((from_title, from_id)) = from {
+        out.push_str(&format!("From [{from_title}](note:{from_id}).\n\n"));
+    }
     out.push_str("### What was said\n\n");
     for line in said.lines().filter(|l| !l.trim().is_empty()) {
         out.push_str(&format!("> {}\n", line.trim()));
@@ -199,6 +209,23 @@ mod tests {
         assert_eq!(dropped, 2);
     }
 
+    /// **One shape for every recipe note** (2026-10-18): the headings written here are the
+    /// template's, read from the UI's own definition so the two cannot drift apart.
+    #[test]
+    fn its_headings_are_the_recipe_template_s() {
+        let ui = include_str!("../../../ui/src/lib/templates.ts");
+        let b = body(&Parts::default(), None, "", &[]);
+        for (key, heading) in [
+            ("ingredients", "Ingredients"),
+            ("method", "Method"),
+            ("times", "Times"),
+            ("notes", "Notes"),
+        ] {
+            assert!(ui.contains(&format!("{key}: '{heading}'")), "the template names {heading}");
+            assert!(b.contains(&format!("## {heading}\n")), "the note has ## {heading}");
+        }
+    }
+
     #[test]
     fn a_line_the_recogniser_repeated_is_kept_once() {
         let step = "Separate i tuorli dagli albumi.";
@@ -224,12 +251,18 @@ mod tests {
             times: [("riposo".to_string(), "4 ore".to_string())].into(),
             ..Default::default()
         };
-        let b = body(&p, "Ricetta Tiramisu", "01M55H50X59QNAW5RVBQ2QDYD8", "Unite il mascarpone.");
+        let b = body(
+            &p,
+            Some(("Ricetta Tiramisu", "01M55H50X59QNAW5RVBQ2QDYD8")),
+            "Unite il mascarpone.",
+            &["![Ricetta](asset:sha256-ab)"],
+        );
         assert!(b.starts_with(
             "## Ingredients\n\n- 500 g di mascarpone\n\n## Method\n\n1. Unite il mascarpone.\n"
         ));
         assert!(b.contains("## Times\n\nriposo: 4 ore\n"));
         assert!(b.contains("From [Ricetta Tiramisu](note:01M55H50X59QNAW5RVBQ2QDYD8)."));
         assert!(b.contains("### What was said\n\n> Unite il mascarpone.\n"));
+        assert!(b.contains("![Ricetta](asset:sha256-ab)\n"), "the recording stays in the note");
     }
 }

@@ -28,6 +28,9 @@ fn a_real_recording_becomes_a_recipe_of_only_what_was_said() {
     println!("--- answer ---\n{answer}\n--------------");
     let parts = read(&answer).expect("the answer holds a recipe");
     let (kept, dropped) = keep_what_was_said(parts, &said);
-    println!("--- note ({dropped} dropped) ---\n{}", body(&kept, "Ricetta", "ID", &said));
+    println!(
+        "--- note ({dropped} dropped) ---\n{}",
+        body(&kept, Some(("Ricetta", "ID")), &said, &[])
+    );
     assert!(!kept.ingredients.is_empty(), "no ingredient survived the check");
 }

@@ -144,11 +144,41 @@ pub struct FmServe {
     host: String,
     port: u16,
     timeout: Duration,
+    /// The formicaria this agent belongs to — its `/api/alive` `instance` (2026-10-18). `None`
+    /// follows whatever answers, as before.
+    instance: Option<String>,
+}
+
+/// **Is the formicaria answering the one this agent belongs to?** Only a *different* instance is
+/// another app: no instance expected (a dev run), or none reported (an older build), is ours. An
+/// assistant left behind by an app that has gone used to live on with the next one, answering in
+/// the old build's name and holding the model's port (2026-10-18).
+pub fn same_app(expected: Option<&str>, answering: Option<&str>) -> bool {
+    match (expected, answering) {
+        (Some(e), Some(a)) => e == a,
+        _ => true,
+    }
 }
 
 impl FmServe {
     pub fn local(port: u16) -> Self {
-        Self { host: "127.0.0.1".into(), port, timeout: Duration::from_secs(60) }
+        Self { host: "127.0.0.1".into(), port, timeout: Duration::from_secs(60), instance: None }
+    }
+
+    /// Belong to one formicaria: from now on, another one answering on the port is not ours.
+    pub fn with_instance(mut self, instance: Option<String>) -> Self {
+        self.instance = instance;
+        self
+    }
+
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
+    /// The instance of the formicaria answering now — `Ok(None)` from a build that does not say.
+    pub fn answering_instance(&self) -> Result<Option<String>, String> {
+        Ok(self.call("alive", Value::Null)?["instance"].as_str().map(str::to_string))
     }
 
     /// POST one command and return its JSON answer. A non-200 carries `fm-serve`'s error body.
@@ -196,7 +226,8 @@ impl VaultAccess for FmServe {
     }
 
     fn alive(&self) -> bool {
-        self.call("alive", Value::Null).is_ok()
+        self.answering_instance()
+            .is_ok_and(|here| same_app(self.instance.as_deref(), here.as_deref()))
     }
 
     fn reply(&self, note: &str, body: &str) -> Result<Value, String> {
@@ -342,5 +373,18 @@ impl VaultAccess for FmServe {
         let reader =
             reader.map(|r| json!({ "port": r.port, "model": r.model, "labels": r.labels }));
         let _ = self.call("agent_present", json!({ "name": name, "reader": reader }));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_a_different_formicaria_is_not_ours() {
+        assert!(same_app(Some("a1"), Some("a1")));
+        assert!(!same_app(Some("a1"), Some("b2")), "another app on the port");
+        assert!(same_app(None, Some("b2")), "a dev run follows whatever answers");
+        assert!(same_app(Some("a1"), None), "an older build says nothing — still ours");
     }
 }

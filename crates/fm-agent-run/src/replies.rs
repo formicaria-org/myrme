@@ -120,7 +120,9 @@ pub const RECIPE_NOT_FOUND: &str =
     nothing. Say the ingredients and the steps, and ask again.";
 
 /// A recipe was proposed: what it is called, what it was made from, and anything left out.
-pub fn recipe_proposed(title: &str, recordings: usize, dropped: usize) -> String {
+/// `unheard`: recordings in the note that were **not** listened to, because transcription is off
+/// here — said, so a recipe made from the text alone is never mistaken for one made from the voice.
+pub fn recipe_proposed(title: &str, recordings: usize, dropped: usize, unheard: usize) -> String {
     let from = match recordings {
         0 => "from what this note says".to_string(),
         1 => "from the recording".to_string(),
@@ -131,8 +133,30 @@ pub fn recipe_proposed(title: &str, recordings: usize, dropped: usize) -> String
         1 => " I left out one line that wasn't in what was said.".to_string(),
         n => format!(" I left out {n} lines that weren't in what was said."),
     };
+    let deaf = match unheard {
+        0 => String::new(),
+        1 => " I didn't listen to the recording: audio transcription is off on this device \
+              (Settings → Study assistant)."
+            .to_string(),
+        n => format!(
+            " I didn't listen to the {n} recordings: audio transcription is off on this device \
+             (Settings → Study assistant)."
+        ),
+    };
     format!(
         "I've proposed the recipe “{title}”, {from}. Accept it in Collaboration, or change it first; \
-         then in Food its ingredients can be matched to foods so it counts.{left}"
+         then in Food its ingredients can be matched to foods so it counts.{left}{deaf}"
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_recipe_from_text_says_which_recordings_it_did_not_hear() {
+        let r = recipe_proposed("Tiramisù", 0, 0, 1);
+        assert!(r.contains("didn't listen to the recording"), "{r}");
+        assert!(!recipe_proposed("Tiramisù", 1, 0, 0).contains("didn't listen"));
+    }
 }
