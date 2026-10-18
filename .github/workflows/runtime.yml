@@ -51,7 +51,8 @@ jobs:
         run: |
           ./build/bin/llama-server --version
           # A symbol only llguidance defines; the stock archive has none.
-          grep -aqr llg_matcher_compute_mask build/bin || { echo "llguidance is not linked"; exit 1; }
+          grep -aqr toktrie build/bin || { echo "::error::no llguidance code under build/bin"; exit 1; }
+          if grep -aqr "LLAMA_LLGUIDANCE=ON) is not enabled" build/bin; then echo "::error::built without llguidance"; exit 1; fi
       - name: Pack
         run: |
           T=${{ env.DESKTOP_TAG }}
@@ -88,8 +89,11 @@ jobs:
         run: |
           v=$(./build/bin/llama-server --version 2>&1) || echo "::error::llama-server --version failed: $(echo $v | tr '\n' ' ')"
           echo "$v"
-          grep -aqr llg_matcher_compute_mask build/bin \
-            || { echo "::error::no llguidance symbol under build/bin: $(ls build/bin | tr '\n' ' ')"; exit 1; }
+          # llguidance's Rust is in the build ("toktrie" is its tokenizer crate), and llama.cpp's
+          # "-DLLAMA_LLGUIDANCE=ON) is not enabled" abort, which only a build without it carries, is
+          # not. Names that work on every platform: macOS and Windows export no llg_* symbol.
+          grep -aqr toktrie build/bin || { echo "::error::no llguidance code under build/bin"; exit 1; }
+          if grep -aqr "LLAMA_LLGUIDANCE=ON) is not enabled" build/bin; then echo "::error::built without llguidance"; exit 1; fi
       - name: Pack
         run: |
           T=${{ env.DESKTOP_TAG }}
@@ -127,8 +131,8 @@ jobs:
         run: |
           v=$(./build/bin/Release/llama-server.exe --version 2>&1) || echo "::error::llama-server --version failed: $(echo $v | tr '\n' ' ')"
           echo "$v"
-          grep -aqr llg_matcher_compute_mask build/bin/Release \
-            || { echo "::error::no llguidance symbol under build/bin/Release: $(ls build/bin/Release | tr '\n' ' ')"; exit 1; }
+          grep -aqr toktrie build/bin/Release || { echo "::error::no llguidance code under build/bin/Release"; exit 1; }
+          if grep -aqr "LLAMA_LLGUIDANCE=ON) is not enabled" build/bin/Release; then echo "::error::built without llguidance"; exit 1; fi
       - name: Pack
         shell: pwsh
         run: |
@@ -165,13 +169,12 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1, as upstream pins it
-        with:
-          log-accepted-android-sdk-licenses: false
       - name: NDK and the Rust target
         run: |
-          sdkmanager "ndk;${NDK_VERSION}"
-          NDK="${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}"
+          # The runner image carries the Android SDK; only the NDK version upstream uses is added.
+          (yes || true) | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;${NDK_VERSION}" >/dev/null
+          NDK="$ANDROID_HOME/ndk/${NDK_VERSION}"
+          test -f "$NDK/build/cmake/android.toolchain.cmake" || { echo "::error::NDK not installed at $NDK"; exit 1; }
           echo "ANDROID_NDK=$NDK" >> $GITHUB_ENV
           BIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
           echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$BIN/aarch64-linux-android28-clang" >> $GITHUB_ENV
@@ -204,8 +207,11 @@ jobs:
         run: |
           f=$(file build/bin/llama-server); echo "$f"
           case "$f" in *"ARM aarch64"*) ;; *) echo "::error::not an arm64 binary: $f"; exit 1;; esac
-          grep -aqr llg_matcher_compute_mask build/bin \
-            || { echo "::error::no llguidance symbol under build/bin: $(ls build/bin | tr '\n' ' ')"; exit 1; }
+          # llguidance's Rust is in the build ("toktrie" is its tokenizer crate), and llama.cpp's
+          # "-DLLAMA_LLGUIDANCE=ON) is not enabled" abort, which only a build without it carries, is
+          # not. Names that work on every platform: macOS and Windows export no llg_* symbol.
+          grep -aqr toktrie build/bin || { echo "::error::no llguidance code under build/bin"; exit 1; }
+          if grep -aqr "LLAMA_LLGUIDANCE=ON) is not enabled" build/bin; then echo "::error::built without llguidance"; exit 1; fi
       - name: Pack
         run: |
           T=${{ env.ANDROID_TAG }}
