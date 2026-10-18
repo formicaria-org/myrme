@@ -261,8 +261,12 @@ On branch `myrme-cutover` (worktree `~/fm-myrme`, local only):
 
 1. **Merge `myrme-cutover` into formicaria `main`** for the next release.
    - It is in the worktree `~/fm-myrme`, local and not pushed, at `v0.1.2`.
-   - It is five commits on top of `main` as it stood at `697ede4`. If `main` has moved, rebase it;
-     the conflicts would be in `Cargo.lock` and `pixi.toml`.
+   - It is five commits, **rebased onto `main` at `f7f08ab`** (the only conflict was both sides
+     appending to `decisions.md`, resolved by keeping both).
+   - On that state, 10 of formicaria's 11 gate steps pass. The 11th, `third-party-check`, fails on
+     `main` itself since `f7f08ab`: `THIRD-PARTY.md` carries the NIA text that `ci/third-party.sh`
+     does not yet generate. That is the fitness work's to finish. Before the rebase, at `v0.1.2`,
+     all 11 passed.
 2. **Run formicaria's `android` workflow by hand on it.** The phone shell was not compiled here (no
    NDK). Its only change is that the catalogue is `fm_agent_run::CATALOGUE`, and that the staging
    script fetches Myrme's Android runtime and checks its checksum.
