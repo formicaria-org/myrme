@@ -431,6 +431,22 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
     }
 
+    /// **The dev script and this code decide speech the same way.** `agents/agent-serve.sh` starts
+    /// speech when its runtime and weights are staged; [`Tools::speech_staged`] predicts it for the
+    /// app's settings row. A shell script cannot share a predicate, so the names are compared here —
+    /// a guard formicaria's `ci/checks.sh` kept until this code moved (2026-10-18).
+    #[test]
+    fn the_dev_script_and_this_code_name_the_same_speech_files() {
+        let script = include_str!("../../../agents/agent-serve.sh");
+        let here = include_str!("host.rs");
+        for name in ["whisper-server", "ggml-base.bin"] {
+            assert!(
+                script.contains(name) && here.contains(name),
+                "{name} is named on one side only"
+            );
+        }
+    }
+
     #[test]
     fn removal_takes_two_folders_says_what_it_freed_and_never_touches_a_checkout() {
         let d = temp("rm");
