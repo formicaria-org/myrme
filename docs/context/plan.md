@@ -265,6 +265,9 @@ On branch `myrme-cutover` (worktree `~/fm-myrme`, local only):
   formicaria's NDK; it was not run with a model, because the emulator is x86_64 and the runtime is
   arm64.
 - **Contract 2.0 (next breaking release):** remove the 1.0 items nothing uses (`contract.md`).
+- **No copy in formicaria** (Myrme 0.5.0, contract 1.4, 2026-10-19): the manual's assistant chapter
+  and the phone's runtime pins are read from Myrme. formicaria 0.9.3, the first release on the
+  cutover, links 0.4.1 and is published for every platform.
 
 formicaria `main` links Myrme from this repository; the owner merged the cutover on 2026-10-18.
 From then on:

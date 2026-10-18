@@ -38,12 +38,12 @@ use fm_agent_run::host::{
     BUNDLED_SERVER, BUNDLED_WHISPER, SERVER_BIN, WHISPER_BIN, WHISPER_PORT,
 };
 
-/// The contract this file checks is 1.3 (`CONTRACT_MAJOR`/`CONTRACT_MINOR`). Changing what it names
+/// The contract this file checks is 1.4 (`CONTRACT_MAJOR`/`CONTRACT_MINOR`). Changing what it names
 /// means changing the contract version too — a removal or rename is a new major, an addition a new
 /// minor — and the two are compared here so one cannot move without the other.
 #[test]
-fn this_list_is_contract_1_3() {
-    assert_eq!((fm_agent_run::CONTRACT_MAJOR, fm_agent_run::CONTRACT_MINOR), (1, 3));
+fn this_list_is_contract_1_4() {
+    assert_eq!((fm_agent_run::CONTRACT_MAJOR, fm_agent_run::CONTRACT_MINOR), (1, 4));
     assert!(
         fm_agent_run::VERSION.split('.').count() == 3,
         "a release version is MAJOR.MINOR.PATCH"
@@ -72,4 +72,23 @@ fn associated_items_formicaria_calls_exist() {
 #[test]
 fn the_shipped_catalogue_parses() {
     let _ = Manifest::parse(fm_agent_run::CATALOGUE);
+}
+
+/// Contract 1.4: what formicaria reads from files rather than Rust items. Its packaging stages the
+/// phone's runtimes from the catalogue, and its manual renders `docs/manual/assistant.md`, linking
+/// into it by heading.
+#[test]
+fn the_files_formicaria_reads_are_where_it_reads_them() {
+    let m = fm_agent_run::manifest::Manifest::parse(CATALOGUE);
+    assert!(m.runtime("android_arm64").is_some(), "the phone's runtime archive and its hash");
+    assert!(
+        CATALOGUE.lines().any(|l| l.starts_with("whisper_android_source = \"v")),
+        "the whisper.cpp tag the phone build compiles"
+    );
+    let manual = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/manual/assistant.md"),
+    )
+    .expect("docs/manual/assistant.md, formicaria's assistant chapter");
+    // `<ManualLink page="user/assistant.html" section="turn-it-on">` in formicaria's Settings.
+    assert!(manual.lines().any(|l| l.trim_start_matches('#').trim() == "Turn it on"));
 }

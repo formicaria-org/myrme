@@ -26,6 +26,7 @@ jobs:
         run: |
           v=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
           [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "::error::tag ${GITHUB_REF_NAME} but Cargo.toml says $v"; exit 1; }
+          [ -f "docs/releases/${GITHUB_REF_NAME}.md" ] || { echo "::error::no release notes in docs/releases/${GITHUB_REF_NAME}.md"; exit 1; }
   # Myrme against a real formicaria: fm-serve built from the pinned release, the contract's /api
   # and note conventions exercised end to end (crates/fm-agent-run/tests/integration_fm.rs).
   integration:

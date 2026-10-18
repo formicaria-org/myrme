@@ -99,6 +99,16 @@ runtime_sha256_whisper_linux_x64 = "f3bf3b4369a99b54665b0f19b88483b30de27f25963b
 runtime_url_whisper_windows_x64 = "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.1/whisper-bin-x64.zip"
 runtime_sha256_whisper_windows_x64 = "7d8be46ecd31828e1eb7a2ecdd0d6b314feafd82163038ab6092594b0a063539"
 
+# --- The phone's runtimes (contract 1.4) -------------------------------------------------------------
+# Android carries its runtimes inside the APK and never fetches one (`Manifest::platform_key` answers
+# `None` there), so these are read by formicaria's packaging, not by the app: its
+# `ci/android-stage-runtime.sh` stages this archive and checks this hash, and
+# `ci/android-stage-whisper.sh` compiles whisper.cpp at this tag (upstream publishes no Android
+# build). Kept here so the runtime a phone runs is decided in one place, beside the desktop's.
+runtime_url_android_arm64 = "https://github.com/formicaria-org/myrme/releases/download/runtime-llg-3/llama-b10081-bin-android-arm64.tar.gz"
+runtime_sha256_android_arm64 = "40763a08247ace6866dd478099d2d0aa53f6cd27d2c2fa75371b0aa13bb35200"
+whisper_android_source = "v1.9.1"
+
 # Each model: `name` (the key you pass to fetch), its Hugging Face `repo` and `file`, and a note.
 # Keep `name`, then `repo`, then `file` in that order — fetch.sh reads them positionally.
 #

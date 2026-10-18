@@ -15,12 +15,21 @@ Each task gets a dedicated method instead of one general agent:
 
 Whatever Myrme produces arrives in formicaria as a **proposal** you accept or reject.
 
-**Status (2026-10-18):** `v0.1.0`.
-- Every method is measured on its own cases (`methods/*/METHOD.md`).
-- The model runtime is built here with llguidance for every platform (release `runtime-llg-3`).
-- formicaria's switch to linking this repository by tag is rehearsed and green on a branch. It
-  ships from the formicaria release that merges it; until then formicaria ships its own copy. See
-  [`docs/context/plan.md`](./docs/context/plan.md).
+## Releases and documentation
+
+- **[Releases](https://github.com/formicaria-org/myrme/releases)**: each version's page says what
+  changed for people using formicaria, what changed for formicaria, and how it was checked. A version
+  is released once CI has published its page, after the gate and the integration test pass on its
+  tag. Notes are written in [`docs/releases/`](./docs/releases/).
+- **[Which formicaria links which Myrme](./docs/context/releases.md)**, with the contract version
+  each needs. formicaria links Myrme by release tag and checks the contract when it builds, so people
+  only ever update formicaria.
+- **[The user manual's assistant chapter](./docs/manual/assistant.md)** is written here and rendered
+  in [formicaria's manual](https://formicaria-org.github.io/formicaria/manual/user/assistant.html).
+- **[The contract with formicaria](./docs/context/contract.md)**: what formicaria may rely on.
+- **[The methods](./methods/)**, each with its evaluation and results (`methods/*/METHOD.md`).
+- The model runtime is built here with llguidance for every platform (`runtime-llg-*` releases,
+  [`.github/workflows/runtime.yml`](./.github/workflows/runtime.yml)).
 
 ## Build and test
 

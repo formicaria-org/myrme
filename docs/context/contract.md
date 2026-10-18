@@ -13,7 +13,7 @@ _Taken from formicaria at tag v0.9.2 (commit e670190) on 2026-10-18; the Rust it
 Two numbers, kept apart:
 - **The release version** (`fm_agent_run::VERSION`, `Cargo.toml`, the `v…` tag) changes with
   every release.
-- **The contract version** (`fm_agent_run::CONTRACT_MAJOR`.`CONTRACT_MINOR`, now **1.3**) changes
+- **The contract version** (`fm_agent_run::CONTRACT_MAJOR`.`CONTRACT_MINOR`, now **1.4**) changes
   only when this document does.
   - **Major:** anything listed below is renamed, removed or changes meaning. formicaria checks the
     major at compile time, so an app written for another major refuses to build and says why. It
@@ -24,7 +24,7 @@ So formicaria can take any newer Myrme release of the same contract major by cha
 nothing else. That is how methods, prompts, evals, models and the runtime reach users without a
 formicaria code change. `docs/context/releases.md` lists every release with its contract version.
 
-The list in part 1 is compile-checked as contract 1.3 (`tests/fm_contract.rs`). Changing it means
+The list in part 1 is compile-checked as contract 1.4 (`tests/fm_contract.rs`). Changing it means
 changing the contract version in the same commit.
 
 ## 1. Rust items formicaria names
@@ -106,8 +106,22 @@ some of them.
 desktop archive (`.github/workflows/desktop.yml:141`, `packaging/formicaria.sh:42`) and stages the
 Android runtime from it (`ci/android-stage-runtime.sh`). **Its keys are a format formicaria reads.**
 Adding a key is safe; renaming or removing one is a contract change. Added since the
-extraction: `image_max_tokens` (per model, 2026-10-18). The plan moves it next to the
-crate (`plan.md`, Phase A), so formicaria stops naming the path `agents/`.
+extraction: `image_max_tokens` (per model, 2026-10-18). **Contract 1.4** (Myrme 0.5.0) adds the
+phone's runtimes, which formicaria's packaging reads from here instead of keeping its own copy:
+`runtime_url_android_arm64` with `runtime_sha256_android_arm64` (staged into the APK by
+`ci/android-stage-runtime.sh`) and `whisper_android_source`, the whisper.cpp tag
+`ci/android-stage-whisper.sh` compiles.
+
+## 3a. The user manual's assistant chapter (contract 1.4)
+
+`docs/manual/assistant.md` is **the** chapter on the assistant in formicaria's user manual. formicaria
+keeps no copy: its `ci/docs.sh` renders this file, read at the release it pins, as
+`user/assistant.md` of its book. So:
+- its links to other pages of the book (`./collaboration.md`) are relative to formicaria's
+  `docs/src/user/`;
+- formicaria's app links into it by heading (`<ManualLink page="user/assistant.html"
+  section="turn-it-on">`, checked by formicaria's `ci/checks.sh`): **renaming a heading formicaria
+  links to is a contract change**, like renaming an item in part 1.
 
 ## 4. The notes Myrme writes
 

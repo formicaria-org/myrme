@@ -366,6 +366,21 @@ its releases."*
 **Why.** Tags alone left nothing visible on the Releases tab, and nothing to tell a version that
 passed from one that was pushed and then failed.
 
+## 2026-10-19 — the manual's assistant chapter and the phone's runtimes live here; formicaria keeps no copy `#contract`
+
+**The owner:** *"make sure myrme releases are proper, with documentation and proper description"*;
+*"the manual of ai part should be coming from there, not copied doubly on two sides"*; *"no code
+duplication"*.
+
+**Decision.**
+- `docs/manual/assistant.md` is the assistant chapter of formicaria's user manual. formicaria
+  renders it from the release it pins and keeps no copy (contract 1.4, part 3a).
+- The phone's runtime archive with its hash, and the whisper.cpp tag the phone compiles, are
+  catalogue keys. formicaria's Android packaging reads them instead of its own copy.
+- Each release has notes in `docs/releases/<tag>.md`. The release page is those notes plus the
+  compatibility row and links to the documentation at that tag. CI publishes no page without notes,
+  and brings an existing page up to date when its notes change.
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading
