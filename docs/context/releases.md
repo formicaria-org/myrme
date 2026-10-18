@@ -6,7 +6,8 @@ major N whose minor is at least the one it needs.
 
 | Myrme | Contract | Linked by formicaria | What changed for users |
 |---|---|---|---|
-| **0.5.0** | **1.4** | formicaria after 0.9.3 | The assistant chapter of formicaria's manual is written here and rendered by formicaria from the pin; the catalogue carries the phone's runtimes, so formicaria keeps no copy of either. Versions are released by their published GitHub Release page |
+| **0.5.1** | **1.4** | formicaria after 0.9.3 | The phone starts its model with the model's own context window (4096 for lfm2.5-vl-450m) instead of the global 2048, so a photo leaves room for the answer |
+| 0.5.0 | 1.4 | formicaria `main` from 2026-10-19 | The assistant chapter of formicaria's manual is written here and rendered by formicaria from the pin; the catalogue carries the phone's runtimes, so formicaria keeps no copy of either. Versions are released by their published GitHub Release page |
 | 0.4.1 | 1.3 | formicaria 0.9.3 | A model that fails to load is reported as such within seconds, on the desktop and the phone, instead of the assistant announcing itself warm after a 40-second wait; the phone also stops its transcriber then |
 | 0.4.0 | 1.3 | — (superseded by 0.4.1 before formicaria released) | **The phone hosts Myrme through the facade too** (`Bundled`, `Tools::provision_weights`, `installed_for`, `run_in_process`): formicaria's phone host lost about 250 lines of Myrme's insides. **An app update brings the runtime its catalogue pins** (`runtime_outdated`, `refresh_runtime`): the faster runtime reaches people who already had the assistant |
 | 0.3.0 | 1.1 | formicaria `main` from 2026-10-18 (after its push of the cutover) | The desktop host's facade, `fm_agent_run::host`: formicaria asks Myrme what is installed, fetches it, removes it and starts it, without reaching into Myrme's insides. Fixes removing the downloaded model from Settings, which an installed copy refused |

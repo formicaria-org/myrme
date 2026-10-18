@@ -64,7 +64,10 @@ fn a_live_reader_against_the_cases() {
         if only.as_ref().is_some_and(|o| !o.contains(&id)) {
             continue;
         }
-        let jpg = std::fs::read(format!("{IMAGES}/{id}.jpg")).unwrap_or_else(|_| {
+        // `FM_EVAL_IMAGES` reads the same pages from another folder, e.g. resized copies, to
+        // measure what an image size costs in accuracy (2026-10-19, the speed study).
+        let dir = std::env::var("FM_EVAL_IMAGES").unwrap_or_else(|_| IMAGES.to_string());
+        let jpg = std::fs::read(format!("{dir}/{id}.jpg")).unwrap_or_else(|_| {
             panic!("{id}.jpg missing — run `pixi run eval-data -- handwriting`")
         });
         let read = reader.read_image(&jpg, "image/jpeg").unwrap_or_else(|e| format!("ERROR {e}"));

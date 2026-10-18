@@ -35,4 +35,5 @@ eval = "bash agents/eval.sh"
 integration = "bash agents/integration.sh"
 eval-data = "python -I agents/eval-data.py"
 eval-speech = "bash agents/eval-speech.sh"
+eval-speed = "bash agents/eval-speed.sh"  # per-method prefill/decode timings from the method evals
 check-pins = "cargo test -p fm-agent-run --features download -- --ignored --nocapture every_pinned_runtime"

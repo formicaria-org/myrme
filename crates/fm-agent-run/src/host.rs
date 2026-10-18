@@ -547,7 +547,7 @@ impl Tools {
         let logs_dir = self.dir.join("runtime");
         let _ = std::fs::create_dir_all(&logs_dir);
         let server_bin = bundle.dir.join(BUNDLED_SERVER);
-        let (port, ctx, threads) = (manifest.port, manifest.ctx, manifest.mobile_threads());
+        let (port, threads) = (manifest.port, manifest.mobile_threads());
         let model_name = job.model.clone();
 
         // The weights (a first enable fetches them), logged once per MB.
@@ -580,18 +580,7 @@ impl Tools {
             return Ok(());
         }
 
-        let mut cmd = Command::new(&server_bin);
-        cmd.env("LD_LIBRARY_PATH", &bundle.dir).arg("-m").arg(&model_gguf).args([
-            "--host",
-            "127.0.0.1",
-            "--port",
-            &port.to_string(),
-            "-c",
-            &ctx.to_string(),
-            "-t",
-            &threads.to_string(),
-            "--no-warmup",
-        ]);
+        let mut cmd = phone_server(&server_bin, &bundle.dir, &model_gguf, manifest, &model_name);
         let sees = manifest.add_projector(&mut cmd, &model_name, &models_dir);
         let model_bytes = std::fs::metadata(&model_gguf).map(|m| m.len()).unwrap_or(500_000_000)
             + sees.as_ref().and_then(|p| std::fs::metadata(p).ok()).map(|m| m.len()).unwrap_or(0);
@@ -734,6 +723,31 @@ impl Tools {
         (h.log)("study agent stopped");
         Ok(())
     }
+}
+
+/// The phone's model server command, before its projector is added. **The context is the model's
+/// own** (`Manifest::model_ctx`), as on the desktop: the phone used the catalogue's global 2048, and
+/// lfm2.5-vl-450m asks for 4096 because one photo is about 1027 tokens (fixed 2026-10-19).
+fn phone_server(
+    server_bin: &Path,
+    lib_dir: &Path,
+    model_gguf: &Path,
+    manifest: &Manifest,
+    model_name: &str,
+) -> Command {
+    let mut cmd = Command::new(server_bin);
+    cmd.env("LD_LIBRARY_PATH", lib_dir).arg("-m").arg(model_gguf).args([
+        "--host",
+        "127.0.0.1",
+        "--port",
+        &manifest.port.to_string(),
+        "-c",
+        &manifest.model_ctx(model_name).to_string(),
+        "-t",
+        &manifest.mobile_threads().to_string(),
+        "--no-warmup",
+    ]);
+    cmd
 }
 
 /// What a provisioning stopped by the app answers with. The app tells a stop from a failure by its
@@ -898,6 +912,23 @@ mod tests {
         assert_eq!(Tools::new(&d, false).remove().unwrap(), 1000);
         assert!(!d.join("models").exists() && d.join("keep.txt").exists());
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn the_phone_server_runs_with_the_models_own_context() {
+        let m = Manifest::parse(crate::CATALOGUE);
+        let model = m.mobile_default().to_string();
+        let cmd = phone_server(
+            Path::new("libllama-server.so"),
+            Path::new("."),
+            Path::new("m.gguf"),
+            &m,
+            &model,
+        );
+        let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        let ctx = args.iter().position(|a| a == "-c").map(|i| args[i + 1].clone());
+        assert_eq!(ctx, Some(m.model_ctx(&model).to_string()), "{args:?}");
+        assert_ne!(m.model_ctx(&model), m.ctx, "the phone default sets its own window");
     }
 
     #[test]
