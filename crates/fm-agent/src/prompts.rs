@@ -28,7 +28,10 @@ old), \"delete\" (old is removed) or \"append\" (new goes at the end of the note
 \"old\": words copied exactly from the note, as few as make them unique in it;\n\
 \"new\": the new text in the note's Markdown, with math as KaTeX ($...$ inline, $$...$$ on its own \
 line), or \"\" for a delete.\n\
-Change only what was asked. If nothing should change, answer {\"edits\": []}.";
+To add something at the end of the note, use append — never replace text to make room. Use replace \
+only for words the person asked to change, and replace only the words that change: the rest of a \
+sentence stays as it was. Change only what was asked. If nothing should change, \
+answer {\"edits\": []}.";
 
 /// The system prompt for the optional query-refinement step: rough request in, one clean search
 /// query out. Bounded, single-shot, no tools.
@@ -58,6 +61,18 @@ paraphrase and do not shorten across gaps. Cite every claim. Use only the number
 own knowledge, and never state anything the sources do not. If the sources do not answer the question, \
 reply with a single '- ' line saying so and no citation. Output only the list — no preamble, no \
 headings, no Sources section.";
+
+/// M2's write step **held to a schema** (`grounding::answer_schema`): the model first says whether
+/// the sources answer the question at all, then gives each claim with its source number and a quote.
+/// Replaces the free-text claim list, whose two failure modes on small models were a citation in the
+/// wrong place and a cited "the sources do not say" (2026-10-18, `methods/research/eval`).
+pub const GROUNDED_JSON_INSTRUCTION: &str = "\
+You answer a question using ONLY the numbered sources provided, never your own knowledge. First decide \
+whether the sources answer the question: \"answerable\" is true only if at least one source states \
+what was asked. If it is false, \"claims\" is empty — do not write claims that say the sources do not \
+answer. If it is true, give each fact as one claim: \"claim\" is one sentence, \"source\" is the number \
+of the source it comes from, and \"quote\" is a short passage copied EXACTLY, word for word, from that \
+source, that supports it. Answer ONLY with the JSON object.";
 
 /// A conversation's title: who it is with and who they are to the owner (`crate::titles`). Measured on
 /// `qwen3-vl-4b` over the owner's five real conversations (2026-10-15): right names, short roles; the

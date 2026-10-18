@@ -30,21 +30,26 @@ default_mobile = "lfm2.5-vl-450m"
 # between a redirect and running a stranger's binary — `Manifest::parse` therefore drops any
 # `runtime_url_*` whose `runtime_sha256_*` is missing rather than fetching it unverified.
 #
+# **Myrme's own build since 2026-10-18** (release `runtime-llg-3`, `.github/workflows/runtime.yml`):
+# llama.cpp b10076 with upstream's flags plus llguidance, the faster engine for answers held to a
+# schema — measured 17/17 either way on the meeting eval, ~17% less time on the RTX 3050 (Vulkan)
+# and ~20% on the CPU (`docs/context/decisions.md`). Upstream's file names and layout are kept.
+#
 # The suffix is the platform: `linux_x64`, `macos_arm64`, `windows_x64`, with `_gpu` for the Vulkan
 # build that offloads to a discrete GPU. Every archive here was downloaded and hashed; a platform we
 # have not verified gets no entry at all rather than one the fetch cannot check.
-runtime_url_linux_x64 = "https://github.com/ggml-org/llama.cpp/releases/download/b10076/llama-b10076-bin-ubuntu-x64.tar.gz"
-runtime_sha256_linux_x64 = "25d2df529ce393ab994ff5f2ae8511ec729c0591e69c497203b9b7715798c811"
-runtime_url_linux_x64_gpu = "https://github.com/ggml-org/llama.cpp/releases/download/b10076/llama-b10076-bin-ubuntu-vulkan-x64.tar.gz"
-runtime_sha256_linux_x64_gpu = "eed61f88431cc826d36c99fcac00122039e254512a8c0c3cd54ee18f6eab2ed5"
+runtime_url_linux_x64 = "https://github.com/formicaria-org/myrme/releases/download/runtime-llg-3/llama-b10076-bin-ubuntu-x64.tar.gz"
+runtime_sha256_linux_x64 = "2d2528b9fed0185aa59d55a82d75d22b6d1d2daf0aaffea8e0f3ec105d8ec574"
+runtime_url_linux_x64_gpu = "https://github.com/formicaria-org/myrme/releases/download/runtime-llg-3/llama-b10076-bin-ubuntu-vulkan-x64.tar.gz"
+runtime_sha256_linux_x64_gpu = "433fdd77269175a96790a1d68e138c3f1a04eef8b4cd51e135e94f44b08371e5"
 # macOS ships a tarball like Linux; Windows ships a `.zip`, which is why the extractor learned a
 # second format. Both hashed from the downloaded archive, like the Linux pair above.
-runtime_url_macos_arm64 = "https://github.com/ggml-org/llama.cpp/releases/download/b10076/llama-b10076-bin-macos-arm64.tar.gz"
-runtime_sha256_macos_arm64 = "0e4bbc887343e7facad515d1142387d3d7dc3f0d9dad7c7cc5b3b503ed8189e1"
-runtime_url_windows_x64 = "https://github.com/ggml-org/llama.cpp/releases/download/b10076/llama-b10076-bin-win-cpu-x64.zip"
-runtime_sha256_windows_x64 = "73478535f9f67a80a6f4f15187295b0ee8734c340a7e5aba82674bc8cdeacf9c"
-runtime_url_windows_x64_gpu = "https://github.com/ggml-org/llama.cpp/releases/download/b10076/llama-b10076-bin-win-vulkan-x64.zip"
-runtime_sha256_windows_x64_gpu = "6b3f3450c4fe89e079194f412eb5dc4b8bc2b9e371454c416e6095b6127153bb"
+runtime_url_macos_arm64 = "https://github.com/formicaria-org/myrme/releases/download/runtime-llg-3/llama-b10076-bin-macos-arm64.tar.gz"
+runtime_sha256_macos_arm64 = "908fe439ab1a4760e53fe0fadbff6f215e6147f8dfa3400c4bb36f1e9a0e1373"
+runtime_url_windows_x64 = "https://github.com/formicaria-org/myrme/releases/download/runtime-llg-3/llama-b10076-bin-win-cpu-x64.zip"
+runtime_sha256_windows_x64 = "f4bbf9422d87e7d44e2bd323138973cb4a68d777a9fee0ff73835c8f7abe55a0"
+runtime_url_windows_x64_gpu = "https://github.com/formicaria-org/myrme/releases/download/runtime-llg-3/llama-b10076-bin-win-vulkan-x64.zip"
+runtime_sha256_windows_x64_gpu = "0dc68913763167597902f176f06a4c9a35da9c91b9da46c473aea2646b0b18b8"
 
 # Serve settings. `threads` is the laptop value (8 physical cores); `threads_mobile` is the phone's —
 # 4 = the Dimensity 7300's big cores, which is *both* fastest and leaves the little cores for the UI
@@ -137,6 +142,10 @@ mmproj = "mmproj-Qwen3VL-4B-Instruct-F16.gguf"
 # Cost on a machine with no GPU: ~0.9 GB more RAM for the larger KV cache.
 ctx = 8192
 mmproj_offload = false
+# A full-size phone photograph becomes at most this many tokens: uncapped, every handwritten page
+# in the eval took over the 120 s reading limit with the projector on the CPU; at 1024, ~27 s and ~18%
+# word error (2026-10-18, methods/image-text/eval).
+image_max_tokens = 1024
 # Fit to read a packet's nutrition label (measured 2026-10-13, nine photographs from Open Food
 # Facts at 1024 pixels: 48 figures right, none wrong, 8 left empty; `agents/bench/results.md`).
 # A model without this line is never handed a label: `lfm2.5-vl-450m` got 2 packets of 9 right.

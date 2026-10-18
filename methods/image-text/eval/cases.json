@@ -1,0 +1,455 @@
+{
+  "about": "Golden cases for M3, image to text: 30 phone photographs of handwritten pages from GNHK's test split (GoodNotes, CC BY 4.0; see ../NOTICE.md), spread over it. The reference is GNHK's own word annotation, line by line, with its %…% tokens (math, signs, illegible) left out. The images are not committed: `pixi run eval-data -- handwriting` fetches them and checks `jpg_sha256`. Scored by word error rate (`fm_agent::eval::wer`).",
+  "cases": [
+    {
+      "id": "eng_AF_004",
+      "jpg_sha256": "ec6c901e18ca1cfa6320df7a03676afe75c6df87be726864a41ec8a8056436aa",
+      "recorded": {
+        "lfm2.5-vl-450m": "The image shows a handwritten note on a piece of paper. The note is dated \"Date: 1\" and is written in red ink. The content of the note is as follows:\n\n\"What I hope to achieve during this period of mentorship\n1. Improve my speaking and writing\n2. Learn how to run a business\n3. Things I need to do\n4. Have a writing time and day schedule\n5. Apply for free writing courses\n6. Apply for free pattern courses\n7. Learn how to use Canva\n\nThe note appears to be a personal reflection or plan, possibly for a mentorship or writing course. The handwriting is neat and legible, and the notes are written in a consistent, cursive style. The paper itself is white, and there is a visible crease running down the middle, suggesting it might be a notebook or a similar writing instrument. The background is dark, which contrasts with the white paper and red ink, making the text stand out.",
+        "qwen3-vl-4b": "Date: / / \n\nWhat I hope to achieve during this period of mentorship\n\n① Improve my speaking and writing\n② Learn how to run a business\nthings I need to do\nHave a writing time and day set aside\nApply for free writing courses\nApply for free pattern courses\nLearn how to use Canva\n\nDFI ROCKS"
+      },
+      "reference": "DFI Rocks\nDate:\nwhat I hope to achieve during this\nperiod of memtorship\nimprove my speaking and writing\nLearn how to run a business\nthings i need to do\nHave a writing time and day setaside\nApply th free writing courses\nApply for free pattern courses\nlearn how to use canvo",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_AF_004.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_AF_027",
+      "jpg_sha256": "3a8ef4490f27580c04918a7571ee10701d576b5f38d378c2e55cd1a9cfa1264b",
+      "recorded": {
+        "lfm2.5-vl-450m": "Notes",
+        "qwen3-vl-4b": "# NOTES\n\n1. Oke Amorose, a graduate of AEB, UNIBEN currently running a Second degree in MBBS, am a professional in programming, web development specializing in the coding languages PHP, Javascript, Bootstrap HTML and CSS. I work contract jobs due to my highly time demanding course of medicine in my programming aspect. I am a well known MUA in Nigeria and available to travel for events. I have to make clients up in. I work with brands making up the models for adverts. I am a signed model in the FEW model international agency. I am an internationally branded face as I am already signed with a big company. I am currently a shareholder in [?]"
+      },
+      "reference": "NOTES\nI, Oke Amromanog, a graduate of\nAEB, UNIBEN currently running a\nsecond degree inxxx MBBS,Xx am a\nprofessional in programming web\ndevelopment specializing in the coding\nlanguages PHP, Javascript Bootstrap\nHTML and CSS. I work contract Jobs\ndue to my highly time demanding\ncourse of medicine in my programming ascept\nI am a well known MUA in Nigeria\nand available to travel for events I\nhave to make clients up in. I work\nwith brands making up the models for 2.1\nadverts I am a signed model in\nthe FEW models international agency 2.2\nI am an internationally branded\nface as I am already signed with\na big company I am currently a\nshareholder in",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_AF_027.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_AF_061",
+      "jpg_sha256": "74a50b2d01837a9b4d6e55d6727a5ecadcdfc2da3f09eb65c66d02d7b340421d",
+      "recorded": {
+        "lfm2.5-vl-450m": "The image shows a white piece of paper with handwritten text in blue ink. The text appears to be a list of various spices and seasonings, written in a casual, informal style. The list includes:\n\n- Tomato paste\n- Onion\n- Free-range spice\n- Curry powder\n- Mushroom\n- Spice\n- Italian\n\nThe handwriting is somewhat messy and appears to be done quickly. The paper is bound with a black spiral binding at the bottom, suggesting it might be a notebook or a similar writing instrument. The background is plain, which makes the blue ink stand out clearly.",
+        "qwen3-vl-4b": "beans\nTomato pest\nTomatoes\nfried rice Spice\nCurry Powder\nmacaroni\nSpaghetti"
+      },
+      "reference": "beans\nTomato pest\nonions.\nfried ricespice\ncurry powder\nmacaroni\nspaghetti",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_AF_061.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_AF_076",
+      "jpg_sha256": "ffd906579a41069621dd62ce9e54d54fa9285ae2c059d5a1eeb887531b3bf872",
+      "recorded": {
+        "lfm2.5-vl-450m": "Australia Canada Oceania Pacific Ocean\n\nAtlantic Ocean Antarctica Arctic India",
+        "qwen3-vl-4b": "Australia Canada Oceania pacific Ocean\nAtlantic Ocean Antarctica Arctic India"
+      },
+      "reference": "Amstralia Canada Oceania pacific Ocean\nAtlantic Ocean Antarctica Arctrc India",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_AF_076.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_AF_113",
+      "jpg_sha256": "f619acb8389790fe9bacb8de2a4854772fa6214b9c2967ee8a7de5eb455e78d1",
+      "recorded": {
+        "lfm2.5-vl-450m": "The image shows a piece of lined paper with handwritten notes. The notes are written in blue ink and are organized in a list format. The notes are as follows:\n\n1. ANTONYMS\n2. Adopt - Disown\n3. Holy - Unholy\n4. Slowly - quickly\n5. Welcome - Unwelcome\n6. New - Old, ancient\n7. External - Internal\n8. Distance -",
+        "qwen3-vl-4b": "# ANTONYMS\n\nAdopt - Disown\n\nHoly - Unholy\n\nSlowly - quickly\n\nWelcome - Unwelcome\n\nNew - Old, ancient\n\nExternal - Internal\n\nDistance -"
+      },
+      "reference": "ANTONYMNS\nAdopt - Disown\nHoly - Unholy\nSlowly - quickly\nWelcome - Unwelcome\nNew - Old, ancient\nExternal - Internal\nDistance -",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_AF_113.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_AS_007",
+      "jpg_sha256": "27d21603cda4dcdaeccc8360cfcea610129b3f88fd940e11e3bd51a29b98a4f8",
+      "recorded": {
+        "lfm2.5-vl-450m": "Formal | Fiction\n\n- Evidence\n- Professional/academic\n- Straight to the point\n- Easy to understand\n\nAcademic writing\n\n- Academic papers - research papers, concept papers\n- Dissertations vs thesis (PhD) vs. MA\n- Purpose: research purposes, gives satisfaction to a problem.\n\nExamples:\n\n- Formal\n  1. Complex and thorough\n  2. Longer sentences\n  3. Full words\n  4. No contractions (can't be held, won't)\n  5. Objective\n  6. Not a personal uniting style\n  7. No slang, informal language (stuff, awesome, etc.)\n  8. Avoid the first person (I, me, my)\n  9. No personal examples (Things that happened to you)\n  10. Avoid addressing the reader directly\n  11. No overly emotional language (none, all)\n  12. No derogatory language (no references)\n  13. No statistics without proper references\n  14. Passive voice - impersonal and objective\n  15. Academic vocabulary - bag - detrimental\n\n- Informal\n  1. Conversational\n  2. Slog\n  3. Short and incomplete\n  4. Use contractions and abbreviations\n  5. No personal uniting style\n  6. Not a personal style (stuff, awesome, etc.)\n\n- Objective vs. Subjective\n  - Performative - role-play\n  - Periodical test\n  - No emotions\n  - Quantity",
+        "qwen3-vl-4b": "# FORMAL | FICITION\n\n- Evidence\n- professional/ academic\n- straight to the point\n- easy to understand\n\n- no evidence\n- figurative\n- creative words\n\n# ACADEMIC WRITING\n\n- academic papers - research papers, concept papers\n- dissertations vs thesis (CPHD) vs. (MA)\n\nPURPOSE: research purposes, gives solution to a problem.\n\nExamples:\n\n**FORMAL**\n\n1. Complex and thorough\n2. Longer sentences\n3. Full words\n4. No contractions (can't, held, won't)\n5. Objective\n6. No personal writing style\n7. No slang, informal language (stuff, awesome etc.)\n8. Avoid the first person (I, me, my)\n9. No personal examples (things that happened to you)\n10. Avoid addressing the reader directly\n11. No overly emotional language (irrational)\n12. No over generalization (every, none, all)\n13. No statistics without proper references\n\n> passive voice - impersonal and detrimental\n> Academic vocabulary - bad - facilitate\n\n**INFORMAL**\n\n1. Conversational\n2. Slang\n3. Short and incomplete\n4. Use contractions and Abbreviations\n\n---\n\nObjective vs. Subjective\n\n(Periodical test) - Performance - role-play)\n- numbers\n- no emotions\n- quantity\n\n- quality\n- emotions"
+      },
+      "reference": "FORMAL\na d n\nFICTION\n- Evidence\n- professional/academic\n- straight to the point\n- easy to understand\n- no evidence\n- figurative\n- creative words\nAcademic WRITING\n- academic papers - research papers, concept papers\n- dissection vs thesis (PHD) vs. (MA)\nPURPOSE: research purposes, gives solution to a problem.\nExamples:\nFORMAL\n1. complex and thorough\n2. longer sentences\n3. Full words\n4. No contractions (can't, he'd, won't)\n5. Objective\n6. Not a personal writing style\n7. No slang, informal language (stuff, awesome etc.)\n8. Avoid the first person (I, me, my)\n9. No personal examples (things that happened to you)\n10. Avoid addressing the reorder directly\n11. No overly emotional language (irrational)\n12. No over generalization (every, none, all)\n13. No statistics without proper references\n> Passive voice - Impersonal and objective\n> Academic vocabulary - bad - detrimental\nHelp - facilitate\nObjective VS. subjective\n(periodical test)\n- numbers\n- no emotions\n- quantity\n(perfomance - role-play)\n- quality\n- Emotions\nINFORMAL\n1. controversial\n2. slog\n3. short and Incomplete\n4. use contractions\nand Abbreviations",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_AS_007.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_AS_030",
+      "jpg_sha256": "4307f8393e88ceeb28a34c89ed876b319857ce15d168ba5c443c0f1a1c23d2b2",
+      "recorded": {
+        "lfm2.5-vl-450m": "The image shows a handwritten page from a notebook or journal. The handwriting is in cursive and appears to be in English. The page contains a mix of sentences and paragraphs, with some sections underlined. There is a red circle with a line through it in the center of the page, which might indicate a specific point of interest or a mark made by the writer. The handwriting is neat and legible, suggesting that the writer is familiar with the content of the page. The background of the image is not clearly visible, but it appears to be a wooden surface, possibly a table or desk.",
+        "qwen3-vl-4b": "ERROR the reading was cut off at the token limit — crop the image or raise max_tokens"
+      },
+      "reference": "18. Describe the characteristics of the kingdom of God\naccording to :18 1) mt 12; 18.2 )jh 10 or first After of John\n18.1) when God reigns supreme, the world\nforces of evil overcome (Mt 12:25)\nin the kingdom of God evil is replaced by love, forgiveness, and service\n18.2) the employed the symbol live,, that is\nrooted in body, who is eternal one 2 came\nthat they may have life & have it abundantly\n(Jn 10:10)\nlife\nThe kingdom of God brings to us a meaningful and eternal life in\njesus Christ.\n17/17\nSET C\nTOPIC: Questions for chapter 2. Title :God's way of friendships\n19. what was the sole main purpose of Jesus\nhealing & exorcism?\nas a proof of his divinity because Jesus could\nheal miraculously & drive away evil spirits\nThe main purpose of healing & miracle of Jesus is to invite us to believe in alah\n20. what is distinctive about the table fellowship of\nJesus as found in luke 14: 13?\n\"But when you give a banquet, invite the poor, the\ncrippled, the lame, the blind, and you will be blessed\"\none wonders if this is a guest list churches would\nlike to follow.\nJesus invite everybody especially the poor and there who are\nsocially excluded.\n21. what is the message of in 15:13 with regards to\nJesus' friendship?",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_AS_030.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_AS_042",
+      "jpg_sha256": "6cf331ef53fc74916dbad05564ec2af215bd6c0061b9d4ac71acf3ae9a8b0f75",
+      "recorded": {
+        "lfm2.5-vl-450m": "Vitamin-A\n\nFound in green & leafy vegetables / yellow\n\nAbsorption in small intestine\n\n- Duodenum (1.3)\n- Jejunum (1.0)\n\nWaite product of: Botassium\n\n- Urine: Nominal\n- Root-root: 1.3 mcg\n- Normal: 1.0 mcg\n- Potassium: 1.3 mcg\n- Fructose & glucose: 1.0 mcg\n- Apples: 1.0 mcg\n- Bananas: 1.0 mcg\n- Carrots: 1.0 mcg\n- Orange: 1.0 mcg\n\nRich in Potassium",
+        "qwen3-vl-4b": "$$\n\\text{VITAMIN - A}\n$$\n- found in green, \\& leafy vegetables / yellow\n- fruit\n- $ \\text{ABSORPTION IN SMALL INTESTINE} $\n- $ \\text{DUOPENUM} $ $ \\text{Executive Order No:51} $\n- $ \\text{DEJUNUM} $ $ \\text{BREAST FEEDING} $\n- $ \\text{WASTE PRODUCT OF POTASSIUM} $\n- $ \\text{urine, vomit} $\n- $ \\text{CARBS} $ $ \\text{ROOT CROPS} $ $ \\text{NORMAL SODIUM} $ $ \\text{135-145 mEq} $\n- $ \\text{POTASSIUM - FRUITS \\& VEGETABLES} $\n- $ \\text{IODINE - SEA} $\n- $ \\text{tashog no nisid} $ $ \\text{0 range} $\n- $ \\text{RICH IN POTASSIUM} $\n$$"
+      },
+      "reference": "VITAMIN- A\n- Found in green & leafy vegetables/ yellow\nFruits\nABSORPTION IN SMAL INTESTINE\nDUODENUM\nExecutive Order No. 51\nJEJUNUM\nBREAST FEEDING\nWaste PRODUCT OF POTASSIUM\nurea, vomit\nCARBS\nNORMAL SODIUM\nROOT CROPS\nSODIUM\n135- 146 MEG\nPOTASSIUM- FRUITS & VEGGIES\nFRUITS\nVEGETABLES\nApple\nApricot/\nIODINE SEA\nBanana\nBrocolli\nCantalope Carrots\nOrange\nRICH IN POTASSIUM",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_AS_042.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_AS_063",
+      "jpg_sha256": "745af302745ff5609e5f3fde96811bdbdde34e82cb4a9bfbcd37955d10fb23a7",
+      "recorded": {
+        "lfm2.5-vl-450m": "The image shows a handwritten note on lined paper. The note discusses the process of arriving at a dependable solution to a problem through the planned and systematic collection, analysis, and interpretation of data. It emphasizes the importance of the data and the need to find conditions under which it does not occur in what might appear similar circumstances. The note also mentions the potential for research to raise a lot of questions and the code of ethics. The handwriting is neat and legible, and the note is written in black ink on a white background.",
+        "qwen3-vl-4b": "- process of arriving as\ndependable solution to a\nproblem through the planned\n& systematic collection,\nanalysis & interpretation of\ndata\n- most important process for\nadvancing knowledge\n- devoted to find the conditions\nunder which a certain phenomenon\noccurs & the conditions under\nwhich it does not occur in\nwhat might appear similar\ncircumstances\n\nRE t SEARCH\n- \"must not come from\nus alone\"\n\nperson observes → Phenomena → collection of\ndata → CONCLUSIONS\n\n- Research would raise\na lot of questions\n- Code of Ethics"
+      },
+      "reference": "process of arriving as\ndependable solution to a\nproblem through the planned\n& systematic collection,\nanalysis & interpretation of\ndata\nmost important process for\n- must be useful\nadvancing knowledge\ndevoted to find the conditions\nunder which a certain phenomenon\noccurs & the conditions under\nwhich it does not occur in\nwhat might appear similar\ncircumstances\nRE + SEARCH\n- \"must not come from\nus alone\"\nperson observes phenomenon\ncollection of\ndata CONCLUSIONS\nResearch would raise\na lot of questions\nCode of Ethics",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_AS_063.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_AS_084",
+      "jpg_sha256": "0d0b300aa13079e2e25dbde2fcc221006ae4a58b920302be56a2fe8aa169bf62",
+      "recorded": {
+        "lfm2.5-vl-450m": "A note written in a notebook.",
+        "qwen3-vl-4b": "```markdown\nATE IEA 18TH\nMONDAY\n\nSo today I want to tell you\nthis.\n\nAlways pray to god!\nAsk for guidance in every\ndecision that you will take,\nwith him in your life nothing\nwill go wrong anak.\n\nTHURSDAY\nFRIDAY\n\nI want to tell you this\nburns a new into your\nday. Know that today\nSomething will happen,\nSomething will be,\nand\nthat will make this day\nlike no other\n```"
+      },
+      "reference": "ATE IEA 18Th\nY M MONDAY\nSo today I want to tell you\nthis.\nAlways pray to God!\nAsk for guidance in every\ndecision that you will take\nw/him in your life nothing\nwill go wrong anak,\nTHURSDAY FRIDAY\nI want to tell you\nBurst a anew into your\nday. know that today\nSomething will happen,\nSomething will be,\nand\nthat will make this day\nlike no others",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_AS_084.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_EU_026",
+      "jpg_sha256": "06e2111b099be54063fbc85b30ba3f64a6cf8f43db524e21e25715feacf15690",
+      "recorded": {
+        "lfm2.5-vl-450m": "ERROR the reading was cut off at the token limit — crop the image or raise max_tokens",
+        "qwen3-vl-4b": "38 Chancery Lane\n\nCradle = Afrinium √ Quote received.\nBMS = Ashdownsawrnds = @uote received\nPAT = 47 items = Safety Inspections Ltd. (Excluded).\nDrainage = 24 hr Aquaplow √ Quote received £800\nSump pump chamber clean - Aquaplow - Quote received £800\nAquaplow = Stacks, WC (plumbing), Sinks (traps etc.), Urinals,\nFire curtains - B+B industrial doors -\nSprinklers - Sunsfire √ - Quoted\nDry risers - Hall + Hay √ - Quoted.\nGenerators - P+I - ongoing Quote . recently.\nLighting Control - Zen Control - Quoted . √\nLighting Protection - Safety Inspections - Quoted\nPhotography taken .\nClassic Lists - Car lift -\nBoast sets - Brownings √ - Quoted\nPressure sets - Brownings √ - Quoted"
+      },
+      "reference": "38 Chancery Lane.\nCradle = Atrium Quote recieved\nBMS = Ashdowuscutrols - Quote recieved\nPAT = 47 items = Safety Inspections Ltd. (Excluded).\nDrainage = 24 hr Aquaflow - Quote\nSwup puwp chamber clean - Aquaflow - Quote received\nAquaflow = stacks, wc (flowing) , Sinks (traps etc), Orinds,\nFire curtains . - B + B industrial doors-\nSprinters - Sure fire - Quoted\nDry Risers - Wall + kay - Quoted. received\nGenerators - P+1 - waiting Quote TGC serviced\nrecently.\nLighting Control - Zen Could - Qutoed\nLighting Protection - Safety Inspections - Quoted\nPhotocopy taken .\nClassic Lifts - car lift -\nBoost sets - Brownings - Quoted\nPressure sets - Brownings - Guohed",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_EU_026.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_EU_044",
+      "jpg_sha256": "ee9472beff680955891455facec90cadd1fdcbf539cd0187b46f97c1253be297",
+      "recorded": {
+        "lfm2.5-vl-450m": "Do you think Liam had baked a cake before?\n\nYes  □ No  □\n\nUse the text to give reasons for your answer.\n\nHe hasn't baked a cake before,\n\nFor example, Liam roasted black into\n\nthe richer where he found his grain\n\nsanning the black cloud as Smoke.",
+        "qwen3-vl-4b": "5. Do you think Liam had baked a cake before?\nYes $\\square$  No $\\checkmark$\nUse the text to give reasons for your answer.\nHe hasn't baked a cake before,\nFor example\" Liam raced back into\nthe kitchen where he found his gran\nsanning the black cloud of smoke\n...\n3\n3 marks"
+      },
+      "reference": "5. Do you think Liam had baked a cake before?\nYes No\nUse the text to give reasons for your answer.\nHe hasn't baked a cake before,\nFor example \"Liam raced back into\nthe kichen where he found his gran\nfanning the black cloud of Smoke\n...\".\n3\n3 marks",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_EU_044.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_EU_068",
+      "jpg_sha256": "73bc76485aedda6dc2fe719a7f66626f066eee65e3fa6c5fecaa327ff03d5841",
+      "recorded": {
+        "lfm2.5-vl-450m": "The two L's look like two U's when they are together.",
+        "qwen3-vl-4b": "```markdown\nLiam 15.10.12 AH\n\nThe two L's look\nlike U! when they are\ntogether.\n```"
+      },
+      "reference": "Liam 15.10.12 A.H\nThe two LL's LOOK\nlike u! When they are\ntogether.",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_EU_068.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_EU_109",
+      "jpg_sha256": "6ce56be5aec8c132e40b8eb3043ba16922e545a2e6c591172c507401e2aefec8",
+      "recorded": {
+        "lfm2.5-vl-450m": "Session Summary\n\nRoading alac!: Aiden warned on the target of reading aloud today the Shorvet great pronunciation and blending of words during his Sessions keep it up niden!\n\nAsking for help  ✓ Concentration  ✓ Effort\n\nToday, I was tutored by  _______________________________  _______________________________\n\nI earned Lizard Cards for  _______________________________",
+        "qwen3-vl-4b": "# Session Summary\n\nReading alad:\nBiden worked on the target of\nreading aloud today. He showed\ngreat pronunciation and\nblending of words during\nhis Sessions keep it up\nBiden!\n\nAsking for help  $\\checkmark$  Concentration  $\\checkmark$  Effort  $\\checkmark$\n\nToday, I was tutored by  Max c.\n\nI earned Lizard Cards for\nMMEF"
+      },
+      "reference": "Session Summary\nReading aloud:\nAiden worked on the target of\nreading aloud today, he Showed\ngreat pronouncation and\nblending of words during\nhis sessions keep it up\nAiden!\nAsking for help Concentration Effort\nToday, I was tutored by marc\nI earned Lizard Cards for\nm m E E",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_EU_109.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_EU_123",
+      "jpg_sha256": "b3079a1486080d772e2a78670ec9db3e11106265998d75e2715325c196fbcd06",
+      "recorded": {
+        "lfm2.5-vl-450m": "When leaving our pets and stars on a photo, I said that they are hundreds and hundreds there.",
+        "qwen3-vl-4b": "```markdown\nLiam\n2/01/13\n\nWhen looking at planets\nand stars on a photo\nLiam said there are\n\"hundreds and hundreds\nthere\".\n\nMiss Hills.\n```"
+      },
+      "reference": "Liam\n21/01/13\nWhen looking at planets\nand stars on a photo\nLiam said there are\n\"hundreds and hundreds\nthere.\"\nMiss Hills",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_EU_123.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_EU_138",
+      "jpg_sha256": "e5d6da04dc3f0bdbb774f14a8435c2ec3d8515b35f28aed5e3a49ea033b00cf0",
+      "recorded": {
+        "lfm2.5-vl-450m": "The image shows a handwritten note on a piece of lined paper. The note is dated 29/11/07 and is addressed to \"Pimmans\" and \"Apress\". The content of the note appears to be a list of comments and any advice or treatment related to a specific issue. The handwriting is somewhat cursive and the notes are written in blue ink. The note includes a signature at the bottom, which seems to be that of the person who wrote it. The note is placed on a brown surface, possibly a table or desk. The handwriting is legible, and the notes are organized in a structured manner, with each line separated by a horizontal line. The note seems to be a personal note, possibly from a healthcare provider or a medical professional, given the context of the content.",
+        "qwen3-vl-4b": "```markdown\n| Date | Comments & any advice or treatment | Name & designation |\n|------|------------------------------------|-------------------|\n| 29.11.07. Prenatal visit. Appears alert and contented. Breast feeding well on demand, good weight gain with midwife. Plasters of wet and dirty nappies, yellow stool. Mother reports no concern. Clear response to hearing test. Health visiting services explained and contact number given. Registered with GP. Item to see GP for both check. Invited to clinic. | | HELEN LYNES-LOUCH HEALTH VISITOR. |\n\nAll entries should be dated and signed To see 16th Sun Wed. at 10 AM for post natal visit.\n```"
+      },
+      "reference": "Date\nComments & any advice or treatment\nName & designation\n29.11.07\n. Primary visit . Appears alert\nand contented . Breast feeding\nwell on demand , good weight\ngain with midwife . Plenty\nof wet and dirty nappies, yellow stooh.\nMother report no concern .\nclear response to hearing test .\nHealth visiting services\nexplained and contact numbers\ngiven . Registered with GP.\nNum to see GP for bwh chech .\nInvited to clinic\nAll entries should be dated and signed\nTo see 16th Jan wed.\nat 10AM for post natal visit\nHELEN\nLYNES - LOUCH\nHEALTH\nVISION",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_EU_138.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_EU_163",
+      "jpg_sha256": "290ba596093a80ce80e37900768ce9abbda79c818702319a1ca5d2741d66317a",
+      "recorded": {
+        "lfm2.5-vl-450m": "Next Steps: Talk activities through reflecting on and modifying what he is deriving.",
+        "qwen3-vl-4b": "```markdown\nNext Steps:\nTalk activities through\nreflecting on and modifying\nwhat he's doing.\n```"
+      },
+      "reference": "Next Steps:\nTalk activities through,\nreflecting on and modifying\nwhat he is doing.",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_EU_163.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_EU_186",
+      "jpg_sha256": "a867b476e5c9e14ecb3a998a592c0f06d1b4d1fcdae7084a48e1a5461f2455ed",
+      "recorded": {
+        "lfm2.5-vl-450m": "The image shows a handwritten note on lined paper. The note is dated 17 June 2018 and contains several entries:\n\n1. \"Profit name: Paypal money\"\n2. \"From account: Paypal money\"\n3. \"Paypal account: 1\"\n4. \"Paypal balance: 0\"\n5. \"Bank: 0\"\n\nThe note appears to be a financial summary or report, detailing the profit made from a PayPal account and the current balance of the account. The handwriting is somewhat cursive and the notes are written in black ink on white paper.",
+        "qwen3-vl-4b": "```markdown\nDATE 17 06 2017.\n\n119\nAgency → profile creation.\n\n119\nCom\nPaypal account\n✓ company account.\n✓ bank account.\n✓ should be\nsame.\n\nProfit name\npaypal name\n\nZ API\n```"
+      },
+      "reference": "DATE 17 /06/20/7.\ni> Agency profile creation.\nii>\nprofit name\nBom\npaypal account\npaypal name.\ncompany account.\nbank account.\nshould be\nsame.\nZ API",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_EU_186.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_EU_200",
+      "jpg_sha256": "9024a784a17994d0712ff9ce4f54c3b437eab79d702790861a42b34c6faffbde",
+      "recorded": {
+        "lfm2.5-vl-450m": "English: compound verbs\nB-compatible using on-ram put\nnot sure now to define these\nremember their jobs to\nnot just sentences together.\nMaking: under and quadratic\nfunctions. Quadratic was\nso x^2 for example. Linear is\nthe simpler one.)",
+        "qwen3-vl-4b": "English: 'compound verbs'\nI comfortable using them but\nnot sure how to define these.\nRemember their jobs is to\njoin sentences together.\nMaths: linear and quadratic\nfunctions, quadratic uses\nso x^2 for example. Linear is\nthe simpler one:)"
+      },
+      "reference": "English: 'compound verbs'\ncomfortable using them but\nnot sure how to define these.\nRemember their job is to\njoin sentences together.\nMaths: linear and quadratic\nfunctions. quadratic uses 2\nso x2 for example. Linear is\nthe simpler one:)",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_EU_200.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_EU_241",
+      "jpg_sha256": "282cad43a962f339684815c7b8de9b81de105ee5299c42b68c4bce1d1e1a2dba",
+      "recorded": {
+        "lfm2.5-vl-450m": "The image shows a page from a notebook with handwritten notes. The handwriting is in cursive and appears to be in English. The notes are written in a somewhat informal and casual style, with some words and phrases written in a more cursive script. The handwriting is not perfectly aligned, and there are some spaces between the notes. The page is lined with horizontal lines, which are typical of notebook paper. The handwriting is difficult to read due to the cursive style and the angle at which the page is photographed. The notes seem to be related to a topic or subject, but without more context, it is difficult to determine the exact content. The handwriting is legible, but the overall appearance of the notes suggests that they were written quickly or with little attention to detail.",
+        "qwen3-vl-4b": "ERROR the reading was cut off at the token limit — crop the image or raise max_tokens"
+      },
+      "reference": "There is a point in every\ntrue friendship\nwhere friends stop\nbesing friend and\nbecome sister",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_EU_241.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_EU_278",
+      "jpg_sha256": "f91fc1d3a0fcd22fcc1a853fe68d7377a7404143a45ef12f79cc014fcad5d9b2",
+      "recorded": {
+        "lfm2.5-vl-450m": "This is a receipt from a flight. The receipt is from a flight number 1791, operated by H.S.T. The flight was from Vienna to Airport, and the date of the flight was June 6, 1974. The receipt was signed by the person who received the receipt.",
+        "qwen3-vl-4b": "```markdown\n# RECEIPT\n\nCab No. 1791 H.S.T.\n\nFrom 2743 Victoria Pl AV\n\nTo AIRPORT\n\nDate 06.04.2018 Amount 70-12\n\nSignature\n```"
+      },
+      "reference": "RECEIPT\nCab No. 1791 H.S.T.\nFrom 2743 Victoria Plc Av\nTo AIRPORT\nDate 06-04-2018 Amount 70 -\nSignature",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_EU_278.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_EU_293",
+      "jpg_sha256": "9ea1e6d1b8cfea8b0019572560ec43d1c490b50282e32605724c3428a90355ee",
+      "recorded": {
+        "lfm2.5-vl-450m": "Rev. Thomas Kim, \"University Presbyterian\", 1830 Finch Ave. W, Toronto M3N 1M8",
+        "qwen3-vl-4b": "Rev. Thomas Kim\n\"University Presbyterian\"\n1830 Finch Ave. W\nToronto M3N 1M8"
+      },
+      "reference": "Rev. Thomas Kim\n\"University Presbyterian\"\n1830 Finch Avc. W\nToronto M3N 1M8",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_EU_293.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_EU_313",
+      "jpg_sha256": "66a6a9b9b9f3a299c0f850d43a130ce99702836119ff9c0f12f4a39db84a3985",
+      "recorded": {
+        "lfm2.5-vl-450m": "Dear Jennifer,\n\nThank you much for your absolute generosity to me during this auscultation. I appreciate it so much, and has very touched that you wanted to share with me in this way. I have had every happiness and joy in this way. You have a kind and multifaceted heart to share with me.\n\nYou have every happiness and joy in this way. May your kindness return to you over and over, always multiplying and sharing.\n\nYou have every happiness and joy in this way. May your kindness return to you over and over, always multiplying and sharing.\n\nSincerely,\n\nJennifer",
+        "qwen3-vl-4b": "Dear Jennifer\nThank you with\nmy heart for your absolute\ngenerosity to me during\nthis visit, I appreciate it\nso much, and has very touched\nthat you wanted to share\nwith me in this way. May\nyour kindness return to you\nover and over multiplied, to me\nyou have every happiness and\n[?]"
+      },
+      "reference": "Dear Jennifer\nthank you with\nmy heart for your absolute\ngenerosity to me during\nthis visit, I appreciate it\nso much, and was very touche\nthat you wanled to share\nwith me in this way . May\nyour kindness return to you\nover and over multiplied, to me\nyou have every , happiness",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_EU_313.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_NA_012",
+      "jpg_sha256": "83aeca03a2e131db3c948c48df0711a25ff7bc1bc0a9a83cd3e04be9dcf3f006",
+      "recorded": {
+        "lfm2.5-vl-450m": "The handwriting is messy and difficult to read. The handwriting is in cursive.",
+        "qwen3-vl-4b": "ERROR the reading was cut off at the token limit — crop the image or raise max_tokens"
+      },
+      "reference": "andriod run\ncompile\ntime\nclasses. dex. Jave. bytecode. Dalvic./ART\nmanifest. XML.\nres\nResources.\nassets\nLib\nmeta-info\nUnity c# sharp\nconfiguration\nSource file Registered compile\nprecompiled resources XMLIN\nby files\nSo arm 86 32/64\napk signing doc\nUnity c#",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_NA_012.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_NA_032",
+      "jpg_sha256": "5b0a54e4bc2684adb2d38eff1f275f16753a5f3024dd9870e68d6d3b47b651ae",
+      "recorded": {
+        "lfm2.5-vl-450m": "The handwriting is in cursive.",
+        "qwen3-vl-4b": "1. It seemed impossible to me, but all the others\nlooked very confident.\n2. We looked around. There wasn't a building\nstanding in sight. The earthquake seemed to\nhave destroyed everything.\n3. He seems to be in low spirits these days. I wonder\nwhy.\nClass 2"
+      },
+      "reference": "Unit 2\n1. It seemed impossible to me, but all the others\nlooked very confident.\n2. We looked around, There wasn't a building\nstanding in sight. The earthquake seemed to\nhave destroyed everything.\n3. -He seems to be in low spirits these days. I wonder\nwhy.",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_NA_032.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_NA_047",
+      "jpg_sha256": "3d249b1fe2a31621e5aa279478640c1833fc0d759235afae520ced1950f0f2c6",
+      "recorded": {
+        "lfm2.5-vl-450m": "Rule 103\nAny syndicate member who is a market maker in a security can either resign as a member during 10 day cod off, or act as a passive member.\n\nRule 101\nLimits on syndicate members who are NOT market makers\n• Stock Trading Restrictions\n  - Tier 1: Actively Traded\n    - no trading restriction on a stock that has an ADTV of $1,000,000 and a maximum market cap of $150,000,000\n  - Tier 2: Limited Trading\n    - ADV of $100,000\n    - min market cap $25,000,000\n    - restricted 1 day prior to effective date\n  - Tier 3: Inactively traded\n    - ADV of $100,000\n    - market cap of > $25,000,000\n    - 5 day restriction\n\nRule 104\nRequirement of a notice of stabilization after a new issue\n• stabilization after a new issue",
+        "qwen3-vl-4b": "Rule 103\n* any syndicate member who is a market\nmaker in a security can either resign\nas mm during 70 day cool off, or\nact as a passive mm\n13 agrees it will not bid stock higher\n\nRule 101\n* limits on syndicate members who are NOT\nmarket makers\n* Stock Trading Restrictions\n- Tier 1: Actively Traded\n* no trading restriction on a stock\nthat has an ADTV of $1,000,000\nand a minimum market cap of\n$150,000,000\n- Tier 2: Limited Trading\n* ADV of $100,000\n* min mkt cap $25,000,000\n* restricted 1 day prior to\neffective date\n- Tier 3: Inactively traded\n* ADV of >$100,000\n* market cap of > $25,000,000\n* 5 day restriction\n\nRule 104\n* requirement of a notice of stabilization\nafter a new issue\n* stabilizing bid per mm @ or below POP"
+      },
+      "reference": "Rule 103\nany syndicate member who is a market\nmaker in a security can either resign\nas mm during 20 day cool off, or\nact as a passive mm\nagrees it will not bid stock higher\nRule 101\n.limits on syndicate members who are NOT\nmarket makers\nStock Trading Restrictions\n- Tier 1: Actively Traded\nno trading restriction on a stock\nthat has an ADTV of & 1,000,000\nand a minimum market cap of\n$ 150,000,000\n- Tier2: Limited Trading\nADV of $ 100,000\nmin mkt cap $ 25,000,000\nrestricted I day prior to\neffective date\n- Tier 3: Inactively traded\nADV of > $ 100,000\nmarket cap of > $ 25,000,000\n5 day restriction\nRule 104\nrequirement of a notice of stabilization\nafter a new issue\nPOP",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_NA_047.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_NA_076",
+      "jpg_sha256": "65f50e64b0b9a77cd41d51a12b1d8ad6a1cf8e40bd7ec08c11f000aa851c113e",
+      "recorded": {
+        "lfm2.5-vl-450m": "The image shows a handwritten note on graph paper, detailing a process for sorting stocks by fundamental ratio. The process involves the following steps:\n\n1. **Initial Setup**: The note starts with a note that reads \"1000 stocks 'pool'\".\n\n2. **Sorting by Fundamental Ratio**: The next step is to sort the stocks by their fundamental ratio. This is done using the formula:\n   \\[\n   \\text{industry, ratio} \\times \\text{weight} \\times \\text{weight} \\times \\text{ratio}\n   \\]\n   This formula is written in a large, bold font and is circled for emphasis.\n\n3. **Sorting by Top 5 Stocks**: After sorting by fundamental ratio, the next step is to sort the stocks by their top 5 stocks. This is done using the formula:\n   \\[\n   \\text{top} \\times \\text{stocks of the day} \\times \\text{weight} \\times \\text{weight} \\times \\text{ratio}\n   \\]\n   This formula is also circled.\n\n4. **Final Sorting**: The final step is to sort the stocks by their mean return factor. This is done using the formula:\n   \\[\n   \\text{mean returns} \\times \\text{reversion factor}\n   \\]\n   This formula is written in a smaller font and is also circled.\n\nThe note concludes with a note on the importance of the \"macro ratio\" and the \"mean reversion factor\", which are not fully detailed in the image.\n\nOverall, the note provides a clear and step-by-step guide for sorting stocks based on fundamental ratios and mean return factors.",
+        "qwen3-vl-4b": "```markdown\n1000 stocks \"pool\"\n\nmacro ratio × Weight 1\nindustry, ratio × weight 2\nmicro (Individual)\nratj × weight 3\n⇒ final ratio\n\nsort by final ratio → top 5 stocks of the day.\nto train\n\nbuy @ 9:30. sell @ 3:55\n\nstop limit threshold? (step 2).\n\nmacro ratio < momentum factor\nmean reversion factor\n```"
+      },
+      "reference": "1000 stocks \"pool\"\nmacro rating x weight 1\nindustry rating x weight 2\n(country)\nmicro (\nindividual)\nrating x weight 3\nfinal\nrating\nsort by final rating top5 stocks of the day.\nbuy @ 9:30 sell @ 3:55\nstop limit threshold ? (step2).\nmacro rating <\nmomentum factor\nmean reversion factor\nto train",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_NA_076.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_NA_095",
+      "jpg_sha256": "6dad3226e4aaf9e9d080f69c764c14d273d5d2dfca248cec51374ff6b71b7984",
+      "recorded": {
+        "lfm2.5-vl-450m": "Leading Pave:\n\nExperiences -> English overestimates -> overestimated\n\nEnglish teachers -> support English curriculum -> my opinion: Shout (learn English)",
+        "qwen3-vl-4b": "```markdown\nDate. Page.\n\nLeading Part:\n\nExperts → English overestimate\nis overestimated\n\nEnglish teachers\n→ support English\ncurriculum s\n\nmy opinion :\nShould learn English\n```"
+      },
+      "reference": "Date. Page.\nLeading Part:\nExperts English overestimate\nis overestimated\nEnglish teachers\nsupport English\ncurriculums\nmy opinion:\nshould learn English",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_NA_095.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_NA_121",
+      "jpg_sha256": "301c4a039fc73b1a6468c60cfced92aa11917621aae9db5612fbf9835d1dafff",
+      "recorded": {
+        "lfm2.5-vl-450m": "ERROR the reading was cut off at the token limit — crop the image or raise max_tokens",
+        "qwen3-vl-4b": "$KN:$\nLetter: $KN-15-03$ PII\nnewspaper: $KN-3-05$ uncompleted\noffical doc.\n$KN-8-04$ PII\ntags: $KN-10-04$ no price\nsigns: $KN-16-17$: human face\n$LV:$\ncomyc books: $LV-12-04$ uncomplete\n$LV-12-07$ uncomplete\n$LV-13-09$ uncomplete\nfood menu:\n$LV-11-27$ no price\n$LV-11-38$ uncomplete\n$LV-11-45$ uncomplete\nletters:\n$LV-15-08$ PII\nnewspaper: $LV-3-02$ uncomplete\n$LV-3-08$ uncomplete"
+      },
+      "reference": "KN:\nLetter: KN-15-03 PII\nNewspaper:\nKN-3-05 uncompleted\nofficial doc .\nKN-8-04 PII\ntags : KN-10-04 no price\nsigns: 16 KN-16-17 : human face\nLV :\ncomic books : LV-12-04 uncomplete\nLV-12-07 uncomplete\nLV-12-09 uncomplete\nfood menu :\nLV-11-27 no price\nLV-11-38 uncomplete\nLV-11-45 uncomplete\nletters :\nLV-15-08 PII\nnewspaper:\nLV-3-02 uncomplete\nLV-3-08 uncomplete",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_NA_121.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    },
+    {
+      "id": "eng_NA_142",
+      "jpg_sha256": "4c679364f92d18e852febbb406805d70ac2863b381685408c8c383f02c39b17f",
+      "recorded": {
+        "lfm2.5-vl-450m": "ERROR the reading was cut off at the token limit — crop the image or raise max_tokens",
+        "qwen3-vl-4b": "```markdown\nProblem 1.\na. Accounting income before taxes:\n    Permanent and penalties on taxes: 1,000,000\n    Interest: 4,200\n    Dividends from taxable Canadian corporations (13,000) 12,500\n    Non-deductible portion of capital gain: 943,700\n    Accounting income subject to tax: 372,480\n    Total income tax expense: 372,480\n    Timing differences:\n        Depreciation: 172,500\n        CC&A: (225,000)\n        Warranty expense: 85,000\n        Gain on sale of depreciable asset (70,000) 15,000\n        Taxable capital gain: 921,200\n        Taxable income: 377,980\n        Current income tax expense: 368,480\n        Deferred income tax expense: 9,000\n        Balance at year end: 368,480\n        Income tax expense - current: 368,480\n        Income taxes payable: 9,000\n        Deferred income tax expense: 9,000\n        Deferred income tax liability: 9,000\n    b. Deferred 2\n        Total income tax expense = 368,480\n        Current income tax expense = 368,480\n        Deferred income tax expense = 122,150\n        Current income taxes = 104,650\n        Deferred income taxes payable = 104,650\n        Income tax expense = 17,500\n        Deferred tax = 17,500\n        Problem 2.\n        a. Total income tax expense = 368,480\n        Current income tax expense = 368,480\n        Deferred income tax expense = 122,150\n        Current income taxes = 104,650\n        Deferred income taxes payable = 104,650\n        Income tax expense = 17,500\n        Deferred tax = 17,500\n        [?]\n```"
+      },
+      "reference": "Problem 1\na. Accounting income before taxes 1,000,000\nPermanent differences :\nInterest and penalties on taxes 4,200\nDividends from taxable Canadian corporations (53,000)\nNon- deductible portion of capital gain (7,500)\nAccounting income subject to tax 943,700\nTotal Income tax expense AISTx40% = 377,480\nTiming differences :\nDepreciation\n172,500\nCCA\n(225,000)\nWarranty expense\n85,000\nGain on sale of depreciable asset (70,000)\nTaxable capital gain\n15,000\nTaxable income\n921,200\nCurrent income tax expense TIx40% = 368,480\nDeferred income tax expense = 377,480-368,480 = 9,000\nBalance at year end : 98,000+9,000 = 107,000\nb. Income tax expense- current 368,480\nIncome taxes payable\n368,480\nDeferred income tax expense 9,000\nDeferred income tax liability\n9,000\nProblem 2\na. Total income tax expense = 349,000X35% = 122,150\nCurrent income tax expense = 299,000X35% = 104,650\nDeferred taxes = 122,150-104,650 = 17,500\nCurrent income tax expense 104,650\nIncome taxes payable\n104,650\nDeferred income tax expense 17,500\nDeferred tax (SFP) -1\n17,500",
+      "source": {
+        "dataset": "aryaman27/goodnotes-handwritten-dataset",
+        "file": "test_data/test/eng_NA_142.jpg",
+        "licence": "CC-BY-4.0",
+        "revision": "904297760a9fec813fdc1ecb5f8055cb1ca03550"
+      }
+    }
+  ]
+}

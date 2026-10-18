@@ -19,8 +19,25 @@ the main model if it can see, else nobody (`Agent::image_reader`, formicaria `de
 
 ## Eval
 
-None yet. Phase C plans a 50-image set from the owner's own notes, since no public handwriting
-benchmark exists for small vision models (`docs/research/2026-10-18-dedicated-methods-per-task.md`).
+`eval/cases.json`: 30 phone photographs of handwritten pages from GNHK's test split (CC BY 4.0, see
+`NOTICE.md`), scored by word error rate against GNHK's own word annotation. Run it with
+`EVAL_MMPROJ=<projector> pixi run eval -- image <gguf> <name>`.
+
+| Reader, 2026-10-18 (RTX 3050) | Median WER | Pages under 50% | Mean | Time |
+|---|---|---|---|---|
+| qwen3-vl-4b, projector on the CPU, uncapped | — | 0/30 | — | every page over the 120 s limit |
+| **qwen3-vl-4b, `image_max_tokens = 1024`** (the catalogue now) | **17.9%** | **24/30** | 29.0% | ≈35 s a page |
+| lfm2.5-vl-450m (the phone), house instruction | 82.7% | 8/30 | 95.6% | ≈5 s |
+| lfm2.5-vl-450m, its catalogue instruction | 96.4% | 9/30 | 155.5% (9 pages loop) | ≈3 s |
+
+**Decided on these numbers:**
+- **The laptop reader is capped at 1024 image tokens** (`image_max_tokens`, a catalogue key that
+  `Manifest::add_projector` passes as `--image-max-tokens`). Uncapped, a full-size photograph is
+  more than the projector on the CPU can encode in time.
+- **The phone reader cannot read handwriting.** It describes pages, or loops. This is the
+  dedicated-reader work in Phase C (PaddleOCR-VL or a printed-text OCR first,
+  `docs/research/2026-10-18-dedicated-methods-per-task.md`), not something to prompt away.
+
 `agents/bench/vision/` holds the earlier typed-note fixtures and their results.
 
 ## Planned (Phase C)

@@ -1,0 +1,1025 @@
+{
+  "about": "Golden cases for M4, speech to text: read speech in Italian (Multilingual LibriSpeech) and English (LibriSpeech test-clean), 30 clips each spread over the test file, both CC-BY-4.0 (see NOTICE.md). The audio is not committed: `pixi run eval-data -- speech` rebuilds it into .eval-data/ from the pinned files and checks each clip against `wav_sha256`. Scored by word error rate against `reference` after normalisation (`fm_agent::eval::wer`). `recorded` holds real readers' transcripts.",
+  "cases": [
+    {
+      "id": "it-0000",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "Ma per contrario lasceranno il fiene la viada, perché non\n li conviene per essere contrario alla natura loro.\n \"Voi adunque, signor mio, lascerete i cibi che alla natura\n vostra non si convengono e abbrazzerete quelli che alla\n complessione vostra sono convenivoli.\"",
+        "ggml-small": "ma per contrario lasceranno il fio nella beada, perché non\n li conviene per essere contrario alla natura loro.\n Voi ad un quei signor mio lascerete i cibi che alla natura\n vostra non si convengono e abbracerete quelli che alla\n complessione vostra sono convenevoli."
+      },
+      "reference": "ma per contrario lasceranno il fieno e la biada perchè non li conviene per esser contrario alla natura loro voi adunque signor mio lascerete i cibi che alla natura vostra non si convengono e abbracciarete quelli che alla complessione vostra sono convenevoli",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 0
+      },
+      "wav_sha256": "ba43e16368ef97c6021f01eff6a5b3264a4f232cca4daf48ef2f88f69fe7239f"
+    },
+    {
+      "id": "it-0043",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "Signori miei, il vostro piacevole ridere min di cam\n manifestamente che voi stimate il nostro enima esser sporco\n, anzi sporchissimo, ma nel vero, se con le orecchi attender\nete.",
+        "ggml-small": "Signori miei, il vostro piacevole ridere mi indica manifest\namente che voi stimate il nostro enigma essere sporco, anzi\n sporchissimo, ma nel vero, secondo le orecchie attenderete."
+      },
+      "reference": "signori miei il vostro piacevole ridere m'indica manifestamente che voi istimate il nostro enimma esser sporco anzi sporchissimo ma nel vero se con le orecchie attenderete",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 43
+      },
+      "wav_sha256": "dc8c3058b74bc6b6e77b22cb5e7d8c32eb2264f6fa23a6a1ab5403f5a8f11d8c"
+    },
+    {
+      "id": "it-0087",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "Più d'un cliente aveva cercato di spingere il molestissimo\n figlio dell'avvocato verso que3,\n ma il ragazzo adombrato da col fune per squadro, serà att\nratto indietro, arricciando il naso.",
+        "ggml-small": "Più di un cliente aveva cercato di spingere il molestissimo\n figlio dell'avvocato verso\n que tre, ma il ragazzo, adombrato da quel fune bre squall\nore, sarà attratto indietro,\n arricciando il naso."
+      },
+      "reference": "più d'un cliente aveva cercato di spingere il molestissimo figlio dell'avvocato verso quei tre ma il ragazzo adombrato da quel funebre squallore s'era tratto indietro arricciando il naso",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 87
+      },
+      "wav_sha256": "28d141f5da80072350db4e8b21b7b7748f8275d3fb76b0d494543aa20eb1f98b"
+    },
+    {
+      "id": "it-0130",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "E così facevano quella mattina ad agosto nella sala d'as\npetto della boccata zoom in numerosi clienti, tutti in sud\nore, mangiati dalle mosche e dalla noia.",
+        "ggml-small": "E così facevano quella mattina ad agosto, nella sala d'as\npetto dell'abocato Zoommo,\n i numerosi clienti, tutti in sudore, mangiati dalle mosche\n e dalla noia."
+      },
+      "reference": "e così facevano quella mattina d'agosto nella sala d'aspetto dell'avvocato zummo i numerosi clienti tutti in sudore mangiati dalle mosche e dalla noia",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 130
+      },
+      "wav_sha256": "6dc05fac3e4516cc57ae2a166d8d0b79c8fd0ecef87c8bf16b526d0326e02899"
+    },
+    {
+      "id": "it-0174",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "A aperto piampiano il portone, guardono lo sterrato.\n Nessuno.\n Tiro a se il portone, e rascentando il muro della casa,\n sgattaiolo per il viottolo fuori dell'emura al buio.",
+        "ggml-small": "Aperto pian piano il portone guardono lo sterrato, nessuno,\n tirò a sé il portone e rasantando\n il muro della casa, sgattaio lo per il viotto lo fuori\n delle mura al buio."
+      },
+      "reference": "aperto pian piano il portone guardò nello sterrato nessuno tirò a sé il portone e rasentando il muro della casa sgattaiolò per il viottolo fuori delle mura al buio",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 174
+      },
+      "wav_sha256": "0715745e028a37c93fbb4ad3240b00633060a38292ff8603725d8790ffa6649a"
+    },
+    {
+      "id": "it-0217",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "Se non che nel voltarsi così soridente a guardare dentro la\n camera,\n vede non comprese bene che fosse.\n In prima, balzo in piedi è stare fatto.\n Sapperò rinculando alla ringiera del balcone.",
+        "ggml-small": "se non che nel voltarsi così soridente a guardare dentro la\n camera\n vide non comprese bene che fosse\n in prima balzo in piedi estere fatto\n safferrò rinculando alla ringhiera del balcone"
+      },
+      "reference": "se non che nel voltarsi così sorridente a guardar dentro la camera vide non comprese bene che fosse in prima balzò in piedi esterrefatto s'afferrò rinculando alla ringhiera del balcone",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 217
+      },
+      "wav_sha256": "1ab5a7e730c8996864318d95a2fdbb1fa2f3bba6cd955c4148d37a3a5f8e48bc"
+    },
+    {
+      "id": "it-0261",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "Sì, ha una malevola interpretazione, safretto a dire che\n intendeva parlare della Signorina Ascienzi.\n Ah, la Signorina Ascienzi, ma allora sì, protetta, il risp\nose l'onorevole verona,\n soridendo, ha crescendo l'imbarazzo dal povero cavaliere\n mattino l'ori.",
+        "ggml-small": "— Sì, ha una malevola interpretazione, saffretto a dire che\n intendeva parlare della signorina a scienzi.\n — Ah, la signorina a scienzi, ma allora sì, protetta! gli\n rispose l'onorevole Verona, sorridendo e accrescendo l'im\nbarazzo del povero cavaliere Martino Lori."
+      },
+      "reference": "sì a una malevola interpretazione s'affrettò a dire che intendeva parlare della signorina ascensi ah la signorina ascensi ma allora sì protetta gli rispose l'onorevole verona sorridendo e accrescendo l'imbarazzo del povero cavalier martino lori",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 261
+      },
+      "wav_sha256": "a3e070a5b00d3c0eb2babbc890b3a5fbae57a270dfadc92ff0694b6dca060d93"
+    },
+    {
+      "id": "it-0304",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "Allora che benca nobbe il gallotto.\n Grido fa che gli ginocchi o c'è l'angelo del Dio, piighi le\n mani, o mai vedrai di\n si fatti o fichali.",
+        "ggml-small": "Allor che ben cnove il gallotto.\n Gridò fa, fa che l'ignocchio calì.\n Ecco l'angelo de Dio, pieghi le mani.\n O mai vedrai di si fatti ufficiali."
+      },
+      "reference": "allor che ben conobbe il galeotto gridò fa fa che le ginocchia calì ecco l'angel di dio piega le mani omai vedrai di sì fatti officiali",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 304
+      },
+      "wav_sha256": "3e2c207ea281d9cc12e39c713a92176846a4b9b9ccea3f601201252e7aa7f615"
+    },
+    {
+      "id": "it-0348",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "Edegli a me, nessun tuo passo caggia, pur su al monte diet\nro a me acquista, finché n'appaya alcuna scorta saggia. Lo s\nommo è ralto che vince alla vista, e la costa superba più\n assai che da mezzo quadrante e accentro lista.",
+        "ggml-small": "Ed elli a me, nessun tuo passo caggia, pur su al monte diet\nro a me acquista, finché n'appaia alcuna scorta saggia.\n Lo sommo è alto che vincea la vista, e la costa superba più\n assai che da mezzo quadrante e a centro lista."
+      },
+      "reference": "ed elli a me nessun tuo passo caggia pur su al monte dietro a me acquista fin che n'appaia alcuna scorta saggia lo sommo era alto che vincea la vista e la costa superba più assai che da mezzo quadrante a centro lista",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 348
+      },
+      "wav_sha256": "b3f1f557abcad668c0dcb2d0c2963c767eb5811764142ccd3de692bc322b935a"
+    },
+    {
+      "id": "it-0391",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "e comelli ebbe sua parola d'etta una voce di presso sono,\n forse che di sedere impria avrai\n di stretta. Al suon di lei ci ascondi noi si torse, e vedem\nmo a mancina un gran petrone\n del quale io nei prima saccorse.",
+        "ggml-small": "E comelli ebbe sua parola detta una voce di presso sonno,\n Forse che di sedere in pria avrai di stretta.\n Al suon di lei ciascundi noi si torse,\n E vedemo a Mancina un gran petrone,\n Del qual ne io ne e i prima saccorse."
+      },
+      "reference": "e com'elli ebbe sua parola detta una voce di presso sonò forse che di sedere in pria avrai distretta al suon di lei ciascun di noi si torse e vedemmo a mancina un gran petrone del qual né io né ei prima s'accorse",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 391
+      },
+      "wav_sha256": "69b3de9ddc66774e3382929dfbf150a85d65bc31d27cedf3dcd099e1df35b0d9"
+    },
+    {
+      "id": "it-0435",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "Poi disse un altro.\n Dessi quel disio si compia che ti trage all'alto-monte con\n buona pietate aiuta il mio.\n Io fuidi Monte Feltro.\n Io sono buon conte.\n Giovanna o'altra non ha di meccura, per chi ho vota costor\n con bassa fronte.",
+        "ggml-small": "Poi disse un altro, \"Desse quel desio si compia che ti trag\nge all'alto monte, con buona pietata e aiuta il mio.\n Io fui di Montefeltro, io son bonconte. Giovanna o altri\n non ha di mecura, per chi ho vota costur con bassa fronte.\""
+      },
+      "reference": "poi disse un altro deh se quel disio si compia che ti tragge all'alto monte con buona pietate aiuta il mio io fui di montefeltro io son bonconte giovanna o altri non ha di me cura per ch'io vo tra costor con bassa fronte",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 435
+      },
+      "wav_sha256": "88a43ab6f6aa8f6ff096ba33fb305033d49499383b9c75e4462b5c590d873d2b"
+    },
+    {
+      "id": "it-0478",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "avete il nuovo e il vecchio testamento, il pastor della ch\niesa che vi guida, questo vi basti a vostro salvamento.\n Se male a cupidigia altro vi grida, uomini siate e non peco\n rematte, si che il giudetto di voi tra voi in un rido.",
+        "ggml-small": "avete il nuovo e il vecchio testamento, e il pastor della\n chiesa che vi guida,\n questo vi basti a vostro salvamento.\n Se male a cupidigia altro vi grida, uomini siate e non pe\ncore matte,\n sì che il Giudeo di voi tra voi non rida."
+      },
+      "reference": "avete il novo e 'l vecchio testamento e 'l pastor de la chiesa che vi guida questo vi basti a vostro salvamento se mala cupidigia altro vi grida uomini siate e non pecore matte sì che 'l giudeo di voi tra voi non rida",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 478
+      },
+      "wav_sha256": "19db8cbb8cecee467ee9717fe2bc7979e237fadfa7b0830dc46c586e32be5583"
+    },
+    {
+      "id": "it-0522",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "Così, parlar convienzi al vostro ingegno, però che solo da\n sensato apprende ciò che fa\n poscia di intelletto degno.\n Per questo la scrittura con descende a vostra facultate e\n piedi e mano attribuisce adio\n e altro intende.",
+        "ggml-small": "Così, parlar convienzi al vostro ingegno, però che solo da\n senzato apprende ciò che\n fa poscia d'intelletto degno.\n Per questo la scrittura condescende a vostra facultate e\n piedi e mano attribuisce a Dio\n e altro intende."
+      },
+      "reference": "così parlar conviensi al vostro ingegno però che solo da sensato apprende ciò che fa poscia d'intelletto degno per questo la scrittura condescende a vostra facultate e piedi e mano attribuisce a dio e altro intende",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 522
+      },
+      "wav_sha256": "f974acf23b6629c5d6628ddd320ac16870cff152430261aea07cb13df3a98869"
+    },
+    {
+      "id": "it-0565",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "Quale io fui vivo talso muoto. Se giovè stanche il suo fabb\nolo da cui cruciato prese\n la folga reaguta, un dell'ultimo dip per costo fuori, e se\n gli stanchi gli altri ammuta\n in un giubello alla fucina negra.",
+        "ggml-small": "Quale io fui vivo talso un morto, se giovè stanchi il suo\n fabbro da cui cruciato prese\n la folga reaguta, onde l'ultimo di percosto fui, e se gli\n stanchi gli altri a muta a\n muta in Mungibello alla fucina negra?"
+      },
+      "reference": "qual io fui vivo tal son morto se giove stanchi il suo fabbro da cui crucciato prese la folgore aguta onde l'ultimo dì percosso fui e s'elli stanchi gli altri a muta a muta in mongibello alla fucina negra",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 565
+      },
+      "wav_sha256": "5b96f9a0f69c1a35d06ee7d67cdfb96fa972e2a55ce65b6282a0d32ca01a0f0b"
+    },
+    {
+      "id": "it-0609",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "Ciò che narrate il d'io corso scrivo, è servolo a fiosar\n con altro testo adonna che saprà, sale a rivo.\n Tanto voglio che vi sia manifesto, pur che mia coscienza\n non mi garva, calla fortuna come vuol sono presto.",
+        "ggml-small": "Ciò che narrate di mio corso scrivo è servolo a chiosar con\n altro testo a donna che saprà\n se lei arriva.\n Tanto voglio che vi sia manifesto, pur che mia coscienza\n non mi garba, che alla fortuna\n come vuol son presto."
+      },
+      "reference": "ciò che narrate di mio corso scrivo e serbolo a chiosar con altro testo a donna che saprà s'a lei arrivo tanto vogl'io che vi sia manifesto pur che mia coscienza non mi garra che a la fortuna come vuol son presto",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 609
+      },
+      "wav_sha256": "9668abb55bc172f3b5bc4d6656f6fad76566de806422d2a68ebe46b13c4bd69f"
+    },
+    {
+      "id": "it-0652",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "e si ver' noi aguzzava in Sicilia, come il vecchio sartor\n fa nella cuna. Così ad occhiato\n da Kotal famiglia, fu il conosciuto da un che mi prese per\n lo lembo e grido. Qual è\n la raviiglia?",
+        "ggml-small": "e si vernoi aguzzava le ciglia, come il vecchio Sartor fa\n nella cruna.\n Così ad occhiato da Kotal Famiglia, fui conosciuto da un\n che mi prese per lo lembo e gridò. Quale maraviglia!"
+      },
+      "reference": "e sì ver noi aguzzavan le ciglia come il vecchio sartor fa nella cruna cosi adocchiato da cotal famiglia fui conosciuto da un che mi prese per lo lembo e gridò qual maraviglia",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 652
+      },
+      "wav_sha256": "dda000705ca2b967352e706cea028b9483273885aa39ed4a8aff8a6ed2e39a29"
+    },
+    {
+      "id": "it-0696",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "Per lui fie trasmutata molta gente, cambiando condizion ric\nchi e mendici, e porterà nescritto\n nella mente di lui e non dirai.",
+        "ggml-small": "per lui fi è trasmutata molta gente, cambiando condizioni\n ricchi e mendici e porteranno\n scritto nella mente di lui e non dirai."
+      },
+      "reference": "per lui fia trasmutata molta gente cambiando condizion ricchi e mendici e portera'ne scritto ne la mente di lui e nol dirai",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 696
+      },
+      "wav_sha256": "bf814b87a5a75ba1bc58a5a2e2d579b86c57c34012d1e2a89e78f20345525af2"
+    },
+    {
+      "id": "it-0739",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "che saranno in giudizia, sei me in probe, al lui che talche\n non conosce Cristo.\n E dai chistiani dannerà le tiope quando",
+        "ggml-small": "che saranno in giudizia Simon prope a lui che tal che non\n conosce Cristo e dai cristiani\n dannerà le tiope quando..."
+      },
+      "reference": "che saranno in giudizio assai men prope a lui che tal che non conosce cristo e tai cristian dannerà l'etiope quando",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 739
+      },
+      "wav_sha256": "5e3077674a3dc8f4d83dcb25595a096e67753dce758b0ad5a88d76dfe67a95c6"
+    },
+    {
+      "id": "it-0783",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "quella qual tu cadrai in questa valle che tutta in grada,\n tutta matta e\n d'empia si farà contrate ma poco preso e la non tu\n nave la rossa la d'empia.",
+        "ggml-small": "quella quale tu cadrai in questa valle che tutta in grada,\n tutta matta e tempia si farà contra te,\n ma poco appresso ella, non tu,\n navarra rossa la tempia."
+      },
+      "reference": "con la qual tu cadrai in questa valle che tutta ingrata tutta matta ed empia si farà contr'a te ma poco appresso ella non tu n'avrà rossa la tempia",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 783
+      },
+      "wav_sha256": "e0a2c6bb23baf549abda2f61fab50be9ec43ecbf4c098d78672caeca80f80bb5"
+    },
+    {
+      "id": "it-0826",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "tordito, stonato, insensato addirittura dalla sede della\n magistrazione.\n E dunque, la conclusione l'aveva in mano, un bottone della\n palandrana.",
+        "ggml-small": "Tordito, stonato, insensato addirittura, dalla sede dell'am\nministrazione, e dunque la conclusione l'aveva in mano, un\n bottone della palandrana."
+      },
+      "reference": "stordito stonato insensato addirittura dalla sede dell'amministrazione e dunque la conclusione l'aveva in mano un bottone della palandrana",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 826
+      },
+      "wav_sha256": "324101c15b5d8783b9c1c603728e9ef776d0e2400f205e1776f64da729d41db3"
+    },
+    {
+      "id": "it-0870",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "Suomoglie era morta di parto, da mezz'ora, lasciando malv\niva una povera bambina.\n Passarono più di tre mesi prima che il Marquese Don Camillo\n righi si reccassa a rivederla sua mante e l'altra sua bamb\nina.",
+        "ggml-small": "Sua moglie era morta di parto, da mezz'ora, lasciando malv\niva una povera bambina.\n Passarono più di tre mesi prima che il marchese Don Camillo\n Righi si recassa a rivederla sua amante e l'altra sua bamb\nina."
+      },
+      "reference": "sua moglie era morta di parto da mezz'ora lasciando mal viva una povera bambina passarono più di tre mesi prima che il marchese don camillo righi si recasse a rivedere la sua amante e l'altra sua bambina",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 870
+      },
+      "wav_sha256": "7e00321fac36019afa5b03d4a6e6b96776495752b763ab9b782c21dac7fc0701"
+    },
+    {
+      "id": "it-0913",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "Il quale colbonare sorriso indulgente dell'ampia faccia pac\nifica pareva consigliasse calma e rassegnazione.\n Calma e rassegnazione, il Marchesino, figlio d'una sua vec\nchia guardia nobile, guardia nobile ora anche lui del suo s\nanto successore.",
+        "ggml-small": "il quale colbonario sorriso indulgente dell'ampia faccia\n pacifica pareva consigliasse calma e rassegnazione, calma e\n rassegnazione al Marchesino, figlio d'una sua vecchia guard\nia nobile, guardia nobile ora anche lui del suo santo\n successore."
+      },
+      "reference": "il quale col bonario sorriso indulgente dell'ampia faccia pacifica pareva consigliasse calma e rassegnazione calma e rassegnazione al marchesino figlio d'una sua vecchia guardia nobile guardia nobile ora anche lui del suo santo successore",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 913
+      },
+      "wav_sha256": "2fd29f10469715789bbe55d1df2133f34199f1488cc6b5d9aaa6350cd0c41438"
+    },
+    {
+      "id": "it-0957",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "Dello sposo.\n E non poteva.\n In coscienza, non poteva.\n Bastave il sacrificio della marzina.\n Ma un matsollino, in tanto, si ecco.",
+        "ggml-small": "dello sposo, e non poteva.\n In coscienza, non poteva.\n Bastave il sacrificio della Marsina, ma un mazzolino int\nanto sì, ecco."
+      },
+      "reference": "dello sposo e non poteva in coscienza non poteva bastava il sacrifizio della marsina ma un mazzolino intanto sì ecco",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 957
+      },
+      "wav_sha256": "e500a87b6099582086332434a6c9b95015c83351e8ccd713d5b360f170a267c9"
+    },
+    {
+      "id": "it-1000",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "Sinte arrupi, infiriatto e spuffante, si caccia una mano\n sotto la manica da sopprabito, afferro la manica della marz\nina e con uno strappo violento se la terra fuori e la lanciò\n per area.",
+        "ggml-small": "Si interrupi, infiriatto e spuffante, si cacciò una mano\n sotto la manica del sopravito, afferrò la manica della mars\nina e con uno strappo violento se la tirò fuori e la lanciò\n per aria."
+      },
+      "reference": "s'interruppe infuriato e sbuffante si cacciò una mano sotto la manica del soprabito afferrò la manica della marsina e con uno strappo violento se la tirò fuori e la lanciò per aria",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 1000
+      },
+      "wav_sha256": "dc79abe94ead8777200f177f7f514f2592c0b0f5e459611fec6d1019d59f81e4"
+    },
+    {
+      "id": "it-1044",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "E quel colletto in cui si sentive impiccato; e quel sparato\n che distrabusava, già tutto squalcitto dal panciotto;\n e quel cravettino bianca, enamidate pendente, a cui ancora\n doveva fare il nolo, e non sapeva come?",
+        "ggml-small": "E quel colletto in cui si sentiva impiccato, e quello spar\nrato che distrabuzzava già tutto squalcitto dal panciotto, e\n quel cravatino bianco in amidata e pendente a cui ancora\n doveva fare il nodo e non sapeva come."
+      },
+      "reference": "e quel colletto in cui si sentiva impiccato e quello sparato che gli strabuzzava già tutto sgualcito dal panciotto e quella cravattina bianca inamidata e pendente a cui ancora doveva fare il nodo e non sapeva come",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 1044
+      },
+      "wav_sha256": "3da80a85f13a481fbad40d7583da3eb91f94265046c29741c14561480e7f3748"
+    },
+    {
+      "id": "it-1087",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "Uno come Castiglione evidentemente, a cui però il Marquese\n si spera, dopo averso ferto un\n così lungo suppizio, non porrà per patto l'estere tanto on\nesso.\n Cominciareà allora la vera lotta, lotta accanita, franno il\n cinque che facciamo il tiro cinio\n di vecchia amici di casa.",
+        "ggml-small": "Uno come Castiglione, evidentemente, a cui però il Marchese\n si spera, dopo aver sofferto un così lungo supplizio, non\n porrà per patto essere tanto onesto.\n Comincerà allora la vera lotta, lotta a Canita, fra noi cin\nque che facciamo il tiroccino di vecchi amici di casa."
+      },
+      "reference": "uno come castiglione evidentemente a cui però il marchese si spera dopo aver sofferto un così lungo supplizio non porrà per patto d'essere tanto onesto comincerà allora la vera lotta lotta accanita fra noi cinque che facciamo il tirocinio di vecchi amici di casa",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 1087
+      },
+      "wav_sha256": "0ab7ba290b9a9ff60861e769dc9d5c7670345b1e76d55a33cf8a62c5df851672"
+    },
+    {
+      "id": "it-1131",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "Non sono omero.\n Voi non siete vecchi di Troia.\n Ma vi giuro che mi idea è cento mila volte più bella di\n Elena.\n E vi prego da argomentare similemente con la sua divina,\n indescrivibile bellezza,\n dal vedermi ora andare a torno per le vie di Roma con\n questa filuca di mammina Sua.",
+        "ggml-small": "Non sono omero, voi non siete vecchi di Troia, ma vi giuro\n che Medea è centomila volte più bella di Elena, e vi prego\n d'argumentare similmente quella sua divina, indescrivibile\n bellezza, dal vedermi ora andare attorno per le vie di Roma\n con questa filuca di mammina sua."
+      },
+      "reference": "non sono omero voi non siete vecchi di troia ma vi giuro che medea è centomila volte più bella di elena e vi prego d'argomentare similmente quella sua divina indescrivibile bellezza dal vedermi ora andare attorno per le vie di roma con questa filuca di mammina sua",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 1131
+      },
+      "wav_sha256": "2561170963c3312654db478c282a7cda11e60a1e25c1c68f86ef0e33c841a2e9"
+    },
+    {
+      "id": "it-1174",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "Ancora il lunga la via, ma él già potrebbe fermarsi qui.\n È nell'eternità, vita mena, di respira, in nebrezza di vina\n, in otta i vili.",
+        "ggml-small": "Ancora è lunga la via, ma elli già potrebbe fermarsi qui.\n È nell'eternità, vi cammina, vi respira, in nebrezza divina\n, igno t'ai vivi."
+      },
+      "reference": "ancora è lunga la via ma egli già potrebbe fermarsi qui è nell'eternità vi cammina vi respira in un'ebbrezza divina ignota ai vivi",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 1174
+      },
+      "wav_sha256": "d6ded4b99dc28a718475bab79197d8b4672cbebf4faadcfe68d1e5e3f54e4586"
+    },
+    {
+      "id": "it-1218",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "Volete voi volete, volete voi ballare, volete voi volete,\n co gamberi danzare, che male\n gli rispose il candidone a zello.\n Dileci un'altra sponda ci ho suolo, sai più bello.",
+        "ggml-small": "Volete voi volete? Volete voi ballare? Volete voi volete?\n Cogambe ridanzare? Che male! gli rispose il candido nasello\n.\n Dila c'è un'altra sponda, c'è un suolo sai più bello!"
+      },
+      "reference": "volete voi volete volete voi ballare volete voi volete co gamberi danzare che male gli rispose il candido nasello di là c'è un'altra sponda cè un suolo assai più bello",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 1218
+      },
+      "wav_sha256": "4ef8ded5aff237f345f2911d7373f11a964faaa185d99b948a3fe019a8989cc8"
+    },
+    {
+      "id": "it-1261",
+      "lang": "it",
+      "recorded": {
+        "ggml-base": "All'icce stava per dire, una volta gustai, ma in ghiutti la\n frase dice \"No, mai ti voi non\n potete farvi un'idea della bellezza d'una contradanza dei\n gamberi\". No, davvero rispose\n all'icce. Ma che mai la contradanza dei gamberi?",
+        "ggml-small": "Alice stava per dire \"Una volta gustai\", ma in Gliottila\n frase disse \"No mai, di voi\n non potete farvi un'idea della bellezza d'una contradanza\n dei gamberi\".\n \"No davvero?\" rispose Alice.\n \"Ma che mai la contradanza dei gamberi?\""
+      },
+      "reference": "alice stava per dire una volta gustai ma inghiottì la frase e disse no mai voi non potete farvi una idea della bellezza d'una contraddanza de' gamberi no davvero rispose alice ma ch'è mai la contraddanza de' gamberi",
+      "source": {
+        "dataset": "facebook/multilingual_librispeech",
+        "file": "italian/test-00000-of-00001.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "2e83e61823b4c47dcbcb1980bb88601274127609",
+        "row": 1261
+      },
+      "wav_sha256": "19c90b094b17f098c454a1a3174b32d3096fdc2fe3b3bb739edb04858832e4e9"
+    },
+    {
+      "id": "en-0000",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "Concorde returned to its place amidst the tents.",
+        "ggml-small": "Concord returned to its place amidst the tents."
+      },
+      "reference": "CONCORD RETURNED TO ITS PLACE AMIDST THE TENTS",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 0
+      },
+      "wav_sha256": "fb7da50c0e839fc3b53e4ed0af92bff775ca00602a45ae4cbe3551eb4cca1f5f"
+    },
+    {
+      "id": "en-0090",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "Four or five of the latter only lingered about the door of\n the prison of Unkas,\n wary but close observers of the manner of their captive.",
+        "ggml-small": "Four or five of the latter only lingered about the door of\n the prison of Uncus, wary but\n close observers of the manner of their captive."
+      },
+      "reference": "FOUR OR FIVE OF THE LATTER ONLY LINGERED ABOUT THE DOOR OF THE PRISON OF UNCAS WARY BUT CLOSE OBSERVERS OF THE MANNER OF THEIR CAPTIVE",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 90
+      },
+      "wav_sha256": "6e853b6647b6db73b31905da772c96d9791280600e508899ebe56b33d4d5f147"
+    },
+    {
+      "id": "en-0181",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "It was the white rabbit returning, splendidly dressed for\n the pair of white kid gloves in one hand and a large fan in\n the other.\n He came trotting along and a great hurry, muttering to\n himself as he came.\n Oh, the Duchess, the Duchess!",
+        "ggml-small": "It was the white rabbit returning, splendidly dressed with\n a pair of white kid gloves in\n one hand and a large fan in the other.\n He came trotting along in a great hurry, muttering to\n himself as he came.\n \"Oh, the Duchess, the Duchess!\""
+      },
+      "reference": "IT WAS THE WHITE RABBIT RETURNING SPLENDIDLY DRESSED WITH A PAIR OF WHITE KID GLOVES IN ONE HAND AND A LARGE FAN IN THE OTHER HE CAME TROTTING ALONG IN A GREAT HURRY MUTTERING TO HIMSELF AS HE CAME OH THE DUCHESS THE DUCHESS",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 181
+      },
+      "wav_sha256": "c8369527b906abbc690f5ac63a46db406e6b54645a4afd1a67f6d5e15a336e97"
+    },
+    {
+      "id": "en-0271",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "Of the lynchings, the mobs, and the murders, it would be\n impossible, except in a very extended\n work to note the frequent and atrocious details.",
+        "ggml-small": "Of the lynchings, the mobs, and the murders, it would be\n impossible, except in a very extended work, to note the\n frequent and atrocious details."
+      },
+      "reference": "OF THE LYNCHINGS THE MOBS AND THE MURDERS IT WOULD BE IMPOSSIBLE EXCEPT IN A VERY EXTENDED WORK TO NOTE THE FREQUENT AND ATROCIOUS DETAILS",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 271
+      },
+      "wav_sha256": "f67805c33aa22cf36e8f8176cd83214fa08e6c7c82e8871c4f47bdec4403b024"
+    },
+    {
+      "id": "en-0361",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "For if he's anywhere on the farm, we can send for him in a\n minute.",
+        "ggml-small": "For if he's anywhere on the farm, we can send for him in a\n minute."
+      },
+      "reference": "FOR IF HE'S ANYWHERE ON THE FARM WE CAN SEND FOR HIM IN A MINUTE",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 361
+      },
+      "wav_sha256": "f0988c5a9b4ac737c3aa16191de0dc04bfdd3fa32c9f5e2eb64ac4f59d5bf035"
+    },
+    {
+      "id": "en-0452",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "Well, said Mademoiselle, Dittonet-Shelland, I also think a\n good deal, but I take care.",
+        "ggml-small": "\"Well,\" said Mademoiselle de Tonecheland, \"I also think a\n good deal, but I take care\n of the rest of the world.\""
+      },
+      "reference": "WELL SAID MADEMOISELLE DE TONNAY CHARENTE I ALSO THINK A GOOD DEAL BUT I TAKE CARE",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 452
+      },
+      "wav_sha256": "651cff553af3cf7ed8d3120f5160a7581280e93fdadca440794344481f2107c3"
+    },
+    {
+      "id": "en-0542",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "Then now let me explain to you the order of our\n entertainment.\n First, Timeyus, who is a natural philosopher, will speak of\n the origin of the world, going\n down to the creation of men.\n And then, I shall receive the men whom he has created, and\n some of whom will have been\n educated by you, and introduce them to you as the lost Ath\nenian citizens, are from\n the Egyptian records spoke.",
+        "ggml-small": "Then now let me explain to you the order of our\n entertainment.\n First, Timeyes, who is a natural philosopher, will speak of\n the origin of the world, going\n down to the creation of men.\n And then, I shall receive the men whom he has created, and\n some of whom will have been\n educated by you, and introduce them to you as the lost Ath\nenian citizens of whom the\n Egyptian records spoke."
+      },
+      "reference": "THEN NOW LET ME EXPLAIN TO YOU THE ORDER OF OUR ENTERTAINMENT FIRST TIMAEUS WHO IS A NATURAL PHILOSOPHER WILL SPEAK OF THE ORIGIN OF THE WORLD GOING DOWN TO THE CREATION OF MAN AND THEN I SHALL RECEIVE THE MEN WHOM HE HAS CREATED AND SOME OF WHOM WILL HAVE BEEN EDUCATED BY YOU AND INTRODUCE THEM TO YOU AS THE LOST ATHENIAN CITIZENS OF WHOM THE EGYPTIAN RECORD SPOKE",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 542
+      },
+      "wav_sha256": "8634673e18d26279677d396b2ce57289a7c4c6bf7f0bc175ad9b914f9c1e6b37"
+    },
+    {
+      "id": "en-0632",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "They must have some characteristic, which makes us regard\n them as referring to more or less remote portions of the\n past.",
+        "ggml-small": "They must have some characteristic, which makes us regard\n them as referring to more or less remote portions of the\n past."
+      },
+      "reference": "THEY MUST HAVE SOME CHARACTERISTIC WHICH MAKES US REGARD THEM AS REFERRING TO MORE OR LESS REMOTE PORTIONS OF THE PAST",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 632
+      },
+      "wav_sha256": "69e41a4213e719a8b78f3bfe409cc5cb58e95bf08bd316d7e72e41eaca405403"
+    },
+    {
+      "id": "en-0722",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "almost instantly he was forced to the top.",
+        "ggml-small": "Almost instantly he was forced to the top."
+      },
+      "reference": "ALMOST INSTANTLY HE WAS FORCED TO THE TOP",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 722
+      },
+      "wav_sha256": "7403c50e3438192ed4538fd251482547eb7bf675f7ba65c6045642d8d849567f"
+    },
+    {
+      "id": "en-0813",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "Well, that may be true, agreed Mark a lot.\n But on the commentary, a servant with too much brains is\n sure to become independent and\n high in mighty and feel above her work.",
+        "ggml-small": "\"Well, that may be true,\" agreed Margolot.\n \"But on the contrary, a servant with too much brains is\n sure to become independent and\n high and mighty and feel above her work.\""
+      },
+      "reference": "WELL THAT MAY BE TRUE AGREED MARGOLOTTE BUT ON THE CONTRARY A SERVANT WITH TOO MUCH BRAINS IS SURE TO BECOME INDEPENDENT AND HIGH AND MIGHTY AND FEEL ABOVE HER WORK",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 813
+      },
+      "wav_sha256": "264bd716bd5c3dda0821e3f1f60503bdb646f7e044819365160a5b037bd66323"
+    },
+    {
+      "id": "en-0903",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "But I stayed that spring and built me a boat.",
+        "ggml-small": "But I stayed that spring and built me a boat."
+      },
+      "reference": "BUT I STAYED THAT SPRING AND BUILT ME A BOAT",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 903
+      },
+      "wav_sha256": "86f5f536edb0b4b85b17a0c4c2ef66b0960ac20a4c1cb030f8f742adeec70c98"
+    },
+    {
+      "id": "en-0993",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "but I mean to have my innings before long.",
+        "ggml-small": "But I mean to have my innings before long."
+      },
+      "reference": "BUT I MEAN TO HAVE MY INNINGS BEFORE LONG",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 993
+      },
+      "wav_sha256": "ff897750ad77e8bb845decc66336417e606852dd796cbecdd672c3ed99e5b605"
+    },
+    {
+      "id": "en-1084",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "Grace involves the remission of sins, peace and a happy\n conscience.",
+        "ggml-small": "Grace involves the remission of sins, peace, and a happy\n conscience."
+      },
+      "reference": "GRACE INVOLVES THE REMISSION OF SINS PEACE AND A HAPPY CONSCIENCE",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 1084
+      },
+      "wav_sha256": "df05252697015d09aae43b25499ab2a562f94e3aed539887d3ee57ba72af12f0"
+    },
+    {
+      "id": "en-1174",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "Her hair is still like flax, and her blue eyes are just\n like a baby's, and she has the\n same three freckles on her little nose and talks about\n going back to her band-a-mayor.",
+        "ggml-small": "Her hair is still like flax, and her blue eyes are just\n like a baby's, and she has the same three freckles on her\n little nose and talks about going back to her band of mare."
+      },
+      "reference": "HER HAIR IS STILL LIKE FLAX AND HER BLUE EYES ARE JUST LIKE A BABY'S AND SHE HAS THE SAME THREE FRECKLES ON HER LITTLE NOSE AND TALKS ABOUT GOING BACK TO HER BAINS DE MER",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 1174
+      },
+      "wav_sha256": "7abc5b1dc8b235516475b76b3c68da05485c82d944a22210b0314f766d346976"
+    },
+    {
+      "id": "en-1264",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "Their eyes were from the first, turned in anticipation\n toward the evening sun.\n Not merely that the work of proselytics should be carried\n on in the west, but that the\n headquarters of the church should be there established.",
+        "ggml-small": "Their eyes were from the first, turned in anticipation\n toward the evening sun.\n Not merely that the work of proselyting should be carried\n on in the West, but that the headquarters\n of the Church should be there established."
+      },
+      "reference": "THEIR EYES WERE FROM THE FIRST TURNED IN ANTICIPATION TOWARD THE EVENING SUN NOT MERELY THAT THE WORK OF PROSELYTING SHOULD BE CARRIED ON IN THE WEST BUT THAT THE HEADQUARTERS OF THE CHURCH SHOULD BE THERE ESTABLISHED",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 1264
+      },
+      "wav_sha256": "6b5d4f494d362c307a30a19e354ccecd3aeec4e824c55c8d6af377c707c5002e"
+    },
+    {
+      "id": "en-1355",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "When called before, I told how hastily I dropped my flowers\n or break off from a game.",
+        "ggml-small": "When called before, I told how hastily I dropped my flowers\n or break off from a game."
+      },
+      "reference": "WHEN CALLED BEFORE I TOLD HOW HASTILY I DROPPED MY FLOWERS OR BRAKE OFF FROM A GAME",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 1355
+      },
+      "wav_sha256": "7e81cc10f3b745dbb3115cd34bae4b6d3ee8d8011a8bccfe8d66964e7a95f3dc"
+    },
+    {
+      "id": "en-1445",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "The good-natured audience, in pity to fall in majesty,\n showed for once greater\n difference to the king than to the minister, and sung the p\nsalm which the\n former had called for.",
+        "ggml-small": "The good-natured audience in pity to fallen majesty showed\n for once greater deference\n to the king than to the minister, and sung the psalm which\n the former had called for."
+      },
+      "reference": "THE GOOD NATURED AUDIENCE IN PITY TO FALLEN MAJESTY SHOWED FOR ONCE GREATER DEFERENCE TO THE KING THAN TO THE MINISTER AND SUNG THE PSALM WHICH THE FORMER HAD CALLED FOR",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 1445
+      },
+      "wav_sha256": "9aff4005504b2ab7f1d7f495d0e6ebeca28b911d74618bd01a034897dce0fe93"
+    },
+    {
+      "id": "en-1535",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "to grow, and grow, to get older, and be tall, thought the\n tree.\n That, after all, is the most delightful thing in the world.",
+        "ggml-small": "To grow and grow, to get older and be tall, thought the\n tree.\n That, after all, is the most delightful thing in the world."
+      },
+      "reference": "TO GROW AND GROW TO GET OLDER AND BE TALL THOUGHT THE TREE THAT AFTER ALL IS THE MOST DELIGHTFUL THING IN THE WORLD",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 1535
+      },
+      "wav_sha256": "cf63521f41bd677b1d181079db91ecea357b078bd87335c3c47e845cb99aed3d"
+    },
+    {
+      "id": "en-1626",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "exclaim servidak, keeping his eye unmoved at his telescope.",
+        "ggml-small": "exclaimed Servidak, keeping his eye unmoved at his\n telescope."
+      },
+      "reference": "EXCLAIMED SERVADAC KEEPING HIS EYE UNMOVED AT HIS TELESCOPE",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 1626
+      },
+      "wav_sha256": "cbf795f6389d5dafd22606502dfb4f31bf6e98a421a44ef54f2993011f67180c"
+    },
+    {
+      "id": "en-1716",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "Angry with himself, he tried to hide his face from their\n eyes by gazing down sideways into the shallow swirling\n water under the bridge,\n but he still saw a reflection therein of their top-heavy\n silk hats, and humble tape-like collars and loosely hanging\n clerical clothes.\n Brother Hickey.",
+        "ggml-small": "Angry with himself, he tried to hide his face from their\n eyes by gazing down sideways into\n the shallow, swirling water under the bridge, but he still\n saw a reflection therein of their\n top-heavy silk hats, and humble, tape-like collars and\n loosely hanging clerical clothes.\n \"Brother Hickey!\""
+      },
+      "reference": "ANGRY WITH HIMSELF HE TRIED TO HIDE HIS FACE FROM THEIR EYES BY GAZING DOWN SIDEWAYS INTO THE SHALLOW SWIRLING WATER UNDER THE BRIDGE BUT HE STILL SAW A REFLECTION THEREIN OF THEIR TOP HEAVY SILK HATS AND HUMBLE TAPE LIKE COLLARS AND LOOSELY HANGING CLERICAL CLOTHES BROTHER HICKEY",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 1716
+      },
+      "wav_sha256": "089e3bddf618db7cdb0b212a79142422b2e24d296290cbf7dd6733d21975659e"
+    },
+    {
+      "id": "en-1806",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "Thus, in Chaucer's dream,",
+        "ggml-small": "Thus, in Chaucer's dream..."
+      },
+      "reference": "THUS IN CHAUCER'S DREAM",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 1806
+      },
+      "wav_sha256": "1c03ade24497e72e1df6eb95e7df260a15e9aab2e897bcd9f195e7f0b033c1c0"
+    },
+    {
+      "id": "en-1897",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "He looked up rather ungracious sleep but motioned them to\n be seated.",
+        "ggml-small": "He looked up rather ungraciously, but motioned them to be\n seated."
+      },
+      "reference": "HE LOOKED UP RATHER UNGRACIOUSLY BUT MOTIONED THEM TO BE SEATED",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 1897
+      },
+      "wav_sha256": "2defa272befa04fc04542c3ca8d4fd3d04a2ea517f6af378d88026b7d0d32ee5"
+    },
+    {
+      "id": "en-1987",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "I understand you to say that there are three students who\n use this stair and are in the habit of passing your door.\n Yes, there are.",
+        "ggml-small": "I understand you to say that there are three students who\n use this stair and are in the habit of passing your door.\n Yes, there are."
+      },
+      "reference": "I UNDERSTAND YOU TO SAY THAT THERE ARE THREE STUDENTS WHO USE THIS STAIR AND ARE IN THE HABIT OF PASSING YOUR DOOR YES THERE ARE",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 1987
+      },
+      "wav_sha256": "d3a93fa4151c21ca8fae59dacdcb7d33f4fd03ffa41c7107541df430adec478c"
+    },
+    {
+      "id": "en-2077",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "I have nothing to wear.\n Reply that demure person.",
+        "ggml-small": "\"I have nothing to wear,\" replied that demure person."
+      },
+      "reference": "I HAVE NOTHING TO WEAR REPLIED THAT DEMURE PERSON",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 2077
+      },
+      "wav_sha256": "1c6bb639105fbdc98db288e94e8f3f5e8f620f395602ea6e03c0938693e162c8"
+    },
+    {
+      "id": "en-2167",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "Ralph Thurston had found a line of Latin for them in his\n beloved Horace, to be splendid\n focus.\n For you, the hearth fire shines.",
+        "ggml-small": "Ralph Thurston had found a line of Latin for them in his\n beloved\n Horns.\n \"Tibis, Blendet, Focus.\n For you the hearthfire shines.\""
+      },
+      "reference": "RALPH THURSTON HAD FOUND A LINE OF LATIN FOR THEM IN HIS BELOVED HORACE TIBI SPLENDET FOCUS FOR YOU THE HEARTH FIRE SHINES",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 2167
+      },
+      "wav_sha256": "d29c2c9be731eb80d6827e7722a68ae8a0f26a59537a9a8bb1ce6e51cbca4a51"
+    },
+    {
+      "id": "en-2258",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "We will go out together to the bowler. There is a way down\n to the court from my window.",
+        "ggml-small": "We will go out together to the bower. There is a way down\n to the court from my window.\""
+      },
+      "reference": "WE WILL GO OUT TOGETHER TO THE BOWER THERE IS A WAY DOWN TO THE COURT FROM MY WINDOW",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 2258
+      },
+      "wav_sha256": "2d7cbde4abe8c2b546ec9e7bc299e810cf6c12e9ea4202b0aba08c64529fbb7c"
+    },
+    {
+      "id": "en-2348",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "The orchard was sparkling and rippling in the sun.",
+        "ggml-small": "The orchard was sparkling and rippling in the sun."
+      },
+      "reference": "THE ORCHARD WAS SPARKLING AND RIPPLING IN THE SUN",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 2348
+      },
+      "wav_sha256": "9fa1308c900c51ba87d02971301bb8cbd014fa12c6a4e602f730da65c77a085c"
+    },
+    {
+      "id": "en-2438",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "Under the taboo, certain rituals and more particularly,\n certain beverages are strictly reserved for the use of the\n superior class.",
+        "ggml-small": "Under the taboo, certain victuals and more particularly,\n certain beverages are strictly reserved for the use of the\n superior class."
+      },
+      "reference": "UNDER THE TABU CERTAIN VICTUALS AND MORE PARTICULARLY CERTAIN BEVERAGES ARE STRICTLY RESERVED FOR THE USE OF THE SUPERIOR CLASS",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 2438
+      },
+      "wav_sha256": "ca4b3d79eb335a68b2132a533b579880fdc398a2b86223a0ecc6121ab213bdf9"
+    },
+    {
+      "id": "en-2529",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "But don't these very wise things sometimes turn out very\n foolishly.",
+        "ggml-small": "But don't these very wise things sometimes turn out very\n foolishly?"
+      },
+      "reference": "BUT DON'T THESE VERY WISE THINGS SOMETIMES TURN OUT VERY FOOLISHLY",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 2529
+      },
+      "wav_sha256": "d730ea011bfb02abe5069ab9fdff8320243f2ef8c6fbd368234259a227be2d51"
+    },
+    {
+      "id": "en-2619",
+      "lang": "en",
+      "recorded": {
+        "ggml-base": "\"My heart doth plead that thou in him doth lie.\n A closet never pierced with crystal eyes.\n But the defendant doth that plea deny, and says in him thy\n fair appearance lies.\"",
+        "ggml-small": "\"My heart doth plead that thou in him dost lie. A closet\n never pierced with crystal eyes.\n But the defendant doth that plea deny, And says in him thy\n fair appearance lies.\""
+      },
+      "reference": "MY HEART DOTH PLEAD THAT THOU IN HIM DOST LIE A CLOSET NEVER PIERC'D WITH CRYSTAL EYES BUT THE DEFENDANT DOTH THAT PLEA DENY AND SAYS IN HIM THY FAIR APPEARANCE LIES",
+      "source": {
+        "dataset": "openslr/librispeech_asr",
+        "file": "all/test.clean/0000.parquet",
+        "licence": "CC-BY-4.0",
+        "revision": "71cacbfb7e2354c4226d01e70d77d5fca3d04ba1",
+        "row": 2619
+      },
+      "wav_sha256": "0c7554daf3f14fd39304bd442a0717961b727ed2ec018316fcd8b8a355f7a186"
+    }
+  ]
+}

@@ -18,7 +18,7 @@
       "oracle": "{\"edits\": [{\"op\": \"replace\", \"old\": \"we discus chapter\", \"new\": \"we discuss chapter\"}]}",
       "recorded": {
         "qwen3-4b-2507": "{\"edits\": [{\"new\": \"This week we discuss chapter three of the book, on memory and sleep.\", \"old\": \"This week we discus chapter three of the book, on memory and sleep.\", \"op\": \"replace\"}]}",
-        "qwen3-vl-4b": "{\n  \"edits\": [\n    {\n      \"new\": \"This week we discuss chapter three of the book, on memory and sleep.\",\n      \"old\": \"This week we discus chapter three of the book, on memory and sleep.\",\n      \"op\": \"replace\"\n    }\n  ]\n}"
+        "qwen3-vl-4b": "{\n  \"edits\": [\n    {\n      \"new\": \"discuss\",\n      \"old\": \"discus\",\n      \"op\": \"replace\"\n    }\n  ]\n}"
       },
       "remove": [
         "discus chapter"
@@ -41,8 +41,8 @@
       ],
       "oracle": "{\"edits\": [{\"op\": \"append\", \"old\": \"\", \"new\": \"- book the room\"}]}",
       "recorded": {
-        "qwen3-4b-2507": "{\"edits\": [{\"new\": \"book the room\", \"old\": \"Before the workshop:\",\"op\": \"append\"}]}",
-        "qwen3-vl-4b": "{\"edits\": [{\"new\": \"book the room\", \"old\": \"\", \"op\": \"append\"}]}"
+        "qwen3-4b-2507": "{\"edits\": [{\"new\": \"book the room\", \"old\": \"order coffee\", \"op\": \"insert_after\"}]}",
+        "qwen3-vl-4b": "{\n  \"edits\": [\n    {\n      \"new\": \"book the room\",\n      \"old\": \"\",\n      \"op\": \"append\"\n    }\n  ]\n}"
       },
       "remove": [],
       "title": "Workshop prep"
@@ -92,8 +92,8 @@
       ],
       "oracle": "{\"edits\": [{\"op\": \"insert_after\", \"old\": \"velocity squared.\", \"new\": \"$$E_k = \\\\frac{1}{2} m v^2$$\"}]}",
       "recorded": {
-        "qwen3-4b-2507": "{\"edits\": [\n  {\n    \"new\": \"$E_k = \\\\frac{1}{2} m v^2$\",\n    \"old\": \"Kinetic energy is one half times mass times velocity squared.\\\\n\\\\n\",\n    \"op\": \"replace\"\n  }\n]}",
-        "qwen3-vl-4b": "{\n  \"edits\": [\n    {\n      \"new\": \"$E = \\\\frac{1}{2}mv^2$\",\n      \"old\": \"Kinetic energy is one half times mass times velocity squared.\",\n      \"op\": \"replace\"\n    }\n  ]\n}"
+        "qwen3-4b-2507": "{\"edits\": [{\"new\": \"Kinetic energy is one half times mass times velocity squared: $E_k = \\\\frac{1}{2} m v^2$.\", \"old\": \"Kinetic energy is one half times mass times velocity squared.\",\"op\": \"replace\"}]}",
+        "qwen3-vl-4b": "{\n  \"edits\": [\n    {\n      \"new\": \"Kinetic energy is $\\\\frac{1}{2} m v^2$.\",\n      \"old\": \"Kinetic energy is one half times mass times velocity squared.\",\n      \"op\": \"replace\"\n    }\n  ]\n}"
       },
       "remove": [],
       "title": "Energy"
@@ -140,10 +140,33 @@
       "oracle": "{\"edits\": [{\"op\": \"append\", \"old\": \"\", \"new\": \"Next survey: 14 November\"}]}",
       "recorded": {
         "qwen3-4b-2507": "{\"edits\": [{\"new\": \"Next survey: 14 November\", \"old\": \"Closing re\", \"op\": \"append\"}]}",
-        "qwen3-vl-4b": "{\n  \"edits\": [\n    {\n      \"new\": \"Next survey: 14 November\",\n      \"old\": \"Closing re\",\n      \"op\": \"append\"\n    }\n  ]\n}"
+        "qwen3-vl-4b": "{\"edits\": [{\"new\": \"Next survey: 14 November\", \"old\": \"\", \"op\": \"append\"}]}"
       },
       "remove": [],
       "title": "Wetland survey"
+    },
+    {
+      "add": [
+        [
+          "Next survey: 14 November"
+        ]
+      ],
+      "ask": "add a final line: Next survey: 14 November",
+      "body": "Survey notes\n\nA sentence of field notes about the wetland survey, round 1.\n\nA sentence of field notes about the wetland survey, round 2.\n\nA sentence of field notes about the wetland survey, round 3.\n\nA sentence of field notes about the wetland survey, round 4.\n\nA sentence of field notes about the wetland survey, round 5.\n\nA sentence of field notes about the wetland survey, round 6.\n\nA sentence of field notes about the wetland survey, round 7.\n\nA sentence of field notes about the wetland survey, round 8.\n\nA sentence of field notes about the wetland survey, round 9.\n\nA sentence of field notes about the wetland survey, round 10.\n\nA sentence of field notes about the wetland survey, round 11.\n\nA sentence of field notes about the wetland survey, round 12.\n\nA sentence of field notes about the wetland survey, round 13.\n\nA sentence of field notes about the wetland survey, round 14.\n\nA sentence of field notes about the wetland survey, round 15.\n\nA sentence of field notes about the wetland survey, round 16.\n\nA sentence of field notes about the wetland survey, round 17.\n\nA sentence of field notes about the wetland survey, round 18.\n\nA sentence of field notes about the wetland survey, round 19.\n\nA sentence of field notes about the wetland survey, round 20.\n\nA sentence of field notes about the wetland survey, round 21.\n\nA sentence of field notes about the wetland survey, round 22.\n\nA sentence of field notes about the wetland survey, round 23.\n\nA sentence of field notes about the wetland survey, round 24.\n\nA sentence of field notes about the wetland survey, round 25.\n\nA sentence of field notes about the wetland survey, round 26.\n\nA sentence of field notes about the wetland survey, round 27.\n\nA sentence of field notes about the wetland survey, round 28.\n\nA sentence of field notes about the wetland survey, round 29.\n\nA sentence of field notes about the wetland survey, round 30.\n\nA sentence of field notes about the wetland survey, round 31.\n\nA sentence of field notes about the wetland survey, round 32.\n\nA sentence of field notes about the wetland survey, round 33.\n\nA sentence of field notes about the wetland survey, round 34.\n\nA sentence of field notes about the wetland survey, round 35.\n\nA sentence of field notes about the wetland survey, round 36.\n\nA sentence of field notes about the wetland survey, round 37.\n\nA sentence of field notes about the wetland survey, round 38.\n\nA sentence of field notes about the wetland survey, round 39.\n\nA sentence of field notes about the wetland survey, round 40.\n\nThe last paragraph, which the model is never shown.",
+      "id": "long-repetitive-final-line",
+      "keep": [
+        "round 1.",
+        "round 20.",
+        "round 40.",
+        "The last paragraph, which the model is never shown."
+      ],
+      "oracle": "{\"edits\": [{\"op\": \"append\", \"old\": \"\", \"new\": \"Next survey: 14 November\"}]}",
+      "recorded": {
+        "qwen3-4b-2507": "{\"edits\": [{\"new\": \"Next survey: 14 November\", \"old\": \"\", \"op\": \"append\"}]}",
+        "qwen3-vl-4b": "{\"edits\": [{\"new\": \"Next survey: 14 November\", \"old\": \"\", \"op\": \"append\"}]}"
+      },
+      "remove": [],
+      "title": "Survey notes"
     }
   ]
 }

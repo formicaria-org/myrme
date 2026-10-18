@@ -129,6 +129,16 @@ fn a_live_model_against_the_cases() {
             *self.1.borrow_mut() = r.content.clone();
             Ok(r)
         }
+        fn complete_constrained(
+            &self,
+            s: &str,
+            u: &str,
+            schema: &Value,
+        ) -> Result<LlmResponse, AgentError> {
+            let r = self.0.complete_constrained(s, u, schema)?;
+            *self.1.borrow_mut() = r.content.clone();
+            Ok(r)
+        }
     }
     let llm = Recording(OpenAiStep::local(port, &model).with_temperature(0.0), Default::default());
 

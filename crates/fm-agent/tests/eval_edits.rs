@@ -1,8 +1,8 @@
 //! M5's eval — note edits (`/propose`), against `methods/edits/eval/cases.json`.
 //!
 //! The case's note and request go through the real turn ([`StudyAssistant::turn`]) with the note
-//! given exactly as the runner gives it (`fm-agent-run`'s `host_note`: the first [`HOST_NOTE_CHARS`]
-//! characters, labelled as this note); the edits it answers with are applied to the whole note
+//! given exactly as the runner gives it (`fm-agent-run`'s `host_note`: the first [`fm_agent::HOST_NOTE_CHARS`]
+//! characters, labelled as this note, and marked when it goes on — [`fm_agent::shown_note`]); the edits it answers with are applied to the whole note
 //! ([`fm_agent::edits::apply`]), and the result is checked with [`fm_agent::eval::edit_outcome`].
 //!
 //! **In the gate:** each `oracle` must pass; every `recorded` proposal is re-scored and printed.
@@ -15,8 +15,6 @@ use fm_agent::{AgentError, InputDoc, LlmResponse, LlmStep, SearchHit, StudyAssis
 use serde_json::Value;
 
 const CASES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../methods/edits/eval/cases.json");
-/// What `fm-agent-run`'s `host_note` passes of the note (2026-10-18).
-const HOST_NOTE_CHARS: usize = 1200;
 
 fn load() -> Value {
     serde_json::from_str(&std::fs::read_to_string(CASES).expect("the case file")).expect("JSON")
@@ -52,7 +50,7 @@ fn run<L: LlmStep>(llm: L, case: &Value) -> Result<(String, bool, String), Agent
     };
     let note = InputDoc {
         label: format!("{} (this note)", case["title"].as_str().unwrap()),
-        text: case["body"].as_str().unwrap().chars().take(HOST_NOTE_CHARS).collect(),
+        text: fm_agent::shown_note(case["body"].as_str().unwrap()),
     };
     let turn = StudyAssistant::new(llm, NoWeb).turn("", &intent, &[note], None)?;
     // As the runner does: the edits go onto the whole note, not the part the model saw.

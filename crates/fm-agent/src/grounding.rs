@@ -87,6 +87,69 @@ pub fn pack_sources(sources: &[Source], per_source_chars: usize) -> String {
     p.trim_end().to_string()
 }
 
+/// The shape [`crate::prompts::GROUNDED_JSON_INSTRUCTION`] asks for. `answerable` comes first (keys
+/// reach the server alphabetically), so the model commits to whether there is an answer before it
+/// writes one.
+pub fn answer_schema() -> serde_json::Value {
+    let text = serde_json::json!({ "type": "string" });
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "answerable": { "type": "boolean" },
+            "claims": {
+                "type": "array",
+                "maxItems": 12,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "claim": text,
+                        "quote": text,
+                        "source": { "type": "integer", "minimum": 1 },
+                    },
+                    "required": ["claim", "quote", "source"],
+                    "additionalProperties": false,
+                },
+            },
+        },
+        "required": ["answerable", "claims"],
+        "additionalProperties": false,
+    })
+}
+
+/// A schema-held answer turned into the claim list [`verify`] reads (`- claim [n]` then `> quote`), so
+/// the check that a quote is in its source is the one and only check. `answerable: false` is no
+/// claims at all. An answer that is not the object asked for is passed through as it is, and read as
+/// free text.
+pub fn claims_from_json(answer: &str) -> String {
+    let t = answer.trim();
+    let Some(v) = t
+        .find('{')
+        .zip(t.rfind('}'))
+        .and_then(|(a, b)| serde_json::from_str::<serde_json::Value>(&t[a..=b]).ok())
+    else {
+        return answer.to_string();
+    };
+    if v.get("answerable").and_then(serde_json::Value::as_bool) == Some(false) {
+        return String::new();
+    }
+    let mut out = String::new();
+    for c in v.get("claims").and_then(serde_json::Value::as_array).into_iter().flatten() {
+        let s = |k: &str| c.get(k).and_then(serde_json::Value::as_str).unwrap_or("").trim();
+        let (claim, quote) = (s("claim").replace('\n', " "), s("quote").replace('\n', " "));
+        if claim.is_empty() {
+            continue;
+        }
+        match c.get("source").and_then(serde_json::Value::as_u64) {
+            Some(n) => out.push_str(&format!("- {claim} [{n}]\n")),
+            None => out.push_str(&format!("- {claim}\n")),
+        }
+        if !quote.is_empty() {
+            out.push_str(&format!("> {quote}\n"));
+        }
+    }
+    out
+}
+
 /// Ground a model draft against the sources: parse each claim, verify its quote is a verbatim substring
 /// of the cited source, drop the rest, and assemble the note body with a deterministic `## Sources`
 /// section built from the *verified* set only. Fail-closed: if nothing verifies, the body says so
@@ -249,6 +312,19 @@ fn quote_supported(quote: &str, source_text: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A schema-held answer becomes the claim list `verify` reads; "not answerable" is no claims,
+    /// so a cited "the sources do not say" cannot ship; free text passes through untouched.
+    #[test]
+    fn a_held_answer_becomes_claims_and_not_answerable_becomes_none() {
+        let srcs = vec![src(1, "A", "", "Quillite melts at 812 degrees Celsius.")];
+        let held = r#"{"answerable":true,"claims":[{"claim":"It melts at 812 C.","quote":"melts at 812 degrees Celsius","source":1}]}"#;
+        let g = verify(&claims_from_json(held), &srcs);
+        assert_eq!((g.verified.len(), g.verified[0].source_id), (1, 1));
+        let none = r#"{"answerable":false,"claims":[{"claim":"The sources do not say.","quote":"Quillite melts","source":1}]}"#;
+        assert_eq!(verify(&claims_from_json(none), &srcs).total_claims(), 0);
+        assert_eq!(claims_from_json("- free text [1]\n> q"), "- free text [1]\n> q");
+    }
 
     /// The three ways a small model misplaced a correct answer (2026-10-18, research eval), each
     /// still verified, and an invented quote still dropped whatever is done with its citation.

@@ -189,6 +189,65 @@ pub fn wer(reference: &str, hypothesis: &str) -> f64 {
     prev[h.len()] as f64 / r.len() as f64
 }
 
+/// How a recipe (M7) scored against the recipe it was said from. An ingredient line is *found* when
+/// most of its words of three letters or more (after [`crate::textmatch::loose`], so "egg" and
+/// "oil" count) are in one
+/// line of the result, quantities aside; a result line is *invented* when it finds no listed
+/// ingredient. `exact` asks for every ingredient found, none invented, and at least as many steps
+/// as half the recipe's.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecipeOutcome {
+    pub exact: bool,
+    pub found: usize,
+    pub listed: usize,
+    pub invented: usize,
+    pub steps: usize,
+    pub why: String,
+}
+
+pub fn recipe_outcome(
+    got_ingredients: &[String],
+    got_steps: usize,
+    listed: &[String],
+    listed_steps: usize,
+) -> RecipeOutcome {
+    let words = |s: &str| -> Vec<String> {
+        crate::textmatch::loose(s)
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|w| w.chars().count() >= 3 && !w.chars().all(|c| c.is_ascii_digit()))
+            .map(str::to_string)
+            .collect()
+    };
+    let covers = |want: &str, line: &str| {
+        let (w, l) = (words(want), words(line));
+        !w.is_empty() && w.iter().filter(|x| l.contains(x)).count() * 2 >= w.len()
+    };
+    let found =
+        listed.iter().filter(|want| got_ingredients.iter().any(|g| covers(want, g))).count();
+    let invented = got_ingredients
+        .iter()
+        .filter(|g| !listed.iter().any(|want| covers(want, g) || covers(g, want)))
+        .count();
+    let mut why = Vec::new();
+    if found < listed.len() {
+        why.push(format!("found {found}/{} ingredients", listed.len()));
+    }
+    if invented > 0 {
+        why.push(format!("{invented} invented"));
+    }
+    if got_steps * 2 < listed_steps {
+        why.push(format!("{got_steps}/{listed_steps} steps"));
+    }
+    RecipeOutcome {
+        exact: why.is_empty(),
+        found,
+        listed: listed.len(),
+        invented,
+        steps: got_steps,
+        why: why.join("; "),
+    }
+}
+
 /// A tally over a case battery, printed the same way by every method's eval.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Tally {

@@ -157,6 +157,91 @@ the phone, which runs on the CPU.
 **Cost, stated.** One more thing to maintain: a llama.cpp bump is now a Myrme release, not a URL
 change. The build machines are GitHub's free public runners.
 
+## 2026-10-18 (late) — what formicaria needs to link Myrme from here, and the runtime switched to Myrme's build `#contract` `#model` `#repo`
+
+**The owner, leaving for some hours:** *"I want the full port and all outstanding issues solved in your
+recommended way. This should then also lead to a test of fm with our myrme outside the main repo to
+go towards this new setting from next releases."*
+
+**Decision.**
+- **The catalogue lives beside the crate that embeds it**: `crates/fm-agent-run/models.toml`,
+  exported as `fm_agent_run::CATALOGUE`.
+  - `agent-serve --print-catalogue` writes it out, and `agent-serve` uses it when no
+    `models.toml` is on disk.
+  - The dev scripts find it in its new place.
+  - formicaria's phone parses the constant; its desktop release writes the file beside the
+    program.
+- **`agent-serve`'s code is in the library** (`fm_agent_run::agent_serve::main`).
+  - Cargo builds binaries only for a workspace's own members, so formicaria ships the same binary
+    from a three-line crate of its own.
+  - Both additions are in `contract.md`. Nothing existing was renamed or removed.
+- **The runtime is Myrme's own** (release `runtime-llg-3`, all six archives). The catalogue's
+  `runtime_url_*` and `runtime_sha256_*` now point there, after measuring:
+  - The published Linux Vulkan archive against upstream's, qwen3-4b-2507, meeting eval held to
+    its schema, twice each on the RTX 3050: **17/17 both**, **21.7 s against 26.1 s on average**
+    (about 17% less time). The CPU build measured earlier saved about 20%.
+  - `pixi run check-pins` downloaded every pinned archive and matched every checksum.
+  - The link check in the workflow looks for llguidance's own code (`toktrie`) and for the
+    absence of llama.cpp's "not enabled" abort, because macOS and Windows export no `llg_*`
+    symbol.
+  - Android pins b10081 to match formicaria's staging; the desktops pin b10076.
+- **Testing formicaria from here:**
+  - `FM_CHECKOUT=<path> pixi run integration` builds a local formicaria checkout instead of the
+    pin.
+  - `agents/e2e-live.sh` runs everything live: that checkout's `fm-serve` and `agent-serve`, a
+    real model on a real runtime, and `@Myrme-laptop … /propose` posted as a person would, in a
+    temporary home.
+
+## 2026-10-18 (late) — a cut note is marked; research answers say first whether there is an answer `#method`
+
+- **The live run found a fault the eval had not.** Asked to "add a final line" to a long note, the
+  model replaced the last sentence it could see; the edit applied, and a sentence was lost.
+  - Cause: the turn shows the model the note's first 1200 characters with nothing saying more
+    follows.
+  - **`fm_agent::shown_note`** now adds "[… the note goes on; only its beginning is shown here …]"
+    when it cuts. The runner and the eval both use it.
+  - `EDITS_INSTRUCTION` now says that adding at the end is `append`, never a replace, and that a
+    replace changes only the words that change.
+  - A case shaped like the live failure joined the eval (`long-repetitive-final-line`).
+  - Both laptop models now score **7/7**, up from 5/6. The `latex` case that had kept the score
+    there is fixed by the second sentence.
+- **Research (M2) is held to a schema whose first field is `answerable`**
+  (`grounding::answer_schema`, `GROUNDED_JSON_INSTRUCTION`). The claims are turned into the list
+  `grounding::verify` checks, so the guarantee is unchanged.
+  - Both laptop models now score **8/8**, up from 7/8: the cited "the sources do not say" is gone.
+  - A free-text answer is still read.
+- **Tried and not adopted:** "two meetings in one email are two items" in the meeting instruction.
+  - qwen3-vl-4b went from 15/17 to 16/17 (the merge was fixed); qwen3-4b-2507 went from 17/17 to
+    16/17 (it reported the moved meeting's old time as cancelled).
+  - That is 32 of 34 either way, so the wording was reverted. The recordings are of the shipped
+    wording.
+
+## 2026-10-18 (night) — the image, speech and recipe methods measured on openly licensed data `#method` `#model`
+
+**Data.** Every source is pinned by revision and every file checked by sha256
+(`agents/eval-data.py`). The case files are committed; the media stay in `.eval-data/`. Licences and
+attribution sit beside each case file.
+- GNHK: 30 phone photographs of handwriting (CC BY 4.0).
+- Multilingual LibriSpeech (Italian) and LibriSpeech (English): 30 clips each (CC BY 4.0).
+- Wikibooks Cookbook: 30 recipes turned into speech-like text (CC BY-SA 4.0, kept under its own
+  licence).
+
+**Decision.**
+- **The laptop vision reader is capped at 1024 image tokens.** `image_max_tokens` is a new
+  catalogue key; adding a key is safe for formicaria (`contract.md`, part 3).
+  - Uncapped, every photographed page took longer than the 120 s reading limit with the projector
+    on the CPU.
+  - Capped, the median word error is 17.9% (24 of 30 pages under 50%) at about 35 s a page.
+- **The phone's vision model cannot read handwriting** (median 82.7% with the house instruction,
+  96.4% with its own, 9 pages looping). It stays the phone's typed-text reader; handwriting on the
+  phone waits for a dedicated reader (Phase C).
+- **Speech:** `ggml-base` gives 6.3% WER in English and 36.1% in Italian; *better listening*
+  (`ggml-small`) gives 4.1% and 23.1% at about three times the time. Recorded for the owner, who
+  decides whether formicaria suggests it by language.
+- **Recipes stay free-form.** qwen3-vl-4b scored 28/30 (256 of 257 ingredients found, 1 invented)
+  both free and held to `recipe::answer_schema()`, and the schema was slower. qwen3-4b-2507 scored
+  26/30 both ways.
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading

@@ -23,6 +23,25 @@ Answer with JSON only, no other words, in exactly this shape: \
 \"times\": {\"<what it is, e.g. preparazione>\": \"<as said, e.g. 20 minuti>\"}, \
 \"notes\": [\"anything else that was said: tips, variations\"]}";
 
+/// [`INSTRUCTION`]'s shape as a JSON Schema, for [`crate::LlmStep::complete_constrained`]. Every
+/// key is required, as for the meeting pass, where requiring the pointer was the whole gain.
+pub fn answer_schema() -> Value {
+    let lines = serde_json::json!({ "type": "array", "items": { "type": "string" } });
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "title": { "type": "string" },
+            "servings": { "type": ["integer", "null"] },
+            "ingredients": lines,
+            "steps": lines,
+            "times": { "type": "object", "additionalProperties": { "type": "string" } },
+            "notes": lines,
+        },
+        "required": ["title", "servings", "ingredients", "steps", "times", "notes"],
+        "additionalProperties": false,
+    })
+}
+
 /// The parts, as the model gave them, before the check.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Parts {

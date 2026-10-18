@@ -42,6 +42,11 @@ pub struct Model {
     /// holds under a 6.8k-token prompt. Image reading gets slower; text does not. `None` = the
     /// runtime's default (on the GPU).
     pub mmproj_offload: Option<bool>,
+    /// The most tokens one image may become (`--image-max-tokens`). Measured 2026-10-18 on the RTX
+    /// 3050, projector on the CPU, qwen3-vl-4b: a full-size phone photograph (≈4000 px) took over
+    /// the 120 s reading limit on every one of 30 handwritten pages; capped at 1024 it reads one in
+    /// ≈27 s at ≈18% word error (`methods/image-text/eval`). `None` = the runtime's default.
+    pub image_max_tokens: Option<u32>,
     /// Per-model thread-count override; falls back to the manifest's `threads` when unset.
     pub threads: Option<u32>,
     /// The weights' licence, e.g. `Apache-2.0` — shown before anything is downloaded, because the
@@ -170,6 +175,7 @@ impl Manifest {
                     revision: None,
                     mmproj: None,
                     mmproj_offload: None,
+                    image_max_tokens: None,
                     ctx: None,
                     threads: None,
                     license: None,
@@ -196,6 +202,7 @@ impl Manifest {
                     "mmproj" => m.mmproj = Some(val.to_string()),
                     "ctx" => m.ctx = val.parse().ok(),
                     "mmproj_offload" => m.mmproj_offload = val.parse().ok(),
+                    "image_max_tokens" => m.image_max_tokens = val.parse().ok(),
                     "threads" => m.threads = val.parse().ok(),
                     "license" => m.license = Some(val.to_string()),
                     "bytes" => m.bytes = val.parse().ok(),
@@ -412,6 +419,10 @@ impl Manifest {
         // Keep the projector off a small GPU so the context window fits (`models.toml`).
         if model.mmproj_offload == Some(false) {
             cmd.arg("--no-mmproj-offload");
+        }
+        // Bound what one photograph costs, so a full-size picture is read in time (`models.toml`).
+        if let Some(n) = model.image_max_tokens {
+            cmd.arg("--image-max-tokens").arg(n.to_string());
         }
         Some(proj)
     }
@@ -640,6 +651,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let m = Manifest::parse(
             "[[models]]\nname = \"sees\"\nfile = \"a.gguf\"\nmmproj = \"p.gguf\"\nmmproj_offload = false\n\
+             image_max_tokens = 1024\n\
              read_prompt = \"Transcribe the text in this image exactly.\"\nreads_labels = true\n\
              [[models]]\nname = \"blind\"\nfile = \"b.gguf\"\n",
         );
@@ -659,6 +671,9 @@ mod tests {
             got.contains(&"--no-mmproj-offload".to_string()),
             "the catalogue's setting rides along"
         );
+        let cap =
+            got.iter().position(|a| a == "--image-max-tokens").expect("the image cap rides along");
+        assert_eq!(got[cap + 1], "1024");
 
         let mut blind = std::process::Command::new("x");
         assert_eq!(m.add_projector(&mut blind, "blind", &dir), None, "a text-only model");

@@ -117,5 +117,147 @@ def check_speech() -> None:
             sys.exit(f"{c['id']}: audio differs from the case file ({got})")
 
 
+# Wikibooks Cookbook (CC BY-SA 4.0): recipe pages, parsed for their Ingredients and Procedure.
+RECIPES = ("gossminn/wikibooks-cookbook", "49fb73ea07d2a1380c15197db5589934937457ed")
+RECIPE_COUNT = 30
+
+
+def recipe_page(html: str):
+    """(title, ingredients, steps) from a Wikibooks Cookbook page, or None when it has not both."""
+    import html as htmlmod
+    import re
+
+    title = re.search(r"<title>Cookbook:(.*?) - Wikibooks", html)
+    def section(anchor: str, tag: str):
+        i = html.find(f'id="{anchor}"')
+        if i < 0:
+            return []
+        end = html.find("<h2", i + 1)
+        block = html[i:end if end > 0 else len(html)]
+        m = re.search(rf"<{tag}[^>]*>(.*?)</{tag}>", block, re.S)
+        if not m:
+            return []
+        items = re.findall(r"<li[^>]*>(.*?)</li>", m.group(1), re.S)
+        clean = lambda t: re.sub(r"\s+", " ", htmlmod.unescape(re.sub(r"<[^>]+>", "", t))).strip()
+        return [c for c in (clean(x) for x in items) if c]
+    if not title:
+        return None
+    ing, steps = section("Ingredients", "ul"), section("Procedure", "ol")
+    if not (3 <= len(ing) <= 14 and 2 <= len(steps) <= 10):
+        return None
+    if any(len(x) > 220 for x in ing + steps):
+        return None
+    return title.group(1).strip(), ing, steps
+
+
+def spoken(title: str, ing, steps) -> str:
+    """The recipe as someone might say it into a phone: one run of speech, no lists."""
+    lower = lambda t: t[:1].lower() + t[1:]
+    said = f"Okay, so today I'm making {title}. For this you need {', '.join(ing[:-1])} and {ing[-1]}. "
+    links = ["First", "Then", "After that", "Next", "Then", "After that", "Next", "Then", "After that", "Finally"]
+    for n, step in enumerate(steps):
+        link = "Finally" if n == len(steps) - 1 and n > 0 else links[n]
+        said += f"{link}, {lower(step.rstrip('.'))}. "
+    return said + "And that's it."
+
+
+def recipes() -> None:
+    dataset, revision = RECIPES
+    cases = []
+    i = 0
+    while len(cases) < RECIPE_COUNT and i < 400:
+        file = f"recipes/recipe_00_{i:03d}.html"
+        i += 1
+        try:
+            page = recipe_page(fetch(dataset, revision, file).read_text(errors="replace"))
+        except Exception as e:  # a missing page number is skipped, not fatal
+            print(f"skip {file}: {e}", file=sys.stderr)
+            continue
+        if not page:
+            continue
+        title, ing, steps = page
+        cases.append({
+            "id": f"wb-{i - 1:03d}",
+            "source": {"dataset": dataset, "revision": revision, "file": file},
+            "title": title,
+            "transcript": spoken(title, ing, steps),
+            "ingredients": ing,
+            "steps": steps,
+        })
+    out = ROOT / "methods" / "recipe" / "eval" / "cases.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    old = json.loads(out.read_text()) if out.exists() else {}
+    recorded = {c["id"]: c.get("recorded", {}) for c in old.get("cases", [])}
+    for c in cases:
+        if recorded.get(c["id"]):
+            c["recorded"] = recorded[c["id"]]
+    doc = {
+        "about": "Golden cases for M7, a recipe from what was said. Each is a Wikibooks Cookbook "
+                 "recipe (CC BY-SA 4.0, see LICENSE.md here), its Ingredients and Procedure taken "
+                 "as the ground truth, and turned by `agents/eval-data.py` into one run of speech "
+                 "(`transcript`) — the input the recipe method gets after speech-to-text, which is "
+                 "M4's job. Scored by `fm_agent::eval::recipe_outcome`: every listed ingredient "
+                 "found, none invented, and enough steps.",
+        "cases": cases,
+    }
+    out.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n")
+    print(f"{len(cases)} cases -> {out.relative_to(ROOT)}", file=sys.stderr)
+
+
+# GNHK (GoodNotes, CC BY 4.0): phone photographs of handwritten pages, word boxes with line numbers.
+GNHK = ("aryaman27/goodnotes-handwritten-dataset", "904297760a9fec813fdc1ecb5f8055cb1ca03550")
+GNHK_COUNT = 30
+
+
+def handwriting() -> None:
+    dataset, revision = GNHK
+    listing = json.loads(urllib.request.urlopen(
+        f"https://huggingface.co/api/datasets/{dataset}/tree/{revision}/test_data/test").read())
+    stems = sorted(f["path"][:-4] for f in listing if f["path"].endswith(".jpg"))
+    picks = [stems[round(i * (len(stems) - 1) / (GNHK_COUNT - 1))] for i in range(GNHK_COUNT)]
+    cases = []
+    for stem in picks:
+        words = json.loads(fetch(dataset, revision, stem + ".json").read_text())
+        jpg = fetch(dataset, revision, stem + ".jpg")
+        # Lines in order, words left to right; GNHK's %…% tokens (math, special signs, illegible)
+        # say there is something a transcript cannot be held to, and are left out.
+        lines: dict = {}
+        for w in words:
+            if w["text"].startswith("%") and w["text"].endswith("%"):
+                continue
+            x = sum(w["polygon"][f"x{i}"] for i in range(4)) / 4
+            lines.setdefault(w["line_idx"], []).append((x, w["text"]))
+        reference = "\n".join(" ".join(t for _, t in sorted(ws)) for _, ws in sorted(lines.items()))
+        cid = stem.rsplit("/", 1)[-1]
+        dest = CACHE / "image-text" / f"{cid}.jpg"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(jpg.read_bytes())
+        cases.append({
+            "id": cid,
+            "source": {"dataset": dataset, "revision": revision, "file": stem + ".jpg",
+                       "licence": "CC-BY-4.0"},
+            "jpg_sha256": hashlib.sha256(dest.read_bytes()).hexdigest(),
+            "reference": reference,
+        })
+    out = ROOT / "methods" / "image-text" / "eval" / "cases.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    old = json.loads(out.read_text()) if out.exists() else {}
+    recorded = {c["id"]: c.get("recorded", {}) for c in old.get("cases", [])}
+    for c in cases:
+        if recorded.get(c["id"]):
+            c["recorded"] = recorded[c["id"]]
+    doc = {
+        "about": "Golden cases for M3, image to text: 30 phone photographs of handwritten pages from "
+                 "GNHK's test split (GoodNotes, CC BY 4.0; see ../NOTICE.md), spread over it. The "
+                 "reference is GNHK's own word annotation, line by line, with its %…% tokens (math, "
+                 "signs, illegible) left out. The images are not committed: `pixi run eval-data -- "
+                 "handwriting` fetches them and checks `jpg_sha256`. Scored by word error rate "
+                 "(`fm_agent::eval::wer`).",
+        "cases": cases,
+    }
+    out.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n")
+    print(f"{len(cases)} cases -> {out.relative_to(ROOT)}", file=sys.stderr)
+
+
 if __name__ == "__main__":
-    {"speech": speech, "check-speech": check_speech}[sys.argv[1]]()
+    {"speech": speech, "check-speech": check_speech, "recipes": recipes, "handwriting": handwriting}[sys.argv[1]]()

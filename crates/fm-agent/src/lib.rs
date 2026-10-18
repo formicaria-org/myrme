@@ -43,6 +43,22 @@ pub mod titles;
 pub mod transcribe;
 pub mod watchdog;
 
+/// How much of the host note a turn shows the model.
+pub const HOST_NOTE_CHARS: usize = 1200;
+
+/// The host note as a turn shows it: its first [`HOST_NOTE_CHARS`] characters, and — when that is
+/// not all of it — a line saying so. Without that line a model took the last sentence it could see
+/// for the note's end and replaced it to "add a final line" (2026-10-18, the live end-to-end run);
+/// the edit then landed, and a sentence was lost. Edits still apply to the whole note.
+pub fn shown_note(body: &str) -> String {
+    let shown: String = body.chars().take(HOST_NOTE_CHARS).collect();
+    if shown.len() < body.len() {
+        format!("{shown}\n\n[… the note goes on; only its beginning is shown here …]")
+    } else {
+        shown
+    }
+}
+
 /// The fixed acknowledgement posted after a `/propose` turn. Deterministic on purpose: asking a tiny
 /// model to "acknowledge in one sentence" is a meta-instruction it fails (it echoes the prompt), and
 /// a proposal needs no model-written confirmation — so this is a constant, saving a call too.
@@ -255,7 +271,14 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
             let pack = crate::grounding::pack_sources(&used, chars);
             let user =
                 format!("{}\n{}\n\n# Numbered sources\n{}", heading::TASK, req.ask.trim(), pack);
-            Ok((self.llm.complete(prompts::GROUNDED_WRITE_INSTRUCTION, &user)?, used))
+            // Held to the answer's schema; its claims become the list `verify` checks.
+            let mut resp = self.llm.complete_constrained(
+                prompts::GROUNDED_JSON_INSTRUCTION,
+                &user,
+                &crate::grounding::answer_schema(),
+            )?;
+            resp.content = crate::grounding::claims_from_json(&resp.content);
+            Ok((resp, used))
         };
         let (resp, used) = {
             let (r, u) = write(5, 700)?;
@@ -671,7 +694,7 @@ mod tests {
         let seen = agent.llm.seen.borrow();
         assert_eq!(seen.len(), 2);
         assert_eq!(seen[0].0, prompts::QUERY_REFINE_INSTRUCTION);
-        assert_eq!(seen[1].0, prompts::GROUNDED_WRITE_INSTRUCTION);
+        assert_eq!(seen[1].0, prompts::GROUNDED_JSON_INSTRUCTION);
     }
 
     #[test]

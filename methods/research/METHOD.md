@@ -12,8 +12,11 @@ the person asked for it.
 
 1. Refine the request into one search query (`prompts::QUERY_REFINE_INSTRUCTION`).
 2. Search, then number the sources. Inputs the person named come after the web hits.
-3. One write under `prompts::GROUNDED_WRITE_INSTRUCTION`: each claim cites `[n]` and quotes the
-   source word for word. If the note runs too long, it retries once with fewer, shorter sources.
+3. One write, **held to `grounding::answer_schema()`** under `prompts::GROUNDED_JSON_INSTRUCTION`:
+   - first `answerable` (do the sources state what was asked?), then the claims, each with its
+     source number and a quote copied word for word;
+   - `grounding::claims_from_json` turns them into the list `verify` reads;
+   - if the note runs too long, it retries once with fewer, shorter sources.
 4. **Rust verifies** (`grounding::verify`): a claim whose quote is not in its cited source is
    dropped. The Sources section is assembled by Rust from the verified set.
 
@@ -34,10 +37,10 @@ Each case is scored on two counts:
 
 The cases run the write step and the verification. The web search is not part of the eval.
 
-| Model, 2026-10-18 (RTX 3050) | Before the parser fix | After |
-|---|---|---|
-| qwen3-4b-2507 | 5/8 exact · 5/8 grounded | **7/8 · 7/8** |
-| qwen3-vl-4b, the laptop default | 5/8 · 5/8 | **7/8 · 7/8** |
+| Model, 2026-10-18 (RTX 3050) | Before the parser fix | After it | Held to the schema |
+|---|---|---|---|
+| qwen3-4b-2507 | 5/8 exact · 5/8 grounded | 7/8 · 7/8 | **8/8 · 7/8** |
+| qwen3-vl-4b, the laptop default | 5/8 · 5/8 | 7/8 · 7/8 | **8/8 · 7/8** |
 
 **What the first run found was the parser, not the models.** Correct answers were dropped
 because:
@@ -52,8 +55,8 @@ because:
 
 The guarantee is unchanged: a claim ships only with a quote found word for word in its source.
 
-**Open:** `abstain-near-topic`. Both models cite the source to say that it does not answer. The
-claim is true but ships as a cited claim. A prompt or rule change for this needs its own cases.
+`abstain-near-topic` (a cited "the sources do not say") was fixed by the schema: it asks whether
+there is an answer before any claim.
 
 ## Planned (Phase C)
 

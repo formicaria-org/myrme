@@ -56,7 +56,8 @@ some of them.
 `fm_agent_run::CATALOGUE` and parsed by `Manifest::parse`. formicaria's release copies it into every
 desktop archive (`.github/workflows/desktop.yml:141`, `packaging/formicaria.sh:42`) and stages the
 Android runtime from it (`ci/android-stage-runtime.sh`). **Its keys are a format formicaria reads.**
-Adding a key is safe; renaming or removing one is a contract change. The plan moves it next to the
+Adding a key is safe; renaming or removing one is a contract change. Added since the
+extraction: `image_max_tokens` (per model, 2026-10-18). The plan moves it next to the
 crate (`plan.md`, Phase A), so formicaria stops naming the path `agents/`.
 
 ## 4. The notes Myrme writes

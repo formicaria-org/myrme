@@ -669,7 +669,7 @@ impl<V: VaultAccess> Agent<V> {
         let title = v["title"].as_str().unwrap_or("this note");
         Ok(vec![InputDoc {
             label: format!("{title} (this note)"),
-            text: body.chars().take(1200).collect(),
+            text: fm_agent::shown_note(body),
         }])
     }
 

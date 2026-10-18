@@ -99,7 +99,7 @@ Moonshine's legacy non-English weights.
 Each phase leaves both repos green. **formicaria's `main` changes only in Phase A and Phase D**, each
 time by an ordinary commit that its gate checks.
 
-### Phase A — the port (status: **in progress**, 2026-10-18)
+### Phase A — the port (status: **done in Myrme; rehearsed in formicaria**, 2026-10-18)
 
 In Myrme:
 
@@ -108,23 +108,26 @@ In Myrme:
 | Repo created; `crates/fm-agent`, `crates/fm-agent-run` and `agents/` extracted from formicaria v0.9.1 with their history (78 commits) | ✅ 2026-10-18 |
 | Standalone workspace; `fm-fetch` from formicaria pinned by tag `v0.9.1`; pixi toolchain | ✅ |
 | `pixi run ci` locally: fmt, clippy, 122 + 44 tests (56 with `download`), cargo-deny | ✅ green |
-| `.github/workflows/ci.yml` (push to main and PRs) | written, not yet run on GitHub |
+| `.github/workflows/ci.yml` (push to main and PRs), with the integration job | ✅ green on GitHub |
 | Contract written down (`contract.md`) and compile-checked (`tests/fm_contract.rs`) | ✅ |
 | `CLAUDE.md`, `AGENTS.md`, `README.md`, `docs/context/`, `docs/research/` | ✅ |
 | First push to `github.com/formicaria-org/myrme` | ✅ 2026-10-18 |
 | **Port the agent work formicaria shipped since the extraction**: v0.9.2's `1db54e2` mirrored with `git am` (its author and message kept); the pin moved to v0.9.2 | ✅ |
 
-In formicaria, each a separate commit with `pixi run ci` green:
-1. **Freeze rule recorded.** A `decisions.md#agent` entry says Myrme lives in its own repo, and the
+In formicaria. **Done as one rehearsed change on a local branch, `myrme-cutover` in a worktree
+`~/fm-myrme` (not pushed), instead of four commits on `main`**: the owner asked for the full move
+tested outside the repository. The four steps below are all in it.
+1. ✅ (formicaria `decisions.md#agent`, 2026-10-18, on the branch) **Freeze rule recorded.** A `decisions.md#agent` entry says Myrme lives in its own repo, and the
    in-tree copy takes fixes only, mirrored the same day.
-2. **The catalogue travels with the crate.** Move `agents/models.toml` to
+2. ✅ **The catalogue travels with the crate.** Move `agents/models.toml` to
    `crates/fm-agent-run/models.toml`, export it as `fm_agent_run::CATALOGUE`, and make the three
    places that copy it (`desktop.yml`, `packaging/formicaria.sh`, `ci/android-stage-runtime.sh`)
    take it from `agent-serve --print-catalogue`.
    - Do it in Myrme first and mirror it, so the paths stay identical.
-3. **A guard in `ci/checks.sh`.** Every `fm-agent*` dependency is either in-tree or a git
+3. ✅ (as `deny.toml`'s single allowed git source, plus the cross-crate guards reading Myrme at the pin)
+   **A guard in `ci/checks.sh`.** Every `fm-agent*` dependency is either in-tree or a git
    dependency pinned by `tag` on a public URL.
-4. **An agent-off build** of `fm-serve` and of the mobile shell in CI, so a broken Myrme can always
+4. ✅ (the existing no-default-features guards pass on the branch) **An agent-off build** of `fm-serve` and of the mobile shell in CI, so a broken Myrme can always
    be shipped around.
 
 ### Working in parallel (from now until Phase D)
@@ -159,7 +162,9 @@ In formicaria, each a separate commit with `pixi run ci` green:
 | M2 parser: misplaced citations, closing punctuation | ✅ 5/8 → 7/8 on both laptop models |
 | M5 as anchored edits applied to the whole note | ✅ 3/6 → 5/6 on both laptop models |
 | `Method` enum and `methods/<name>/METHOD.md` for all seven | ✅ |
-| Cases for M3 (images), M4 (speech), M7 (recipe) | ⏳ need real images, recordings and transcripts |
+| Cases for M3 (images), M4 (speech), M7 (recipe), from openly licensed data (`agents/eval-data.py`) | ✅ GNHK 30 photos, MLS + LibriSpeech 60 clips, Wikibooks 30 recipes |
+| M2 held to a schema with `answerable` first | ✅ 7/8 → 8/8 on both laptop models |
+| M5: a cut note is marked; append and replace rules (found by the live run) | ✅ 5/6 → 7/7 on both laptop models |
 | Integration test against a real formicaria (`pixi run integration`, a CI job): `/propose` round trip, an unplaceable edit, the recipe headings | ✅ against v0.9.2 |
 
 1. **An eval harness per method.**
@@ -189,7 +194,15 @@ In order, each gated on its eval beating today's behaviour:
 4. M6 food from a sentence
 5. M4 VAD and dictation
 
-### Phase D — cutover in formicaria (one revertible commit)
+### Phase D — cutover in formicaria (one revertible commit) — status: **rehearsed, green**, 2026-10-18
+
+On branch `myrme-cutover` (worktree `~/fm-myrme`, local only):
+- formicaria's whole `pixi run ci` is green with Myrme from GitHub at `v0.1.0-rc.1`.
+- Myrme's `FM_CHECKOUT=~/fm-myrme pixi run integration` passes 3/3.
+- `agents/e2e-live.sh` runs the branch's own binaries with a real model on Myrme's runtime.
+- **What is left is the owner's:** merge the branch into `main` for the next release, and run the
+  `android` workflow by hand on it (the phone shell was not compiled here; this machine has no
+  NDK).
 
 1. Tag Myrme (`v0.1.0`), with the contract test and integration test green against formicaria
    `main`.

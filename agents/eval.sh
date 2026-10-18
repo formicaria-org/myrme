@@ -7,6 +7,8 @@
 #
 # The server binary is $LLAMA_SERVER, else agents/runtime/llama-server (pixi run fetch-model puts it
 # there). Port $EVAL_PORT, default 8091. Context 8192, the laptop's window. Nothing is downloaded.
+# $EVAL_MMPROJ names a vision projector to load beside the weights (the image eval needs one);
+# $EVAL_EXTRA adds server flags (e.g. --no-mmproj-offload, as the laptop catalogue entry asks).
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 METHOD="${1:?method}"; GGUF="${2:?gguf path}"; NAME="${3:?model name}"; NGL="${4:-99}"
@@ -15,7 +17,8 @@ PORT="${EVAL_PORT:-8091}"
 [ -x "$BIN" ] || { echo "no llama-server at $BIN (set LLAMA_SERVER)" >&2; exit 1; }
 LOG="$(mktemp)"
 LD_LIBRARY_PATH="$(dirname "$BIN")${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
-  "$BIN" -m "$GGUF" --host 127.0.0.1 --port "$PORT" -c 8192 -ngl "$NGL" --no-warmup >"$LOG" 2>&1 &
+  "$BIN" -m "$GGUF" ${EVAL_MMPROJ:+--mmproj "$EVAL_MMPROJ"} --host 127.0.0.1 --port "$PORT" -c 8192 \
+  -ngl "$NGL" --no-warmup ${EVAL_EXTRA:-} >"$LOG" 2>&1 &
 PID=$!
 trap 'kill $PID 2>/dev/null || true; rm -f "$LOG"' EXIT
 for _ in $(seq 1 180); do

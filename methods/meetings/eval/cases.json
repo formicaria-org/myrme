@@ -25,6 +25,8 @@
         "qwen3-4b-2507/free": "[\n  {\n    \"status\": \"fixed\",\n    \"title\": \"Thesis chapter\",\n    \"date\": \"Thursday\",\n    \"time\": \"3pm\",\n    \"place\": \"B12\"\n  }\n]",
         "qwen3-4b-2507@cpu-builtin/constrained": "[\n  {\n    \"date\": \"Thursday\",\n    \"end\": \"\",\n    \"place\": \"B12\",\n    \"quote\": \"Thursday at 3pm in B12 works for me, see you then.\",\n    \"status\": \"fixed\",\n    \"time\": \"3pm\",\n    \"title\": \"Thesis chapter\"\n  }\n]",
         "qwen3-4b-2507@cpu-llguidance/constrained": "[\n  {\n    \"date\": \"Thursday\",\n    \"end\": \"\",\n    \"place\": \"B12\",\n    \"quote\": \"Thursday at 3pm in B12 works for me, see you then.\",\n    \"status\": \"fixed\",\n    \"time\": \"3pm\",\n    \"title\": \"Thesis chapter\"\n  }\n]",
+        "qwen3-4b-2507@gpu-llguidance/constrained": "[\n  {\n    \"date\": \"Thursday\",\n    \"end\": \"\",\n    \"place\": \"B12\",\n    \"quote\": \"Thursday at 3pm in B12 works for me, see you then.\",\n    \"status\": \"fixed\",\n    \"time\": \"3pm\",\n    \"title\": \"Thesis chapter\"\n  }\n]",
+        "qwen3-4b-2507@gpu-stock/constrained": "[\n  {\n    \"date\": \"Thursday\",\n    \"end\": \"\",\n    \"place\": \"B12\",\n    \"quote\": \"Thursday at 3pm in B12 works for me, see you then.\",\n    \"status\": \"fixed\",\n    \"time\": \"3pm\",\n    \"title\": \"Thesis chapter\"\n  }\n]",
         "qwen3-vl-4b/constrained": "[\n  {\n    \"date\": \"Thursday\",\n    \"end\": \"\",\n    \"place\": \"B12\",\n    \"quote\": \"Thursday at 3pm in B12 works for me, see you then.\",\n    \"status\": \"fixed\",\n    \"time\": \"3pm\",\n    \"title\": \"Thesis chapter — Lena Okafor\"\n  }\n]",
         "qwen3-vl-4b/free": "[\n  {\n    \"status\": \"fixed\",\n    \"quote\": \"Thursday at 3pm in B12 works for me, see you then.\",\n    \"title\": \"Thesis chapter — Lena Okafor\",\n    \"date\": \"Thursday\",\n    \"time\": \"3pm\",\n    \"end\": \"\",\n    \"place\": \"B12\"\n  }\n]"
       },
@@ -55,6 +57,8 @@
         "qwen3-4b-2507/free": "[{\"status\":\"fixed\",\"title\":\"Revisione\",\"date\":\"giovedì\",\"time\":\"15\",\"place\":\"il mio ufficio\",\"quote\":\"ci vediamo giovedì alle 15 nel mio ufficio per la revisione\"}]",
         "qwen3-4b-2507@cpu-builtin/constrained": "[{\"date\":\"giovedì\",\"end\":\"\",\"place\":\"\",\"quote\":\"ci vediamo giovedì alle 15 nel mio ufficio per la revisione.\",\"status\":\"fixed\",\"time\":\"alle 15\",\"title\":\"Revisione\"}]",
         "qwen3-4b-2507@cpu-llguidance/constrained": "[\n  {\n    \"date\": \"giovedì\",\n    \"end\": \"\",\n    \"place\": \"nel mio ufficio\",\n    \"quote\": \"ci vediamo giovedì alle 15 nel mio ufficio per la revisione\",\n    \"status\": \"fixed\",\n    \"time\": \"alle 15\",\n    \"title\": \"Revisione\"\n  }\n]",
+        "qwen3-4b-2507@gpu-llguidance/constrained": "[{\"date\":\"giovedì\",\"end\":\"\",\"place\":\"\",\"quote\":\"ci vediamo giovedì alle 15 nel mio ufficio per la revisione.\",\"status\":\"fixed\",\"time\":\"alle 15\",\"title\":\"Revisione\"}]",
+        "qwen3-4b-2507@gpu-stock/constrained": "[{\"date\":\"giovedì\",\"end\":\"\",\"place\":\"\",\"quote\":\"ci vediamo giovedì alle 15 nel mio ufficio per la revisione.\",\"status\":\"fixed\",\"time\":\"alle 15\",\"title\":\"Revisione\"}]",
         "qwen3-vl-4b/constrained": "[\n  {\n    \"date\": \"giovedì\",\n    \"end\": \"\",\n    \"place\": \"\",\n    \"quote\": \"ci vediamo giovedì alle 15 nel mio ufficio per la revisione\",\n    \"status\": \"fixed\",\n    \"time\": \"alle 15\",\n    \"title\": \"Revisione\"\n  }\n]",
         "qwen3-vl-4b/free": "[\n  {\n    \"status\": \"fixed\",\n    \"quote\": \"ci vediamo giovedì alle 15 nel mio ufficio per la revisione\",\n    \"title\": \"Revisione\",\n    \"date\": \"giovedì\",\n    \"time\": \"alle 15\",\n    \"end\": \"\",\n    \"place\": \"nel mio ufficio\"\n  }\n]"
       },
@@ -85,6 +89,8 @@
         "qwen3-4b-2507/free": "[\n  {\n    \"status\": \"fixed\",\n    \"title\": \"Project sync\",\n    \"date\": \"Friday\",\n    \"time\": \"11am\",\n    \"end\": \"\",\n    \"place\": \"\",\n    \"quote\": \"Friday at 11am is fine.\"\n  }\n]",
         "qwen3-4b-2507@cpu-builtin/constrained": "[\n  {\n    \"date\": \"Wednesday\",\n    \"end\": \"\",\n    \"place\": \"\",\n    \"quote\": \"Friday at 11am is fine.\",\n    \"status\": \"fixed\",\n    \"time\": \"11am\",\n    \"title\": \"Project sync\"\n  }\n]",
         "qwen3-4b-2507@cpu-llguidance/constrained": "[\n  {\n    \"date\": \"Friday\",\n    \"end\": \"11am\",\n    \"place\": \"\",\n    \"quote\": \"Friday at 11am is fine.\",\n    \"status\": \"fixed\",\n    \"time\": \"11am\",\n    \"title\": \"Project sync\"\n  }\n]",
+        "qwen3-4b-2507@gpu-llguidance/constrained": "[\n  {\n    \"date\": \"Friday\",\n    \"end\": \"11am\",\n    \"place\": \"\",\n    \"quote\": \"Friday at 11am is fine.\",\n    \"status\": \"fixed\",\n    \"time\": \"11am\",\n    \"title\": \"Project sync\"\n  }\n]",
+        "qwen3-4b-2507@gpu-stock/constrained": "[\n  {\n    \"date\": \"Wednesday\",\n    \"end\": \"\",\n    \"place\": \"\",\n    \"quote\": \"Friday at 11am is fine.\",\n    \"status\": \"fixed\",\n    \"time\": \"11am\",\n    \"title\": \"Project sync\"\n  }\n]",
         "qwen3-vl-4b/constrained": "[\n  {\n    \"date\": \"Friday\",\n    \"end\": \"\",\n    \"place\": \"\",\n    \"quote\": \"Friday at 11am is fine.\",\n    \"status\": \"fixed\",\n    \"time\": \"11am\",\n    \"title\": \"Project sync\"\n  }\n]",
         "qwen3-vl-4b/free": "[\n  {\n    \"status\": \"fixed\",\n    \"quote\": \"Friday at 11am is fine.\",\n    \"title\": \"Project sync\",\n    \"date\": \"Friday\",\n    \"time\": \"11am\",\n    \"end\": \"\",\n    \"place\": \"\"\n  }\n]"
       },
@@ -115,6 +121,8 @@
         "qwen3-4b-2507/free": "[\n  {\n    \"status\": \"cancelled\",\n    \"quote\": \"I'm afraid I have to cancel our call on Thursday, I'm unwell.\",\n    \"title\": \"Weekly call\",\n    \"date\": \"Thursday\",\n    \"time\": \"\",\n    \"end\": \"\",\n    \"place\": \"\"\n  }\n]",
         "qwen3-4b-2507@cpu-builtin/constrained": "[\n  {\n    \"date\": \"Thursday\",\n    \"end\": \"\",\n    \"place\": \"\",\n    \"quote\": \"I'm afraid I have to cancel our call on Thursday, I'm unwell.\",\n    \"status\": \"cancelled\",\n    \"time\": \"2pm\",\n    \"title\": \"Weekly call\"\n  }\n]",
         "qwen3-4b-2507@cpu-llguidance/constrained": "[\n  {\n    \"date\": \"Thursday\",\n    \"end\": \"\",\n    \"place\": \"\",\n    \"quote\": \"I'm afraid I have to cancel our call on Thursday, I'm unwell.\",\n    \"status\": \"cancelled\",\n    \"time\": \"2pm\",\n    \"title\": \"Weekly call\"\n  }\n]",
+        "qwen3-4b-2507@gpu-llguidance/constrained": "[\n  {\n    \"date\": \"Thursday\",\n    \"end\": \"\",\n    \"place\": \"\",\n    \"quote\": \"I'm afraid I have to cancel our call on Thursday, I'm unwell.\",\n    \"status\": \"cancelled\",\n    \"time\": \"\",\n    \"title\": \"Weekly call\"\n  }\n]",
+        "qwen3-4b-2507@gpu-stock/constrained": "[\n  {\n    \"date\": \"Thursday\",\n    \"end\": \"\",\n    \"place\": \"\",\n    \"quote\": \"I'm afraid I have to cancel our call on Thursday, I'm unwell.\",\n    \"status\": \"cancelled\",\n    \"time\": \"\",\n    \"title\": \"Weekly call\"\n  }\n]",
         "qwen3-vl-4b/constrained": "[\n  {\n    \"date\": \"Thursday\",\n    \"end\": \"\",\n    \"place\": \"\",\n    \"quote\": \"I'm afraid I have to cancel our call on Thursday, I'm unwell.\",\n    \"status\": \"cancelled\",\n    \"time\": \"2pm\",\n    \"title\": \"Weekly call — Iris Novak\"\n  }\n]",
         "qwen3-vl-4b/free": "[\n  {\n    \"status\": \"cancelled\",\n    \"quote\": \"I'm afraid I have to cancel our call on Thursday, I'm unwell.\",\n    \"title\": \"Weekly call — Iris Novak\",\n    \"date\": \"Thursday\",\n    \"time\": \"2pm\",\n    \"end\": \"\",\n    \"place\": \"\"\n  }\n]"
       },
@@ -145,6 +153,8 @@
         "qwen3-4b-2507/free": "[\n  {\n    \"status\": \"fixed\",\n    \"title\": \"lab visit\",\n    \"date\": \"Monday\",\n    \"time\": \"9:30\",\n    \"end\": \"\",\n    \"place\": \"\",\n    \"quote\": \"Let's do the lab visit on Monday at 9:30 instead.\"\n  }\n]",
         "qwen3-4b-2507@cpu-builtin/constrained": "[\n  {\n    \"date\": \"Monday\",\n    \"end\": \"\",\n    \"place\": \"\",\n    \"quote\": \"Let's do the lab visit on Monday at 9:30 instead.\",\n    \"status\": \"fixed\",\n    \"time\": \"9:30\",\n    \"title\": \"lab visit\"\n  }\n]",
         "qwen3-4b-2507@cpu-llguidance/constrained": "[\n  {\n    \"date\": \"Monday\",\n    \"end\": \"\",\n    \"place\": \"\",\n    \"quote\": \"Let's do the lab visit on Monday at 9:30 instead.\",\n    \"status\": \"fixed\",\n    \"time\": \"9:30\",\n    \"title\": \"lab visit\"\n  }\n]",
+        "qwen3-4b-2507@gpu-llguidance/constrained": "[\n  {\n    \"date\": \"Monday\",\n    \"end\": \"\",\n    \"place\": \"\",\n    \"quote\": \"Let's do the lab visit on Monday at 9:30 instead.\",\n    \"status\": \"fixed\",\n    \"time\": \"9:30\",\n    \"title\": \"lab visit\"\n  }\n]",
+        "qwen3-4b-2507@gpu-stock/constrained": "[\n  {\n    \"date\": \"Monday\",\n    \"end\": \"\",\n    \"place\": \"\",\n    \"quote\": \"Let's do the lab visit on Monday at 9:30 instead.\",\n    \"status\": \"fixed\",\n    \"time\": \"9:30\",\n    \"title\": \"lab visit\"\n  }\n]",
         "qwen3-vl-4b/constrained": "[\n  {\n    \"date\": \"2026-10-14\",\n    \"end\": \"\",\n    \"place\": \"\",\n    \"quote\": \"Let's do the lab visit on Monday at 9:30 instead.\",\n    \"status\": \"fixed\",\n    \"time\": \"9:30\",\n    \"title\": \"lab visit\"\n  }\n]",
         "qwen3-vl-4b/free": "[\n  {\n    \"status\": \"fixed\",\n    \"quote\": \"Let's do the lab visit on Monday at 9:30 instead.\",\n    \"title\": \"Lab visit\",\n    \"date\": \"Monday\",\n    \"time\": \"9:30\",\n    \"end\": \"\",\n    \"place\": \"\"\n  }\n]"
       },
@@ -163,6 +173,8 @@
         "qwen3-4b-2507/free": "[]",
         "qwen3-4b-2507@cpu-builtin/constrained": "[]",
         "qwen3-4b-2507@cpu-llguidance/constrained": "[]",
+        "qwen3-4b-2507@gpu-llguidance/constrained": "[]",
+        "qwen3-4b-2507@gpu-stock/constrained": "[]",
         "qwen3-vl-4b/constrained": "[{\"date\":\"\",\"end\":\"\",\"place\":\"\",\"quote\":\"\",\"status\":\"fixed\",\"time\":\"\",\"title\":\"Seminar slides — Pia Lund\"}]",
         "qwen3-vl-4b/free": "[{\"status\": \"fixed\", \"quote\": \"here are the slides from last week's seminar. Thanks for the questions!\", \"title\": \"Seminar slides\", \"date\": \"last week\", \"time\": \"\", \"end\": \"\", \"place\": \"\"}]"
       },
@@ -181,6 +193,8 @@
         "qwen3-4b-2507/free": "[]",
         "qwen3-4b-2507@cpu-builtin/constrained": "[]",
         "qwen3-4b-2507@cpu-llguidance/constrained": "[]",
+        "qwen3-4b-2507@gpu-llguidance/constrained": "[]",
+        "qwen3-4b-2507@gpu-stock/constrained": "[]",
         "qwen3-vl-4b/constrained": "[{\"date\":\"Thursday\",\"end\":\"\",\"place\":\"\",\"quote\":\"Would Thursday or Friday afternoon work for a coffee?\",\"status\":\"fixed\",\"time\":\"\",\"title\":\"Coffee\"}]",
         "qwen3-vl-4b/free": "[{\"status\": \"fixed\", \"quote\": \"Would Thursday or Friday afternoon work for a coffee?\", \"title\": \"Coffee\", \"date\": \"Thursday or Friday afternoon\", \"time\": \"\", \"end\": \"\", \"place\": \"\"}]"
       },
@@ -211,6 +225,8 @@
         "qwen3-4b-2507/free": "[{\"status\":\"fixed\",\"title\":\"Review call\",\"date\":\"Friday\",\"time\":\"16:00\",\"place\":\"https://meet.example.org/abc-defg-hij\"}]",
         "qwen3-4b-2507@cpu-builtin/constrained": "[{\"date\":\"Friday\",\"end\":\"\",\"place\":\"https://meet.example.org/abc-defg-hij\",\"quote\":\"Let's meet on Friday at 16:00 on https://meet.example.org/abc-defg-hij for the review.\",\"status\":\"fixed\",\"time\":\"16:00\",\"title\":\"Review call\"}]",
         "qwen3-4b-2507@cpu-llguidance/constrained": "[{\"date\":\"Friday\",\"end\":\"\",\"place\":\"https://meet.example.org/abc-defg-hij\",\"quote\":\"Let's meet on Friday at 16:00 on https://meet.example.org/abc-defg-hij for the review.\",\"status\":\"fixed\",\"time\":\"16:00\",\"title\":\"Review call\"}]",
+        "qwen3-4b-2507@gpu-llguidance/constrained": "[{\"date\":\"Friday\",\"end\":\"\",\"place\":\"https://meet.example.org/abc-defg-hij\",\"quote\":\"Let's meet on Friday at 16:00 on https://meet.example.org/abc-defg-hij for the review.\",\"status\":\"fixed\",\"time\":\"16:00\",\"title\":\"Review call\"}]",
+        "qwen3-4b-2507@gpu-stock/constrained": "[{\"date\":\"Friday\",\"end\":\"\",\"place\":\"https://meet.example.org/abc-defg-hij\",\"quote\":\"Let's meet on Friday at 16:00 on https://meet.example.org/abc-defg-hij for the review.\",\"status\":\"fixed\",\"time\":\"16:00\",\"title\":\"Review call\"}]",
         "qwen3-vl-4b/constrained": "[\n  {\n    \"date\": \"Friday\",\n    \"end\": \"\",\n    \"place\": \"https://meet.example.org/abc-defg-hij\",\n    \"quote\": \"Let's meet on Friday at 16:00 on https://meet.example.org/abc-defg-hij for the review.\",\n    \"status\": \"fixed\",\n    \"time\": \"16:00\",\n    \"title\": \"Review call\"\n  }\n]",
         "qwen3-vl-4b/free": "[\n  {\n    \"status\": \"fixed\",\n    \"quote\": \"Let's meet on Friday at 16:00 on https://meet.example.org/abc-defg-hij for the review.\",\n    \"title\": \"Review call\",\n    \"date\": \"Friday\",\n    \"time\": \"16:00\",\n    \"end\": \"\",\n    \"place\": \"https://meet.example.org/abc-defg-hij\"\n  }\n]"
       },
@@ -241,6 +257,8 @@
         "qwen3-4b-2507/free": "[{\"status\":\"fixed\",\"title\":\"lunch\",\"date\":\"the 20th\",\"time\":\"12:30\",\"end\":\"\",\"place\":\"\"}]",
         "qwen3-4b-2507@cpu-builtin/constrained": "[{\"date\":\"2020-20th\",\"end\":\"\",\"place\":\"\",\"quote\":\"I'll be in town on the 20th. Let's have lunch that day at 12:30.\",\"status\":\"fixed\",\"time\":\"12:30\",\"title\":\"lunch\"}]",
         "qwen3-4b-2507@cpu-llguidance/constrained": "[{\"date\":\"the 20th\",\"end\":\"\",\"place\":\"\",\"quote\":\"I'll be in town on the 20th. Let's have lunch that day at 12:30.\",\"status\":\"fixed\",\"time\":\"12:30\",\"title\":\"lunch\"}]",
+        "qwen3-4b-2507@gpu-llguidance/constrained": "[{\"date\":\"2026-10-20\",\"end\":\"\",\"place\":\"\",\"quote\":\"I'll be in town on the 20th. Let's have lunch that day at 12:30.\",\"status\":\"fixed\",\"time\":\"12:30\",\"title\":\"lunch\"}]",
+        "qwen3-4b-2507@gpu-stock/constrained": "[{\"date\":\"2026-10-20\",\"end\":\"\",\"place\":\"\",\"quote\":\"I'll be in town on the 20th. Let's have lunch that day at 12:30.\",\"status\":\"fixed\",\"time\":\"12:30\",\"title\":\"lunch\"}]",
         "qwen3-vl-4b/constrained": "[\n  {\n    \"date\": \"20th\",\n    \"end\": \"\",\n    \"place\": \"\",\n    \"quote\": \"I'll be in town on the 20th. Let's have lunch that day at 12:30.\",\n    \"status\": \"fixed\",\n    \"time\": \"12:30\",\n    \"title\": \"Lunch with Ana Ruiz\"\n  }\n]",
         "qwen3-vl-4b/free": "[\n  {\n    \"status\": \"fixed\",\n    \"quote\": \"I'll be in town on the 20th. Let's have lunch that day at 12:30.\",\n    \"title\": \"Lunch\",\n    \"date\": \"the 20th\",\n    \"time\": \"12:30\",\n    \"end\": \"\",\n    \"place\": \"\"\n  }\n]"
       },
@@ -281,6 +299,8 @@
         "qwen3-4b-2507/free": "[{\"status\":\"fixed\",\"title\":\"kick-off\",\"date\":\"Monday\",\"time\":\"10am\",\"end\":\"\",\"place\":\"\"},{\"status\":\"fixed\",\"title\":\"review\",\"date\":\"Friday\",\"time\":\"2pm\",\"end\":\"\",\"place\":\"\"}]",
         "qwen3-4b-2507@cpu-builtin/constrained": "[{\"date\":\"Monday\",\"end\":\"\",\"place\":\"\",\"quote\":\"The kick-off is on Monday at 10am. The review will be on Friday at 2pm.\",\"status\":\"fixed\",\"time\":\"10am\",\"title\":\"kick-off\"},{\"date\":\"Friday\",\"end\":\"\",\"place\":\"\",\"quote\":\"The kick-off is on Monday at 10am. The review will be on Friday at 2pm.\",\"status\":\"fixed\",\"time\":\"2pm\",\"title\":\"review\"}]",
         "qwen3-4b-2507@cpu-llguidance/constrained": "[{\"date\":\"Monday\",\"end\":\"\",\"place\":\"\",\"quote\":\"The kick-off is on Monday at 10am. The review will be on Friday at 2pm.\",\"status\":\"fixed\",\"time\":\"10am\",\"title\":\"kick-off\"},{\"date\":\"Friday\",\"end\":\"\",\"place\":\"\",\"quote\":\"The kick-off is on Monday at 10am. The review will be on Friday at 2pm.\",\"status\":\"fixed\",\"time\":\"2pm\",\"title\":\"review\"}]",
+        "qwen3-4b-2507@gpu-llguidance/constrained": "[{\"date\":\"Monday\",\"end\":\"\",\"place\":\"\",\"quote\":\"The kick-off is on Monday at 10am. The review will be on Friday at 2pm.\",\"status\":\"fixed\",\"time\":\"10am\",\"title\":\"kick-off\"},{\"date\":\"Friday\",\"end\":\"\",\"place\":\"\",\"quote\":\"The kick-off is on Monday at 10am. The review will be on Friday at 2pm.\",\"status\":\"fixed\",\"time\":\"2pm\",\"title\":\"review\"}]",
+        "qwen3-4b-2507@gpu-stock/constrained": "[{\"date\":\"Monday\",\"end\":\"\",\"place\":\"\",\"quote\":\"The kick-off is on Monday at 10am. The review will be on Friday at 2pm.\",\"status\":\"fixed\",\"time\":\"10am\",\"title\":\"kick-off\"},{\"date\":\"Friday\",\"end\":\"\",\"place\":\"\",\"quote\":\"The kick-off is on Monday at 10am. The review will be on Friday at 2pm.\",\"status\":\"fixed\",\"time\":\"2pm\",\"title\":\"review\"}]",
         "qwen3-vl-4b/constrained": "[\n  {\n    \"date\": \"Monday\",\n    \"end\": \"2pm\",\n    \"place\": \"\",\n    \"quote\": \"The kick-off is on Monday at 10am. The review will be on Friday at 2pm.\",\n    \"status\": \"fixed\",\n    \"time\": \"10am\",\n    \"title\": \"Kick-off and Review\"\n  }\n]",
         "qwen3-vl-4b/free": "[\n  {\n    \"status\": \"fixed\",\n    \"quote\": \"The kick-off is on Monday at 10am. The review will be on Friday at 2pm.\",\n    \"title\": \"Kick-off\",\n    \"date\": \"Monday\",\n    \"time\": \"10am\",\n    \"end\": \"\",\n    \"place\": \"\"\n  },\n  {\n    \"status\": \"fixed\",\n    \"quote\": \"The kick-off is on Monday at 10am. The review will be on Friday at 2pm.\",\n    \"title\": \"Review\",\n    \"date\": \"Friday\",\n    \"time\": \"2pm\",\n    \"end\": \"\",\n    \"place\": \"\"\n  }\n]"
       },
@@ -309,6 +329,8 @@
         "qwen3-4b-2507/free": "[{\"status\":\"fixed\",\"title\":\"Catch-up\",\"date\":\"Tuesday\",\"time\":\"11am\",\"end\":\"\",\"place\":\"\"}]",
         "qwen3-4b-2507@cpu-builtin/constrained": "[{\"date\":\"Tuesday\",\"end\":\"\",\"place\":\"\",\"quote\":\"See you on Tuesday at 11am.\",\"status\":\"fixed\",\"time\":\"11am\",\"title\":\"Catch-up\"}]",
         "qwen3-4b-2507@cpu-llguidance/constrained": "[{\"date\":\"Tuesday\",\"end\":\"\",\"place\":\"\",\"quote\":\"See you on Tuesday at 11am.\",\"status\":\"fixed\",\"time\":\"11am\",\"title\":\"Catch-up\"}]",
+        "qwen3-4b-2507@gpu-llguidance/constrained": "[{\"date\":\"Tuesday\",\"end\":\"\",\"place\":\"\",\"quote\":\"See you on Tuesday at 11am.\",\"status\":\"fixed\",\"time\":\"11am\",\"title\":\"Catch-up\"}]",
+        "qwen3-4b-2507@gpu-stock/constrained": "[{\"date\":\"Tuesday\",\"end\":\"\",\"place\":\"\",\"quote\":\"See you on Tuesday at 11am.\",\"status\":\"fixed\",\"time\":\"11am\",\"title\":\"Catch-up\"}]",
         "qwen3-vl-4b/constrained": "[\n  {\n    \"date\": \"Tuesday\",\n    \"end\": \"\",\n    \"place\": \"\",\n    \"quote\": \"See you on Tuesday at 11am.\",\n    \"status\": \"fixed\",\n    \"time\": \"11am\",\n    \"title\": \"Catch-up — Leo Grant\"\n  }\n]",
         "qwen3-vl-4b/free": "[\n  {\n    \"status\": \"fixed\",\n    \"quote\": \"See you on Tuesday at 11am.\",\n    \"title\": \"Catch-up — Leo Grant\",\n    \"date\": \"Tuesday\",\n    \"time\": \"11am\",\n    \"end\": \"\",\n    \"place\": \"\"\n  }\n]"
       },
@@ -339,6 +361,8 @@
         "qwen3-4b-2507/free": "[\n  {\n    \"status\": \"fixed\",\n    \"title\": \"Riunione di gruppo\",\n    \"date\": \"venerdì\",\n    \"time\": \"10:30\",\n    \"place\": \"\"\n  }\n]",
         "qwen3-4b-2507@cpu-builtin/constrained": "[\n  {\n    \"date\": \"venerdì\",\n    \"end\": \"10:30\",\n    \"place\": \"\",\n    \"quote\": \"Spostiamo la riunione a venerdì alle 10:30, mercoledì non riesco.\",\n    \"status\": \"fixed\",\n    \"time\": \"10:30\",\n    \"title\": \"Riunione di gruppo\"\n  }\n]",
         "qwen3-4b-2507@cpu-llguidance/constrained": "[\n  {\n    \"date\": \"venerdì\",\n    \"end\": \"10:30\",\n    \"place\": \"\",\n    \"quote\": \"Spostiamo la riunione a venerdì alle 10:30, mercoledì non riesco.\",\n    \"status\": \"fixed\",\n    \"time\": \"10:30\",\n    \"title\": \"Riunione di gruppo\"\n  }\n]",
+        "qwen3-4b-2507@gpu-llguidance/constrained": "[\n  {\n    \"date\": \"venerdì\",\n    \"end\": \"10:30\",\n    \"place\": \"\",\n    \"quote\": \"Spostiamo la riunione a venerdì alle 10:30, mercoledì non riesco.\",\n    \"status\": \"fixed\",\n    \"time\": \"10:30\",\n    \"title\": \"Riunione di gruppo\"\n  }\n]",
+        "qwen3-4b-2507@gpu-stock/constrained": "[\n  {\n    \"date\": \"venerdì\",\n    \"end\": \"10:30\",\n    \"place\": \"\",\n    \"quote\": \"Spostiamo la riunione a venerdì alle 10:30, mercoledì non riesco.\",\n    \"status\": \"fixed\",\n    \"time\": \"10:30\",\n    \"title\": \"Riunione di gruppo\"\n  }\n]",
         "qwen3-vl-4b/constrained": "[\n  {\n    \"date\": \"venerdì\",\n    \"end\": \"\",\n    \"place\": \"\",\n    \"quote\": \"Spostiamo la riunione a venerdì alle 10:30, mercoledì non riesco.\",\n    \"status\": \"fixed\",\n    \"time\": \"alle 10:30\",\n    \"title\": \"Riunione di gruppo — Sara Conti\"\n  }\n]",
         "qwen3-vl-4b/free": "[\n  {\n    \"status\": \"fixed\",\n    \"quote\": \"Spostiamo la riunione a venerdì alle 10:30, mercoledì non riesco.\",\n    \"title\": \"Riunione di gruppo — Sara Conti\",\n    \"date\": \"venerdì\",\n    \"time\": \"10:30\",\n    \"end\": \"\",\n    \"place\": \"\"\n  }\n]"
       },
@@ -357,6 +381,8 @@
         "qwen3-4b-2507/free": "[]",
         "qwen3-4b-2507@cpu-builtin/constrained": "[]",
         "qwen3-4b-2507@cpu-llguidance/constrained": "[]",
+        "qwen3-4b-2507@gpu-llguidance/constrained": "[]",
+        "qwen3-4b-2507@gpu-stock/constrained": "[]",
         "qwen3-vl-4b/constrained": "[{\"date\":\"\",\"end\":\"\",\"place\":\"\",\"quote\":\"\",\"status\":\"fixed\",\"time\":\"\",\"title\":\"Report Deadline Reminder\"}]",
         "qwen3-vl-4b/free": "[{\"status\": \"fixed\", \"quote\": \"Reminder: the deadline for the report is Friday at 5pm. Please upload it to the shared folder.\", \"title\": \"Report Deadline\", \"date\": \"Friday\", \"time\": \"5pm\", \"end\": \"\", \"place\": \"\"}]"
       },
@@ -387,6 +413,8 @@
         "qwen3-4b-2507/free": "[{\"status\":\"fixed\",\"title\":\"Workshop\",\"date\":\"Thursday\",\"time\":\"9am\",\"end\":\"12pm\",\"place\":\"main hall\"}]",
         "qwen3-4b-2507@cpu-builtin/constrained": "[{\"date\":\"Thursday\",\"end\":\"12pm\",\"place\":\"main hall\",\"quote\":\"The workshop is confirmed for Thursday from 9am to 12pm in the main hall.\",\"status\":\"fixed\",\"time\":\"9am\",\"title\":\"Workshop\"}]",
         "qwen3-4b-2507@cpu-llguidance/constrained": "[{\"date\":\"Thursday\",\"end\":\"12pm\",\"place\":\"main hall\",\"quote\":\"The workshop is confirmed for Thursday from 9am to 12pm in the main hall.\",\"status\":\"fixed\",\"time\":\"9am\",\"title\":\"Workshop\"}]",
+        "qwen3-4b-2507@gpu-llguidance/constrained": "[{\"date\":\"Thursday\",\"end\":\"12pm\",\"place\":\"main hall\",\"quote\":\"The workshop is confirmed for Thursday from 9am to 12pm in the main hall.\",\"status\":\"fixed\",\"time\":\"9am\",\"title\":\"Workshop\"}]",
+        "qwen3-4b-2507@gpu-stock/constrained": "[{\"date\":\"Thursday\",\"end\":\"12pm\",\"place\":\"main hall\",\"quote\":\"The workshop is confirmed for Thursday from 9am to 12pm in the main hall.\",\"status\":\"fixed\",\"time\":\"9am\",\"title\":\"Workshop\"}]",
         "qwen3-vl-4b/constrained": "[{\"date\":\"Thursday\",\"end\":\"12pm\",\"place\":\"main hall\",\"quote\":\"The workshop is confirmed for Thursday from 9am to 12pm in the main hall.\",\"status\":\"fixed\",\"time\":\"9am\",\"title\":\"Workshop — Rui Costa\"}]",
         "qwen3-vl-4b/free": "[{\"status\":\"fixed\",\"quote\":\"The workshop is confirmed for Thursday from 9am to 12pm in the main hall.\",\"title\":\"Workshop — Rui Costa\",\"date\":\"Thursday\",\"time\":\"9am\",\"end\":\"12pm\",\"place\":\"the main hall\"}]"
       },
@@ -417,6 +445,8 @@
         "qwen3-4b-2507/free": "[\n  {\n    \"status\": \"fixed\",\n    \"title\": \"Data review\",\n    \"date\": \"Thursday\",\n    \"time\": \"3pm\",\n    \"place\": \"\"\n  }\n]",
         "qwen3-4b-2507@cpu-builtin/constrained": "[\n  {\n    \"date\": \"Thursday\",\n    \"end\": \"\",\n    \"place\": \"\",\n    \"quote\": \"Can we meet on Thursday at 3pm to look at the data?\",\n    \"status\": \"fixed\",\n    \"time\": \"3pm\",\n    \"title\": \"Data review\"\n  }\n]",
         "qwen3-4b-2507@cpu-llguidance/constrained": "[\n  {\n    \"date\": \"Thursday\",\n    \"end\": \"\",\n    \"place\": \"\",\n    \"quote\": \"Can we meet on Thursday at 3pm to look at the data?\",\n    \"status\": \"fixed\",\n    \"time\": \"3pm\",\n    \"title\": \"Data review\"\n  }\n]",
+        "qwen3-4b-2507@gpu-llguidance/constrained": "[\n  {\n    \"date\": \"Thursday\",\n    \"end\": \"\",\n    \"place\": \"\",\n    \"quote\": \"Can we meet on Thursday at 3pm to look at the data?\",\n    \"status\": \"fixed\",\n    \"time\": \"3pm\",\n    \"title\": \"Data review\"\n  }\n]",
+        "qwen3-4b-2507@gpu-stock/constrained": "[\n  {\n    \"date\": \"Thursday\",\n    \"end\": \"\",\n    \"place\": \"\",\n    \"quote\": \"Can we meet on Thursday at 3pm to look at the data?\",\n    \"status\": \"fixed\",\n    \"time\": \"3pm\",\n    \"title\": \"Data review\"\n  }\n]",
         "qwen3-vl-4b/constrained": "[\n  {\n    \"date\": \"Thursday\",\n    \"end\": \"3pm\",\n    \"place\": \"\",\n    \"quote\": \"Can we meet on Thursday at 3pm to look at the data?\",\n    \"status\": \"fixed\",\n    \"time\": \"3pm\",\n    \"title\": \"Data review — Kim Laine\"\n  }\n]",
         "qwen3-vl-4b/free": "[\n  {\n    \"status\": \"fixed\",\n    \"quote\": \"Can we meet on Thursday at 3pm to look at the data?\",\n    \"title\": \"Data review\",\n    \"date\": \"Thursday\",\n    \"time\": \"3pm\",\n    \"end\": \"\",\n    \"place\": \"\"\n  }\n]"
       },
@@ -435,6 +465,8 @@
         "qwen3-4b-2507/free": "[]",
         "qwen3-4b-2507@cpu-builtin/constrained": "[]",
         "qwen3-4b-2507@cpu-llguidance/constrained": "[{\"date\":\"Thursday\",\"end\":\"\",\"place\":\"\",\"quote\":\"Sorry, Thursday doesn't work for me, I'm travelling.\",\"status\":\"cancelled\",\"time\":\"\",\"title\":\"Data review\"}]",
+        "qwen3-4b-2507@gpu-llguidance/constrained": "[]",
+        "qwen3-4b-2507@gpu-stock/constrained": "[]",
         "qwen3-vl-4b/constrained": "[{\"date\":\"\",\"end\":\"\",\"place\":\"\",\"quote\":\"Sorry, Thursday doesn't work for me, I'm travelling.\",\"status\":\"cancelled\",\"time\":\"\",\"title\":\"Data review — Kim Laine\"}]",
         "qwen3-vl-4b/free": "[{\"status\":\"cancelled\",\"quote\":\"Sorry, Thursday doesn't work for me, I'm travelling.\",\"title\":\"Data review — Kim Laine\",\"date\":\"Thursday\",\"time\":\"3pm\",\"end\":\"\",\"place\":\"\"}]"
       },
@@ -463,6 +495,8 @@
         "qwen3-4b-2507/free": "[{\"status\":\"fixed\",\"title\":\"Data review\",\"date\":\"Thursday\",\"time\":\"3pm\",\"end\":\"\",\"place\":\"\"}]",
         "qwen3-4b-2507@cpu-builtin/constrained": "[{\"date\":\"Thursday\",\"end\":\"\",\"place\":\"\",\"quote\":\"Can we meet on Thursday at 3pm to look at the data?\",\"status\":\"fixed\",\"time\":\"3pm\",\"title\":\"Data review\"}]",
         "qwen3-4b-2507@cpu-llguidance/constrained": "[{\"date\":\"Thursday\",\"end\":\"\",\"place\":\"\",\"quote\":\"Can we meet on Thursday at 3pm to look at the data?\",\"status\":\"fixed\",\"time\":\"3pm\",\"title\":\"Data review\"}]",
+        "qwen3-4b-2507@gpu-llguidance/constrained": "[{\"date\":\"Thursday\",\"end\":\"\",\"place\":\"\",\"quote\":\"Can we meet on Thursday at 3pm to look at the data?\",\"status\":\"fixed\",\"time\":\"3pm\",\"title\":\"Data review\"}]",
+        "qwen3-4b-2507@gpu-stock/constrained": "[{\"date\":\"Thursday\",\"end\":\"\",\"place\":\"\",\"quote\":\"Can we meet on Thursday at 3pm to look at the data?\",\"status\":\"fixed\",\"time\":\"3pm\",\"title\":\"Data review\"}]",
         "qwen3-vl-4b/constrained": "[\n  {\n    \"date\": \"Thursday\",\n    \"end\": \"3pm\",\n    \"place\": \"\",\n    \"quote\": \"Can we meet on Thursday at 3pm to look at the data?\",\n    \"status\": \"fixed\",\n    \"time\": \"3pm\",\n    \"title\": \"Data review — Kim Laine\"\n  }\n]",
         "qwen3-vl-4b/free": "[\n  {\n    \"status\": \"fixed\",\n    \"quote\": \"Can we meet on Thursday at 3pm to look at the data?\",\n    \"title\": \"Data review\",\n    \"date\": \"Thursday\",\n    \"time\": \"3pm\",\n    \"end\": \"\",\n    \"place\": \"\"\n  }\n]"
       },
