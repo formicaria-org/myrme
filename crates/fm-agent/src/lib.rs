@@ -21,12 +21,18 @@
 
 pub mod adjunct;
 pub mod convo;
+/// M5: a note edit as anchored edits Rust applies to the whole note.
+pub mod edits;
+/// Scoring a method against its golden cases (`methods/<name>/eval/`).
+pub mod eval;
 pub mod grounding;
 pub mod http;
 pub mod imagetext;
 pub mod launch;
 /// Meetings found in an email exchange: the model quotes, Rust checks the quote and reads the date.
 pub mod meetings;
+/// The dedicated tasks, as one closed list (`methods/<name>/`).
+pub mod method;
 pub mod openai;
 pub mod preflight;
 pub mod prompts;
@@ -44,12 +50,13 @@ pub const PROPOSAL_ACK: &str =
     "I've proposed an edit to this note — review and merge it in the Collaboration view.";
 
 /// One conversational turn's output: a chat `reply` to post to the discussion, and — when `/propose`
-/// was asked — a `proposal` body for the host note. The orchestrator owns the LLM calls that make it;
-/// the caller (a store-aware runner) does the I/O (post the reply, create the proposal).
+/// was asked — the `edits` to make to the host note. The orchestrator owns the LLM calls that make
+/// it; the caller (a store-aware runner) does the I/O: it applies the edits to the **whole** note
+/// ([`edits::apply`]), which the model saw only part of, and creates the proposal.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Turn {
     pub reply: Option<String>,
-    pub proposal: Option<String>,
+    pub edits: Option<Vec<edits::Edit>>,
 }
 
 /// A well-defined error from a pipeline step. Deliberately opaque (a message): the orchestrator does
@@ -100,6 +107,24 @@ impl LlmResponse {
 /// use a fake.
 pub trait LlmStep {
     fn complete(&self, system: &str, user: &str) -> Result<LlmResponse, AgentError>;
+
+    /// The same call, with the answer **held to a JSON Schema** while it is generated, so a small
+    /// model cannot answer in a shape the caller cannot read (research, 2026-10-18: constrained
+    /// decoding always parses and costs no accuracy, `docs/research/`). The model still only points;
+    /// the caller still checks every value.
+    ///
+    /// The default ignores the schema and calls [`LlmStep::complete`], so a step that cannot
+    /// constrain (a test fake, a server without grammar support) still works and the caller's own
+    /// tolerant parsing stays the backstop.
+    fn complete_constrained(
+        &self,
+        system: &str,
+        user: &str,
+        schema: &serde_json::Value,
+    ) -> Result<LlmResponse, AgentError> {
+        let _ = schema;
+        self.complete(system, user)
+    }
 }
 
 /// The web seam: a **text-only** search+fetch the *orchestrator* runs — the model never calls it.
@@ -290,16 +315,27 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
     ) -> Result<Turn, AgentError> {
         let ctx = assemble_turn_context(history, context);
 
-        // A proposal edit to the host note, when asked — reuses the house-format write step.
-        let proposal = if intent.propose {
+        // The edits to propose, when asked: what to change, pointing at the note's own words, held
+        // to the edits schema (`edits`). Math in the new text gets the note's delimiters.
+        let edits = if intent.propose {
             let user = format!("{ctx}\n\n{}\n{}", heading::TASK, intent.ask.trim());
-            let resp = self.llm.complete(prompts::OUTPUT_FORMAT_INSTRUCTION, &user)?;
+            let resp = self.llm.complete_constrained(
+                prompts::EDITS_INSTRUCTION,
+                &user,
+                &edits::answer_schema(),
+            )?;
             if resp.truncated() {
                 return Err(AgentError::new(
-                    "the proposed note was cut off at the token limit — raise max_tokens",
+                    "the proposed edits were cut off at the token limit — ask for a smaller change",
                 ));
             }
-            Some(strip_wrapping_fence(&resp.content))
+            let mut list = edits::parse(&resp.content).ok_or_else(|| {
+                AgentError::new("the model did not answer with edits — try rephrasing the request")
+            })?;
+            for e in &mut list {
+                e.new = normalize_math(&e.new);
+            }
+            Some(list)
         } else {
             None
         };
@@ -313,7 +349,7 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
         // parrots back. The only post-processing is the length cap (the "never berserk" safety bound);
         // the reply is otherwise the model's own words. Earlier heavy orchestration (cross-note RAG +
         // echo-stripping) made a 230M model reply with leaked context, so it was removed.
-        let reply = if proposal.is_some() {
+        let reply = if edits.is_some() {
             PROPOSAL_ACK.to_string()
         } else {
             let mut user = String::new();
@@ -334,23 +370,8 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
             normalize_answer(&resp.content, max_reply_chars)
         };
 
-        Ok(Turn { reply: Some(reply), proposal })
+        Ok(Turn { reply: Some(reply), edits })
     }
-}
-
-/// Strip a single fence that wraps the *entire* answer (```` ```markdown … ``` ````) — a common
-/// small-model tic. Leaves genuine inner code blocks alone; only unwraps when the whole thing is one
-/// fence. Free function so it is trivially tested.
-fn strip_wrapping_fence(s: &str) -> String {
-    let t = s.trim();
-    if let Some(rest) = t.strip_prefix("```") {
-        if let Some((_lang, body)) = rest.split_once('\n') {
-            if let Some(inner) = body.trim_end().strip_suffix("```") {
-                return inner.trim().to_string();
-            }
-        }
-    }
-    t.to_string()
 }
 
 /// The section headings the proposal/context assemblers inject into a prompt. Defined **once** so a
@@ -482,20 +503,6 @@ mod tests {
     }
 
     #[test]
-    fn a_wrapping_code_fence_is_stripped_but_inner_blocks_survive() {
-        let web = FakeWeb { hits: vec![], seen: RefCell::new(Vec::new()) };
-        let agent =
-            StudyAssistant::new(FakeLlm::new(&["```markdown\n# Title\n\n- a\n- b\n```"]), web);
-        let turn = agent.turn("", &propose("tidy this"), &[], None).unwrap();
-        assert_eq!(turn.proposal.as_deref(), Some("# Title\n\n- a\n- b"));
-        // A body with a genuine inner code block, not a wrapping fence, is left intact.
-        assert_eq!(
-            super::strip_wrapping_fence("see this:\n```rust\nfn x(){}\n```"),
-            "see this:\n```rust\nfn x(){}\n```"
-        );
-    }
-
-    #[test]
     fn normalize_answer_fixes_math_and_caps_only() {
         // No echo-stripping — a reply that mentions the question, or has headings, is shown as-is.
         assert_eq!(super::normalize_answer("2 + 2 = 4.", None), "2 + 2 = 4.");
@@ -529,7 +536,7 @@ mod tests {
         let ctx = [InputDoc { label: "note".into(), text: "the note body".into() }];
         let turn = agent.turn("earlier: hi", &intent, &ctx, Some(200)).unwrap();
         assert_eq!(turn.reply.as_deref(), Some("Here is the answer."));
-        assert!(turn.proposal.is_none());
+        assert!(turn.edits.is_none());
         // Exactly one model call (the reply); the writing prompt carried the history + the note.
         let seen = agent.llm.seen.borrow();
         assert_eq!(seen.len(), 1);
@@ -540,8 +547,9 @@ mod tests {
     fn a_propose_turn_produces_a_proposal_and_a_short_reply() {
         use crate::convo::Intent;
         let web = FakeWeb { hits: vec![], seen: RefCell::new(Vec::new()) };
-        // Only one canned reply is needed — the proposal body; the acknowledgement is deterministic.
-        let agent = StudyAssistant::new(FakeLlm::new(&["# Clean note\n\n- point"]), web);
+        // Only one canned reply is needed — the edits; the acknowledgement is deterministic.
+        let answer = r#"{"edits":[{"op":"append","old":"","new":"- \\(x\\) point"}]}"#;
+        let agent = StudyAssistant::new(FakeLlm::new(&[answer]), web);
         let intent = Intent {
             ask: "tidy this".into(),
             search: false,
@@ -551,7 +559,9 @@ mod tests {
             recipe: false,
         };
         let turn = agent.turn("", &intent, &[], Some(200)).unwrap();
-        assert_eq!(turn.proposal.as_deref(), Some("# Clean note\n\n- point"));
+        let edits = turn.edits.expect("a propose turn returns edits");
+        assert_eq!(edits.len(), 1);
+        assert_eq!(edits[0].new, "- $x$ point", "math gets the note's delimiters");
         assert_eq!(turn.reply.as_deref(), Some(super::PROPOSAL_ACK));
         assert_eq!(agent.llm.seen.borrow().len(), 1, "one call to write; the ack is deterministic");
     }

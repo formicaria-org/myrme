@@ -19,6 +19,22 @@ pub fn web_unavailable(reply: &str) -> String {
     )
 }
 
+/// `/propose`: none of the model's edits could be placed — each pointed at words not in the note, or
+/// at words that occur more than once. Nothing is proposed rather than a guess.
+pub const NO_EDIT_PLACED: &str =
+    "I couldn't find where in the note to make that change, so I haven't \
+proposed anything — try naming the words to change.";
+
+/// `/propose`: the proposal was made, but some edits could not be placed and were left out.
+pub fn edits_dropped(dropped: usize) -> String {
+    let what = if dropped == 1 { "one change" } else { "some changes" };
+    format!(
+        "{} _({what} I couldn't place in the note — {dropped} — {} left out.)_",
+        fm_agent::PROPOSAL_ACK,
+        if dropped == 1 { "is" } else { "are" }
+    )
+}
+
 pub const RESEARCH_NEEDS_WEB: &str =
     "_(Grounded research needs web search, but it is off — enable it to use /research.)_";
 

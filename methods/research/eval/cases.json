@@ -1,0 +1,182 @@
+{
+  "about": "Golden cases for M2's write step: a question and numbered sources in, a note of cited claims out, each claim's quote checked by Rust against its source (`grounding::verify`). The sources describe invented things, so a model cannot answer from memory and a fabricated claim cannot be verified by luck. `facts`: words that must appear in the verified claims (quote or sentence, case aside); empty means the sources do not answer and the right note says nothing. `relevant`: the source numbers a verified claim may cite. `oracle`: a hand-written perfect answer; the gate checks it scores. `recorded`: real models' answers from live runs.",
+  "cases": [
+    {
+      "ask": "What does the Varenne pump do and how fast does it run?",
+      "facts": [
+        "coolant",
+        "1,450"
+      ],
+      "id": "single-source",
+      "oracle": "- The Varenne pump moves coolant through the cryostat loop. [1]\n> The Varenne pump moves coolant through the cryostat loop.\n- It runs at 1,450 revolutions per minute. [1]\n> It runs at 1,450 revolutions per minute",
+      "recorded": {
+        "qwen3-4b-2507": "- The Varenne pump moves coolant through the cryostat loop [1].  \n> The Varenne pump moves coolant through the cryostat loop.  \n\n- The Varenne pump runs at 1,450 revolutions per minute [1].  \n> It runs at 1,450 revolutions per minute and must be primed with distilled water before the first start. A green lamp on the housing shows that the loop pressure is within range.",
+        "qwen3-vl-4b": "- The Varenne pump moves coolant through the cryostat loop [1].\n> The Varenne pump moves coolant through the cryostat loop.\n- The Varenne pump runs at 1,450 revolutions per minute [1].\n> It runs at 1,450 revolutions per minute and must be primed with distilled water before the first start."
+      },
+      "relevant": [
+        1
+      ],
+      "sources": [
+        {
+          "label": "Varenne pump — lab manual",
+          "text": "The Varenne pump moves coolant through the cryostat loop. It runs at 1,450 revolutions per minute and must be primed with distilled water before the first start. A green lamp on the housing shows that the loop pressure is within range."
+        }
+      ]
+    },
+    {
+      "ask": "When was the Ostrel archive founded, and where is it kept today?",
+      "facts": [
+        "1873",
+        "library"
+      ],
+      "id": "two-sources",
+      "oracle": "- The Ostrel archive was founded in 1873. [1]\n> The Ostrel archive was founded in 1873 by the parish council of Lindmark\n- Today it is kept in the basement of the Lindmark public library. [2]\n> the archive is kept in the basement of the Lindmark public library",
+      "recorded": {
+        "qwen3-4b-2507": "- The Ostrel archive was founded in 1873 by the parish council of Lindmark.  \n> The Ostrel archive was founded in 1873 by the parish council of Lindmark to keep the town's land registers.  \n\n- The Ostrel archive is currently kept in the basement of the Lindmark public library.  \n> Since its move in 2009 the archive is kept in the basement of the Lindmark public library, where readers can consult it on Thursdays by appointment.",
+        "qwen3-vl-4b": "- The Ostrel archive was founded in 1873 by the parish council of Lindmark to keep the town's land registers [1].\n> The Ostrel archive was founded in 1873 by the parish council of Lindmark to keep the town's land registers.\n\n- Since its move in 2009 the archive is kept in the basement of the Lindmark public library [2].\n> Since its move in 2009 the archive is kept in the basement of the Lindmark public library."
+      },
+      "relevant": [
+        1,
+        2
+      ],
+      "sources": [
+        {
+          "label": "Ostrel archive — history",
+          "text": "The Ostrel archive was founded in 1873 by the parish council of Lindmark to keep the town's land registers. It grew with every boundary dispute the council settled."
+        },
+        {
+          "label": "Ostrel archive — visiting",
+          "text": "Since its move in 2009 the archive is kept in the basement of the Lindmark public library, where readers can consult it on Thursdays by appointment."
+        }
+      ]
+    },
+    {
+      "ask": "What is the melting point of quillite?",
+      "facts": [
+        "812"
+      ],
+      "id": "one-relevant-one-not",
+      "oracle": "- Quillite melts at 812 degrees Celsius. [2]\n> It melts at 812 degrees Celsius",
+      "recorded": {
+        "qwen3-4b-2507": "- Quillite melts at 812 degrees Celsius [2]  \n> It melts at 812 degrees Celsius and dissolves slowly in warm brine.",
+        "qwen3-vl-4b": "- The melting point of quillite is 812 degrees Celsius [2].\n> It melts at 812 degrees Celsius and dissolves slowly in warm brine."
+      },
+      "relevant": [
+        2
+      ],
+      "sources": [
+        {
+          "label": "Garden notes",
+          "text": "Tomatoes on the south bed need staking by June. The compost heap should be turned every two weeks."
+        },
+        {
+          "label": "Quillite — mineral data sheet",
+          "text": "Quillite is a pale blue mineral found in the Harrow seams. It melts at 812 degrees Celsius and dissolves slowly in warm brine."
+        }
+      ]
+    },
+    {
+      "ask": "What year did the Krenshaw Institute's Meridian-7 reactor achieve net-positive output?",
+      "facts": [],
+      "id": "abstain-unrelated",
+      "oracle": "- The sources do not say when the Meridian-7 reactor achieved net-positive output.",
+      "recorded": {
+        "qwen3-4b-2507": "- The Krenshaw Institute's Meridian-7 reactor achieved net-positive output in 2023 [n]  \n> No information available in the provided sources about the Krenshaw Institute's Meridian-7 reactor or its output [n]",
+        "qwen3-vl-4b": "- The Krenshaw Institute's Meridian-7 reactor did not achieve net-positive output in any year mentioned in the provided sources [n]  \n> The Krenshaw Institute's Meridian-7 reactor did not achieve net-positive output in any year mentioned in the provided sources [n]"
+      },
+      "relevant": [],
+      "sources": [
+        {
+          "label": "Bakery inventory note",
+          "text": "The Fournos bakery restocks sourdough starter every Tuesday and keeps the levain at 24 degrees. Rye loaves proof for four hours before the morning bake."
+        },
+        {
+          "label": "Trailhead maintenance log",
+          "text": "The north ridge path was regravelled in spring; the footbridge over Cedar Creek needs a new handrail before the autumn hiking season."
+        }
+      ]
+    },
+    {
+      "ask": "How many people work at the Tallis observatory?",
+      "facts": [],
+      "id": "abstain-near-topic",
+      "oracle": "- The sources do not say how many people work at the Tallis observatory.",
+      "recorded": {
+        "qwen3-4b-2507": "- There is no information provided about the number of people who work at the Tallis observatory [1].  \n> The Tallis observatory sits on the eastern ridge above Corve and houses a 1.2-metre reflecting telescope. It opened to the public in 1998 and runs night tours in summer.",
+        "qwen3-vl-4b": "- The Tallis observatory does not specify the number of people who work there [1].\n> The Tallis observatory sits on the eastern ridge above Corve and houses a 1.2-metre reflecting telescope. It opened to the public in 1998 and runs night tours in summer."
+      },
+      "relevant": [],
+      "sources": [
+        {
+          "label": "Tallis observatory — about",
+          "text": "The Tallis observatory sits on the eastern ridge above Corve and houses a 1.2-metre reflecting telescope. It opened to the public in 1998 and runs night tours in summer."
+        }
+      ]
+    },
+    {
+      "ask": "Quando si tiene il mercato di Valbruna e cosa vi si vende?",
+      "facts": [
+        "sabato",
+        "miele"
+      ],
+      "id": "italian",
+      "oracle": "- Il mercato di Valbruna si tiene ogni sabato mattina in piazza Roma. [1]\n> Il mercato di Valbruna si tiene ogni sabato mattina in piazza Roma.\n- Vi si vendono formaggi di malga, miele e attrezzi in legno. [1]\n> Vi si vendono formaggi di malga, miele e attrezzi in legno fatti a mano.",
+      "recorded": {
+        "qwen3-4b-2507": "- Il mercato di Valbruna si tiene ogni sabato mattina in piazza Roma.  \n> Il mercato di Valbruna si tiene ogni sabato mattina in piazza Roma.  \n\n- Vi si vendono formaggi di malga, miele e attrezzi in legno fatti a mano.  \n> Vi si vendono formaggi di malga, miele e attrezzi in legno fatti a mano. [1]",
+        "qwen3-vl-4b": "- Il mercato di Valbruna si tiene ogni sabato mattina in piazza Roma [1].\n> Il mercato di Valbruna si tiene ogni sabato mattina in piazza Roma.\n- Vi si vendono formaggi di malga, miele e attrezzi in legno fatti a mano [1].\n> Vi si vendono formaggi di malga, miele e attrezzi in legno fatti a mano."
+      },
+      "relevant": [
+        1
+      ],
+      "sources": [
+        {
+          "label": "Comune di Valbruna — mercato",
+          "text": "Il mercato di Valbruna si tiene ogni sabato mattina in piazza Roma. Vi si vendono formaggi di malga, miele e attrezzi in legno fatti a mano."
+        }
+      ]
+    },
+    {
+      "ask": "How long is the Brannock tunnel and when did it open?",
+      "facts": [
+        "4.7",
+        "1911"
+      ],
+      "id": "number-and-unit",
+      "oracle": "- The Brannock tunnel is 4.7 kilometres long and opened in October 1911. [1]\n> At 4.7 kilometres it was the longest rail tunnel in the province when it opened in October 1911.",
+      "recorded": {
+        "qwen3-4b-2507": "- The Brannock tunnel is 4.7 kilometres long [1].  \n> At 4.7 kilometres it was the longest rail tunnel in the province when it opened in October 1911.  \n\n- The Brannock tunnel opened in October 1911 [1].  \n> At 4.7 kilometres it was the longest rail tunnel in the province when it opened in October 1911.",
+        "qwen3-vl-4b": "- The Brannock tunnel is 4.7 kilometres long [1].\n> The Brannock tunnel carries the valley railway under Mount Esk. At 4.7 kilometres it was the longest rail tunnel in the province when it opened in October 1911. [1]\n- The Brannock tunnel opened in October 1911 [1].\n> The Brannock tunnel carries the valley railway under Mount Esk. At 4.7 kilometres it was the longest rail tunnel in the province when it opened in October 1911. [1]"
+      },
+      "relevant": [
+        1
+      ],
+      "sources": [
+        {
+          "label": "Brannock tunnel",
+          "text": "The Brannock tunnel carries the valley railway under Mount Esk. At 4.7 kilometres it was the longest rail tunnel in the province when it opened in October 1911."
+        }
+      ]
+    },
+    {
+      "ask": "Who designed the Hollin bridge and what did it cost?",
+      "facts": [
+        "Maren Osk"
+      ],
+      "id": "partial-answer",
+      "oracle": "- The Hollin bridge was designed by the engineer Maren Osk. [1]\n> The Hollin bridge was designed by the engineer Maren Osk\n- The sources do not say what it cost.",
+      "recorded": {
+        "qwen3-4b-2507": "- The Hollin bridge was designed by the engineer Maren Osk [1].  \n> The Hollin bridge was designed by the engineer Maren Osk and completed in 1931. It spans the river Tey in three stone arches.",
+        "qwen3-vl-4b": "- The Hollin bridge was designed by the engineer Maren Osk [1].\n> The Hollin bridge was designed by the engineer Maren Osk and completed in 1931. It spans the river Tey in three stone arches."
+      },
+      "relevant": [
+        1
+      ],
+      "sources": [
+        {
+          "label": "Hollin bridge",
+          "text": "The Hollin bridge was designed by the engineer Maren Osk and completed in 1931. It spans the river Tey in three stone arches."
+        }
+      ]
+    }
+  ]
+}

@@ -108,6 +108,10 @@ pub enum Dropped {
     NoDate,
     /// It is already over.
     Past,
+    /// The sentence is a question nobody has answered yet: no later email from anyone else. "Would
+    /// Thursday or Friday work?" fixes nothing until someone says which (2026-10-18, eval case
+    /// `proposal-not-fixed`). Once a reply exists, whether it accepted is the model's to read.
+    Unanswered,
 }
 
 /// Tokens the conversation text may take. The laptop model runs with an 8192-token window
@@ -170,6 +174,31 @@ pub fn user_prompt(title: &str, body: &str) -> String {
         }
     }
     format!("Conversation: {title}\n\n{}", &body[start..])
+}
+
+/// The shape [`crate::prompts::MEETINGS_INSTRUCTION`] asks for, as a JSON Schema, for
+/// [`crate::LlmStep::complete_constrained`]. **Every key is required, and that is what it is for**:
+/// measured on 2026-10-18 (qwen3-4b-2507, `methods/meetings/eval`), the free answer was always valid
+/// JSON but left out `quote` in 6 of 14 cases, and a meeting without its pointer is dropped; held to
+/// this schema it scored 13/14 against 8/14. The keys reach the server in alphabetical order
+/// (`serde_json`'s map sorts them), so the grammar generates them in that order, not the
+/// instruction's. [`parse`] stays tolerant, so an unconstrained answer still reads.
+pub fn answer_schema() -> Value {
+    let text = serde_json::json!({ "type": "string" });
+    serde_json::json!({
+        "type": "array",
+        "maxItems": 8,
+        "items": {
+            "type": "object",
+            "properties": {
+                "status": { "enum": ["fixed", "cancelled"] },
+                "quote": text, "title": text, "date": text,
+                "time": text, "end": text, "place": text,
+            },
+            "required": ["status", "quote", "title", "date", "time", "end", "place"],
+            "additionalProperties": false,
+        },
+    })
 }
 
 /// Read the model's answer. Tolerant of what small models wrap JSON in — a ```json fence, a
@@ -358,6 +387,18 @@ pub fn resolve(f: &Found, body: &str, today: Date) -> Result<Meeting, Dropped> {
     };
     let nquote = loose(&quote);
     let at = exact.text.find(&nquote).ok_or(Dropped::NotInEmail)?;
+    // A quote that runs over several sentences is read in the one the model's own words for *this*
+    // meeting point at: a small model reported "The kick-off is on Monday at 10am. The review will be
+    // on Friday at 2pm." for both meetings, and the first date and time then went to both (2026-10-18,
+    // eval case `two-meetings`). The quote shown to the person is unchanged.
+    let (nquote, at) = narrow_to_sentence(&nquote, at, &[&f.time, &f.date]);
+    if nquote.trim_end().ends_with('?') {
+        let here = all.iter().position(|b| std::ptr::eq(b, exact)).unwrap_or(0);
+        let answered = all[here + 1..].iter().any(|b| b.sent.is_some() && b.by != exact.by);
+        if !answered {
+            return Err(Dropped::Unanswered);
+        }
+    }
     let (sent, sent_at, said_by, msg) =
         (exact.sent, exact.at.clone(), exact.by.clone(), exact.text.clone());
     let anchor = sent.unwrap_or(today);
@@ -402,6 +443,37 @@ pub fn resolve(f: &Found, body: &str, today: Date) -> Result<Meeting, Dropped> {
         cancelled,
         dated,
     })
+}
+
+/// The one sentence of a several-sentence `quote` (already [`loose`]) that contains the first of
+/// `words` found in exactly one of them, with its offset added to `at`. Anything less certain — one
+/// sentence, words in none or in several — leaves the quote whole, which is how it was read before.
+fn narrow_to_sentence(quote: &str, at: usize, words: &[&str]) -> (String, usize) {
+    let mut pieces = Vec::new();
+    let mut start = 0;
+    let bytes = quote.as_bytes();
+    for (i, c) in quote.char_indices() {
+        if matches!(c, '.' | '!' | '?') && bytes.get(i + 1) == Some(&b' ') {
+            pieces.push((start, &quote[start..=i]));
+            start = i + 2;
+        }
+    }
+    if start < quote.len() {
+        pieces.push((start, &quote[start..]));
+    }
+    if pieces.len() > 1 {
+        for w in words {
+            let n = loose(w);
+            if n.is_empty() {
+                continue;
+            }
+            let mut hits = pieces.iter().filter(|(_, p)| p.contains(&n));
+            if let (Some(&(off, p)), None) = (hits.next(), hits.next()) {
+                return (p.to_string(), at + off);
+            }
+        }
+    }
+    (quote.to_string(), at)
 }
 
 /// The words of `text` with the punctuation that hugs them taken off, keeping what a date or time is
@@ -1113,6 +1185,48 @@ mod tests {
             find_day(&loose("ci vediamo il 16 alle 15"), a, false),
             Some(date!(2026 - 10 - 16))
         );
+    }
+
+    #[test]
+    fn an_unanswered_question_fixes_nothing_and_an_answered_one_may() {
+        let ask = "### Kim — 2026-10-13 09:00\n\nCan we meet on Thursday at 3pm?\n";
+        let today = Date::from_calendar_date(2026, Month::October, 13).unwrap();
+        let found = Found {
+            status: "fixed".into(),
+            quote: "Can we meet on Thursday at 3pm?".into(),
+            ..Found::default()
+        };
+        assert_eq!(resolve(&found, ask, today), Err(Dropped::Unanswered));
+        // Kim writing again is not an answer.
+        let again = format!("{ask}\n### Kim — 2026-10-13 12:00\n\nAny news?\n");
+        assert_eq!(resolve(&found, &again, today), Err(Dropped::Unanswered));
+        let answered = format!("{ask}\n### Lee — 2026-10-13 10:00\n\nSure, see you then!\n");
+        let m = resolve(&found, &answered, today).unwrap();
+        assert_eq!(m.start_stamp(), "2026-10-15T15:00");
+    }
+
+    #[test]
+    fn a_quote_of_two_sentences_is_read_in_the_one_the_models_words_point_at() {
+        let body =
+            "### Eva — 2026-10-14 11:11\n\nThe kick-off is on Monday at 10am. The review will \
+                    be on Friday at 2pm.\n";
+        let both = "The kick-off is on Monday at 10am. The review will be on Friday at 2pm.";
+        let today = Date::from_calendar_date(2026, Month::October, 14).unwrap();
+        let found = |date: &str, time: &str| Found {
+            status: "fixed".into(),
+            date: date.into(),
+            time: time.into(),
+            quote: both.into(),
+            ..Found::default()
+        };
+        let review = resolve(&found("Friday", "2pm"), body, today).unwrap();
+        assert_eq!(review.start_stamp(), "2026-10-16T14:00");
+        let kickoff = resolve(&found("Monday", "10am"), body, today).unwrap();
+        assert_eq!(kickoff.start_stamp(), "2026-10-19T10:00");
+        assert_eq!(review.quote, both, "the quote shown is the one the model gave");
+        // Words that point at no single sentence leave the quote whole, read as before.
+        let vague = resolve(&found("", ""), body, today).unwrap();
+        assert_eq!(vague.start_stamp(), "2026-10-19T10:00");
     }
 
     #[test]

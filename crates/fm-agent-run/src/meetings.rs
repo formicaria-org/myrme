@@ -192,10 +192,14 @@ impl<V: VaultAccess> Agent<V> {
             // first and gave it again over a later email that moved the meeting.
             let emails = meetings::without_box(&body);
 
+            // Held to the answer's schema: measured on 2026-10-18 (`methods/meetings/eval`), a free
+            // answer often left out the quote and lost the meeting — 8/14 against 14/14 on
+            // qwen3-4b-2507, 11/14 against 12/14 on qwen3-vl-4b, and faster.
             let answer = llm
-                .complete(
+                .complete_constrained(
                     fm_agent::prompts::MEETINGS_INSTRUCTION,
                     &meetings::user_prompt(title, &emails),
+                    &meetings::answer_schema(),
                 )
                 .map_err(|e| format!("the model did not answer for \u{201c}{title}\u{201d}: {e}"))?
                 .content;
@@ -394,6 +398,22 @@ mod tests {
         fn complete(&self, _s: &str, _u: &str) -> Result<LlmResponse, AgentError> {
             *self.1.borrow_mut() += 1;
             Ok(LlmResponse { content: self.0.clone(), finish_reason: None, usage: None })
+        }
+        /// The meeting pass must hold its answer to the meeting schema; every test here checks it.
+        fn complete_constrained(
+            &self,
+            s: &str,
+            u: &str,
+            schema: &serde_json::Value,
+        ) -> Result<LlmResponse, AgentError> {
+            if s == fm_agent::prompts::MEETINGS_INSTRUCTION {
+                assert_eq!(
+                    *schema,
+                    meetings::answer_schema(),
+                    "the meeting pass sent another schema"
+                );
+            }
+            self.complete(s, u)
         }
     }
 

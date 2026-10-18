@@ -154,7 +154,18 @@ impl<V: VaultAccess> Agent<V> {
             convo::Command::Recipe => return self.recipe_turn(&self.llm(), note, on_stage),
             convo::Command::Chat { .. } | convo::Command::Propose { .. } => {}
         }
+        self.conversation_turn(self.llm(), note, intent, on_stage)
+    }
 
+    /// A chat or `/propose` turn, with the model passed in — the seam a test fills with a fake, as
+    /// `recipe_turn` does.
+    fn conversation_turn<L: fm_agent::LlmStep>(
+        &self,
+        llm: L,
+        note: &str,
+        intent: &convo::Intent,
+        on_stage: &dyn Fn(&str),
+    ) -> Result<(String, Option<String>), String> {
         on_stage("reading the conversation");
         let history = self.history(note)?;
         // The note being discussed, plus the notes it explicitly **links** to (text only) — bounded,
@@ -180,14 +191,31 @@ impl<V: VaultAccess> Agent<V> {
         }
 
         on_stage("thinking");
-        let agent = StudyAssistant::new(self.llm(), NoWeb);
+        let agent = StudyAssistant::new(llm, NoWeb);
         let turn = agent
             .turn(&history, intent, &context, Some(self.max_reply_chars))
             .map_err(|e| e.to_string())?;
 
         on_stage("writing the reply");
 
-        let reply = turn.reply.clone().unwrap_or_default();
+        // The edits go onto the **whole** note — the model was shown only its first part — and only
+        // a change that applied becomes a proposal (`fm_agent::edits`).
+        let mut proposed = None;
+        let mut edit_reply = None;
+        if let Some(edits) = &turn.edits {
+            let body = self.fm.get(note)?["body"].as_str().unwrap_or_default().to_string();
+            let done = fm_agent::edits::apply(&body, edits);
+            if done.applied == 0 {
+                edit_reply = Some(replies::NO_EDIT_PLACED.to_string());
+            } else {
+                if done.dropped > 0 {
+                    edit_reply = Some(replies::edits_dropped(done.dropped));
+                }
+                proposed = Some(done.body);
+            }
+        }
+
+        let reply = edit_reply.or_else(|| turn.reply.clone()).unwrap_or_default();
         // A tiny model sometimes returns nothing usable, or the echo-stripper cleans it to empty.
         // Never post an empty message — the store rejects it (a reply "needs something in it"), which
         // would surface as a 500; say so plainly instead.
@@ -205,7 +233,7 @@ impl<V: VaultAccess> Agent<V> {
             let meta = self.fm.reply_as(note, &reply, &who, &email)?;
             reply_id = meta["id"].as_str().map(|s| s.to_string());
         }
-        if let Some(body) = &turn.proposal {
+        if let Some(body) = &proposed {
             let origin =
                 Origin { tool: "propose", query: Some(intent.ask.clone()), sources: Vec::new() };
             self.fm.create_proposal(note, body, &who, &email, &origin)?;
@@ -1262,6 +1290,110 @@ mod tests {
     }
 
     /// **`/recipe` on a written note proposes a recipe of only what was written** (2026-10-18).
+    #[test]
+    fn a_proposed_edit_lands_on_the_whole_note_however_little_of_it_the_model_saw() {
+        // A note far longer than the 1200 characters the model is shown.
+        let long =
+            format!("{}\n\nThe last paragraph, which the model never saw.", "Words. ".repeat(400));
+        struct Notebook {
+            body: String,
+            proposed: std::cell::RefCell<Vec<String>>,
+            said: std::cell::RefCell<Vec<String>>,
+        }
+        impl VaultAccess for Notebook {
+            fn get(&self, _: &str) -> Result<Value, String> {
+                Ok(json!({ "title": "Survey", "body": self.body }))
+            }
+            fn thread(&self, _: &str) -> Result<Value, String> {
+                Ok(json!({ "messages": [] }))
+            }
+            fn discussions(&self) -> Result<Value, String> {
+                Ok(json!([]))
+            }
+            fn alive(&self) -> bool {
+                true
+            }
+            fn reply(&self, _: &str, _: &str) -> Result<Value, String> {
+                Ok(Value::Null)
+            }
+            fn reply_as(&self, _: &str, body: &str, _: &str, _: &str) -> Result<Value, String> {
+                self.said.borrow_mut().push(body.to_string());
+                Ok(json!({ "id": "R1" }))
+            }
+            fn create_proposal(
+                &self,
+                _: &str,
+                body: &str,
+                _: &str,
+                _: &str,
+                origin: &Origin,
+            ) -> Result<Value, String> {
+                assert_eq!(origin.tool, "propose");
+                self.proposed.borrow_mut().push(body.to_string());
+                Ok(Value::Null)
+            }
+            fn propose_note(
+                &self,
+                _: &str,
+                _: &Value,
+                _: &str,
+                _: &str,
+                _: &Origin,
+            ) -> Result<Value, String> {
+                Ok(Value::Null)
+            }
+            fn blob_bytes(&self, _: &str) -> Result<(Vec<u8>, String), String> {
+                Err("none".into())
+            }
+            fn activity(&self, _: &str, _: &str, _: &str) {}
+            fn activity_done(&self, _: &str) {}
+            fn present(&self, _: &str, _: Option<&crate::ImageReader>) {}
+        }
+        struct Says(&'static str);
+        impl fm_agent::LlmStep for Says {
+            fn complete(&self, _: &str, _: &str) -> Result<fm_agent::LlmResponse, AgentError> {
+                Ok(fm_agent::LlmResponse::complete(self.0))
+            }
+        }
+        let agent = |answer: &'static str| {
+            let a = Agent {
+                fm: Notebook {
+                    body: long.clone(),
+                    proposed: Default::default(),
+                    said: Default::default(),
+                },
+                model_port: 0,
+                model: "test".into(),
+                searxng_port: None,
+                web_direct: false,
+                whisper_port: None,
+                whisper_model: String::new(),
+                vision: false,
+                read_prompt: None,
+                reads_labels: false,
+                image_specialist: None,
+                max_reply_chars: 600,
+                history_budget: 4000,
+                device: "laptop".into(),
+            };
+            let intent = convo::parse("add a line: Next survey: 14 November /propose");
+            a.conversation_turn(Says(answer), "N1", &intent, &|_| {}).unwrap();
+            a
+        };
+
+        let a = agent(r#"{"edits":[{"op":"append","old":"","new":"Next survey: 14 November"}]}"#);
+        let proposed = a.fm.proposed.borrow();
+        assert_eq!(proposed.len(), 1);
+        assert!(proposed[0].starts_with(&long), "everything the note had is kept");
+        assert!(proposed[0].ends_with("never saw.\n\nNext survey: 14 November\n"));
+        assert_eq!(a.fm.said.borrow()[0], fm_agent::PROPOSAL_ACK);
+
+        // An edit that points at words the note does not have proposes nothing, and says so.
+        let a = agent(r#"{"edits":[{"op":"delete","old":"no such words","new":""}]}"#);
+        assert!(a.fm.proposed.borrow().is_empty());
+        assert_eq!(a.fm.said.borrow()[0], replies::NO_EDIT_PLACED);
+    }
+
     #[test]
     fn a_recipe_is_proposed_from_what_the_note_says_and_nothing_else() {
         struct Notebook {

@@ -78,26 +78,11 @@ version = 2
 # native window. Any real vulnerability, unsound, or unmaintained advisory now
 # surfaces on its own; add a documented `ignore` entry only if one reappears.
 #
-# One reappeared on 2026-10-12 (`decisions.md#toolchain`, that date):
-ignore = [
-    # `unsafe-libyaml` is *unmaintained* (its repository was archived in March 2024) — not a
-    # vulnerability and not unsound. It is the C-to-Rust translation of libyaml under
-    # `serde_yaml_ng`, which reads every note's front matter and every `.view` file. The advisory
-    # names no safe upgrade; the alternative is a different YAML parser under the one format
-    # every file in every vault depends on, which is a migration to plan and test on real vaults,
-    # not a change to make because a gate turned red on a release day. Waived until that
-    # migration is decided (`outstanding.md`, *the YAML parser*). Remove this entry with it.
-    { id = "RUSTSEC-2024-0449", reason = "unmaintained, no safe upgrade; replacing the YAML parser is a planned migration, see decisions.md 2026-10-12 #toolchain" },
-    # **Three on `zip` 2.4.2, waived together on 2026-10-17** (`decisions.md#toolchain`, that date).
-    # All three are about `ZipArchive::extract` / `ZipStreamReader::extract`, which nothing here
-    # calls: `fm-fetch` and `fm-agent-run` walk entries with `by_index` + `enclosed_name`, refuse
-    # links, and write regular files themselves. The one that applied in spirit — SUID/SGID kept —
-    # is fixed in `fm-fetch`'s own code (`m & 0o777`, tar `preserve_permissions(false)`) and tested.
-    # The fixed line, zip 9, was eight days old on that date. Remove all three on moving to it.
-    { id = "RUSTSEC-2026-0367", reason = "extract() only, never called; our own unpack masks to 0o777 since 2026-10-17; move to zip 9 once settled, see decisions.md 2026-10-17 #toolchain" },
-    { id = "RUSTSEC-2026-0368", reason = "extract() only, never called; links are refused; move to zip 9 once settled, see decisions.md 2026-10-17 #toolchain" },
-    { id = "RUSTSEC-2026-0369", reason = "extract()/ZipStreamReader only, never called; links are refused; move to zip 9 once settled, see decisions.md 2026-10-17 #toolchain" },
-]
+# Myrme waives none. formicaria's four waivers (the YAML parser; three on `zip` 2.4.2) did not
+# carry over: Myrme links no YAML parser, and its lockfile resolved `zip` 2.6.1, which none of the
+# three advisories match (2026-10-18). A waiver added here names its advisory, its reason and the
+# change that will remove it.
+ignore = []
 
 [bans]
 multiple-versions = "warn"

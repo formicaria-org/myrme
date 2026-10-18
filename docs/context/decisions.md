@@ -35,6 +35,80 @@ commits, each checked by its own gate.
 - **Pose coaching is not a Myrme method.** It is a real-time camera screen in formicaria that
   writes `log: workout` notes.
 
+## 2026-10-18 — a method is scored by exact match on its own cases; the meeting pass is held to its schema `#method` `#model`
+
+**What prompted it.** Phase B of `plan.md`: before any method changes, measure it. The first
+measurement was M1, the meeting pass, on the laptop's two models.
+
+**Decision.**
+- **Every method gets `methods/<name>/eval/cases.json`**: invented inputs, the lines a careful
+  person would expect, a hand-written perfect answer (`oracle`), and real models' answers
+  (`recorded`).
+  - **The gate replays them**: each oracle must resolve to its case's expectation, which checks the
+    cases and the Rust half of the method together, and every recording is re-scored.
+  - Live runs are `#[ignore]`d tests that can write their answers back.
+  - Two numbers are kept apart: *well-formed* (exactly the JSON asked for) and *exact* (the right
+    meetings). Cases whose right answer is nothing count like any other. Scoring lives in
+    `fm_agent::eval`.
+- **`LlmStep::complete_constrained`** holds an answer to a JSON Schema while it is generated
+  (`response_format`, which `llama-server` compiles into a grammar).
+  - It has a default that ignores the schema, so no implementor breaks and nothing in the contract
+    changes.
+- **The meeting pass uses it.** Measured on `methods/meetings/eval` (14 cases, 2026-10-18):
+
+  | Model | Free | Held to the schema | Time |
+  |---|---|---|---|
+  | qwen3-4b-2507 | 8/14 | 14/14 | 15.6 s → 21.8 s |
+  | qwen3-vl-4b (laptop default) | 11/14 | 12/14 | 58.3 s → 31.1 s |
+
+  - Free answers were always valid JSON. They failed by **leaving out `quote`**, and a meeting with
+    no pointer is dropped. Making every key required is the fix.
+- **A quote of several sentences is read in the one the model's own date or time words point at**
+  (`meetings::narrow_to_sentence`). A model quoted two meetings' sentences together for both, and
+  both got the first one's date.
+  - This keeps the rule that the date comes from the sentence and not from the model. It only
+    chooses *which* sentence.
+
+**Consequence.** Users get this only through formicaria's cutover (`plan.md`, Phase D). The phone
+model is not measured yet. The schema's keys reach the server alphabetically (`serde_json` sorts
+maps), so their order is not something this decision controls.
+
+## 2026-10-18 (later) — the open items: questions, the phone model, llguidance, and two methods measured `#method` `#model` `#repo`
+
+**The owner:** *"fix the open things first and then move on."*
+
+**Decision.**
+- **A question nobody answered fixes no meeting.** `meetings::resolve` drops a quote ending in `?`
+  when no later email from anyone else exists (`Dropped::Unanswered`). Once someone has replied,
+  reading the reply is the model's job. This was checked on three new cases (question accepted,
+  declined, unanswered). The meeting eval is now 17 cases.
+- **The meeting pass stays off the phone.** `lfm2.5-vl-450m` scores 5/17: it calls nearly every
+  meeting cancelled. A phone-sized model must pass the eval before the pass runs there.
+- **No llguidance build.** It was measured on the CPU at the same llama.cpp commit (b10076):
+  16/17 in 92 s against the stock engine's 17/17 in 115 s. Every schema used here compiles with
+  the stock engine. Revisit if one does not, or if phone speed needs it.
+- **cargo-deny waives nothing.** Myrme has no YAML parser, and its lockfile resolved `zip`
+  2.6.1, which formicaria's three `zip` waivers do not match.
+- **Research (M2) gets an eval** (8 cases about invented things, scored *exact* and *grounded*).
+  `grounding::verify` now:
+  - reads a citation placed on the quote line;
+  - credits an uncited claim to the single source holding its quote;
+  - ignores a quote's closing punctuation.
+
+  Both laptop models went from 5/8 to 7/8. A claim still ships only with a quote found word for
+  word in its source.
+- **Note edits (M5) are anchored edits, applied by Rust to the whole note** (`fm_agent::edits`).
+  This replaces the model writing the whole new body:
+  - With the old format both models returned only the changed part, so an accepted proposal would
+    have deleted the rest of the note, and the model saw only the note's first 1200 characters
+    anyway.
+  - With anchored edits both models score 5/6, up from 3/6.
+  - `Turn` now carries `edits` instead of `proposal`. The runner applies them, proposes only when
+    something applied, and otherwise says it could not place the change.
+  - `Turn` is not in the contract (`contract.md`); formicaria's copy is unaffected.
+- **Methods are a closed `enum`** (`fm_agent::method::Method`), each with `methods/<name>/METHOD.md`
+  in Agent Skills format. A test fails if a method has no folder or a folder is not a method.
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading

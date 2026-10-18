@@ -148,7 +148,19 @@ In formicaria, each a separate commit with `pixi run ci` green:
     - Before Phase D, formicaria depends on these crates by *path*, and Cargo's `[patch]` cannot
       override a path dependency. That is why it takes a worktree and not a config file.
 
-### Phase B — foundations (in Myrme only; formicaria unaffected)
+### Phase B — foundations (in Myrme only; formicaria unaffected) — status: **started**, 2026-10-18
+
+| Step | Status |
+|---|---|
+| Eval harness: `fm_agent::eval`; cases, oracle and recordings per method; replayed in the gate; `pixi run eval` | ✅ M1 (17 cases), M2 (8), M5 (6) |
+| Constrained calls: `LlmStep::complete_constrained`, `OpenAiStep` sends `response_format` | ✅ |
+| llguidance compared with the stock grammar engine | ✅ not adopted (`decisions.md`) |
+| M1 held to its schema; a question nobody answered fixes nothing | ✅ 17/17 qwen3-4b-2507, 15/17 qwen3-vl-4b |
+| M2 parser: misplaced citations, closing punctuation | ✅ 5/8 → 7/8 on both laptop models |
+| M5 as anchored edits applied to the whole note | ✅ 3/6 → 5/6 on both laptop models |
+| `Method` enum and `methods/<name>/METHOD.md` for all seven | ✅ |
+| Cases for M3 (images), M4 (speech), M7 (recipe) | ⏳ need real images, recordings and transcripts |
+| Integration test against a real formicaria | ⏳ |
 
 1. **An eval harness per method.**
    - Grow `agents/bench` into `methods/<name>/eval/`, scored by exact match on structured output.

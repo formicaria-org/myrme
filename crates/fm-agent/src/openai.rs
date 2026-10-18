@@ -79,15 +79,31 @@ impl OpenAiStep {
     /// One chat-completion call with these `messages` — the single request both the text step and
     /// the image step make, so the sampling settings and the transport exist once.
     fn chat(&self, messages: serde_json::Value) -> Result<LlmResponse, AgentError> {
-        let body = serde_json::json!({
+        self.chat_with(messages, None)
+    }
+
+    /// [`Self::chat`], optionally with a `response_format` — the OpenAI-compatible way to hold the
+    /// answer to a JSON Schema, which `llama-server` turns into a grammar.
+    fn chat_with(
+        &self,
+        messages: serde_json::Value,
+        schema: Option<&serde_json::Value>,
+    ) -> Result<LlmResponse, AgentError> {
+        let mut body = serde_json::json!({
             "model": self.model,
             "temperature": self.temperature,
             "seed": self.seed,
             "max_tokens": self.max_tokens,
             "stream": false,
             "messages": messages,
-        })
-        .to_string();
+        });
+        if let Some(schema) = schema {
+            body["response_format"] = serde_json::json!({
+                "type": "json_schema",
+                "json_schema": { "name": "answer", "strict": true, "schema": schema },
+            });
+        }
+        let body = body.to_string();
         let raw = http::post(
             &self.host,
             self.port,
@@ -107,6 +123,21 @@ impl LlmStep for OpenAiStep {
             { "role": "system", "content": system },
             { "role": "user", "content": user },
         ]))
+    }
+
+    fn complete_constrained(
+        &self,
+        system: &str,
+        user: &str,
+        schema: &serde_json::Value,
+    ) -> Result<LlmResponse, AgentError> {
+        self.chat_with(
+            serde_json::json!([
+                { "role": "system", "content": system },
+                { "role": "user", "content": user },
+            ]),
+            Some(schema),
+        )
     }
 }
 
@@ -251,5 +282,36 @@ mod tests {
         // The determinism + bound knobs are actually sent.
         assert!(req.contains("\"seed\":0"), "seed not sent: {req}");
         assert!(req.contains("\"max_tokens\":2048"), "max_tokens not sent: {req}");
+        assert!(!req.contains("response_format"), "a free call must not constrain: {req}");
+    }
+
+    /// A constrained call sends the schema as an OpenAI-style `response_format`, the shape
+    /// `llama-server` compiles into a grammar.
+    #[test]
+    fn a_constrained_call_sends_its_schema_as_a_response_format() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut sock, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 8192];
+            let n = sock.read(&mut buf).unwrap();
+            let req = String::from_utf8_lossy(&buf[..n]).to_string();
+            let json = "{\"choices\":[{\"message\":{\"content\":\"[]\"}}]}";
+            let resp = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                json.len(),
+                json
+            );
+            sock.write_all(resp.as_bytes()).unwrap();
+            req
+        });
+        let schema = serde_json::json!({ "type": "array", "maxItems": 3 });
+        let out = OpenAiStep::local(port, "m").complete_constrained("S", "U", &schema).unwrap();
+        assert_eq!(out.content, "[]");
+        let req = server.join().unwrap();
+        let body: serde_json::Value =
+            serde_json::from_str(&req[req.find("\r\n\r\n").unwrap() + 4..]).unwrap();
+        assert_eq!(body["response_format"]["type"], "json_schema");
+        assert_eq!(body["response_format"]["json_schema"]["schema"], schema);
     }
 }

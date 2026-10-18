@@ -1,0 +1,149 @@
+{
+  "about": "Golden cases for M5, note edits (`/propose`). The note and the request go to the real turn (`StudyAssistant::turn`), with the note given as the runner gives it today: its first 1200 characters, labelled as this note. The model answers with edits (`fm_agent::edits`), which are applied to the note's **whole** body, as the runner applies them; the result is then checked: every `keep` phrase is still there; for each group in `add`, at least one of its phrases is there; no `remove` phrase is left. Phrases compare loosely (case, accents, spacing). `oracle` is a perfect proposal; the gate checks it passes. `recorded` holds real models' proposals.",
+  "cases": [
+    {
+      "add": [
+        [
+          "we discuss chapter three"
+        ]
+      ],
+      "ask": "fix the spelling mistake in the second paragraph",
+      "body": "The reading group meets on Tuesdays in room 4.\n\nThis week we discus chapter three of the book, on memory and sleep.\n\nBring your own copy.",
+      "id": "fix-typo",
+      "keep": [
+        "The reading group meets on Tuesdays in room 4.",
+        "chapter three of the book, on memory and sleep",
+        "Bring your own copy."
+      ],
+      "oracle": "{\"edits\": [{\"op\": \"replace\", \"old\": \"we discus chapter\", \"new\": \"we discuss chapter\"}]}",
+      "recorded": {
+        "qwen3-4b-2507": "{\"edits\": [{\"new\": \"This week we discuss chapter three of the book, on memory and sleep.\", \"old\": \"This week we discus chapter three of the book, on memory and sleep.\", \"op\": \"replace\"}]}",
+        "qwen3-vl-4b": "{\n  \"edits\": [\n    {\n      \"new\": \"This week we discuss chapter three of the book, on memory and sleep.\",\n      \"old\": \"This week we discus chapter three of the book, on memory and sleep.\",\n      \"op\": \"replace\"\n    }\n  ]\n}"
+      },
+      "remove": [
+        "discus chapter"
+      ],
+      "title": "Reading group"
+    },
+    {
+      "add": [
+        [
+          "book the room"
+        ]
+      ],
+      "ask": "add 'book the room' to the list",
+      "body": "Before the workshop:\n\n- send the invitations\n- print the handouts\n- order coffee",
+      "id": "add-item",
+      "keep": [
+        "send the invitations",
+        "print the handouts",
+        "order coffee"
+      ],
+      "oracle": "{\"edits\": [{\"op\": \"append\", \"old\": \"\", \"new\": \"- book the room\"}]}",
+      "recorded": {
+        "qwen3-4b-2507": "{\"edits\": [{\"new\": \"book the room\", \"old\": \"Before the workshop:\",\"op\": \"append\"}]}",
+        "qwen3-vl-4b": "{\"edits\": [{\"new\": \"book the room\", \"old\": \"\", \"op\": \"append\"}]}"
+      },
+      "remove": [],
+      "title": "Workshop prep"
+    },
+    {
+      "add": [
+        [
+          "- ",
+          "* "
+        ]
+      ],
+      "ask": "turn the paragraph into a bullet list, one rule per bullet",
+      "body": "Wear goggles at the bench. Never pipette by mouth. Label every bottle with the date and your initials. Report spills to the technician at once.",
+      "id": "to-bullets",
+      "keep": [
+        "goggles",
+        "pipette by mouth",
+        "date and your initials",
+        "technician"
+      ],
+      "oracle": "{\"edits\": [{\"op\": \"replace\", \"old\": \"Wear goggles at the bench. Never pipette by mouth. Label every bottle with the date and your initials. Report spills to the technician at once.\", \"new\": \"- Wear goggles at the bench.\\n- Never pipette by mouth.\\n- Label every bottle with the date and your initials.\\n- Report spills to the technician at once.\"}]}",
+      "recorded": {
+        "qwen3-4b-2507": "{\"edits\": [\n  {\n    \"new\": \"- Wear goggles at the bench.\",\n    \"old\": \"Wear goggles at the bench. Never pipette by mouth. Label every bottle with the date and your initials. Report spills to the technician at once.\",\n    \"op\": \"replace\"\n  },\n  {\n    \"new\": \"- Never pipette by mouth.\",\n    \"old\": \"Wear goggles at the bench. Never pipette by mouth. Label every bottle with the date and your initials. Report spills to the technician at once.\",\n    \"op\": \"replace\"\n  },\n  {\n    \"new\": \"- Label every bottle with the date and your initials.\",\n    \"old\": \"Wear goggles at the bench. Never pipette by mouth. Label every bottle with the date and your initials. Report spills to the technician at once.\",\n    \"op\": \"replace\"\n  },\n  {\n    \"new\": \"- Report spills to the technician at once.\",\n    \"old\": \"Wear goggles at the bench. Never pipette by mouth. Label every bottle with the date and your initials. Report spills to the technician at once.\",\n    \"op\": \"replace\"\n  }\n]}",
+        "qwen3-vl-4b": "{\n  \"edits\": [\n    {\n      \"new\": \"- Wear goggles at the bench.\",\n      \"old\": \"Wear goggles at the bench.\",\n      \"op\": \"replace\"\n    },\n    {\n      \"new\": \"- Never pipette by mouth.\",\n      \"old\": \"Never pipette by mouth.\",\n      \"op\": \"replace\"\n    },\n    {\n      \"new\": \"- Label every bottle with the date and your initials.\",\n      \"old\": \"Label every bottle with the date and your initials.\",\n      \"op\": \"replace\"\n    },\n    {\n      \"new\": \"- Report spills to the technician at once.\",\n      \"old\": \"Report spills to the technician at once.\",\n      \"op\": \"replace\"\n    }\n  ]\n}"
+      },
+      "remove": [],
+      "title": "Lab safety"
+    },
+    {
+      "add": [
+        [
+          "\\frac{1}{2}",
+          "\\tfrac{1}{2}",
+          "\\dfrac{1}{2}",
+          "1/2"
+        ],
+        [
+          "v^2",
+          "v^{2}"
+        ]
+      ],
+      "ask": "write the formula as LaTeX math",
+      "body": "Kinetic energy is one half times mass times velocity squared.",
+      "id": "latex",
+      "keep": [
+        "Kinetic energy"
+      ],
+      "oracle": "{\"edits\": [{\"op\": \"insert_after\", \"old\": \"velocity squared.\", \"new\": \"$$E_k = \\\\frac{1}{2} m v^2$$\"}]}",
+      "recorded": {
+        "qwen3-4b-2507": "{\"edits\": [\n  {\n    \"new\": \"$E_k = \\\\frac{1}{2} m v^2$\",\n    \"old\": \"Kinetic energy is one half times mass times velocity squared.\\\\n\\\\n\",\n    \"op\": \"replace\"\n  }\n]}",
+        "qwen3-vl-4b": "{\n  \"edits\": [\n    {\n      \"new\": \"$E = \\\\frac{1}{2}mv^2$\",\n      \"old\": \"Kinetic energy is one half times mass times velocity squared.\",\n      \"op\": \"replace\"\n    }\n  ]\n}"
+      },
+      "remove": [],
+      "title": "Energy"
+    },
+    {
+      "add": [],
+      "ask": "remove the line about milk, we already have it",
+      "body": "- eggs\n- milk\n- bread\n- apples",
+      "id": "remove-line",
+      "keep": [
+        "eggs",
+        "bread",
+        "apples"
+      ],
+      "oracle": "{\"edits\": [{\"op\": \"delete\", \"old\": \"- milk\", \"new\": \"\"}]}",
+      "recorded": {
+        "qwen3-4b-2507": "{\"edits\": [{\"new\": \"\", \"old\": \"milk\", \"op\": \"delete\"}]}",
+        "qwen3-vl-4b": "{\"edits\": [{\"new\": \"  - eggs\\n  - bread\\n  - apples\", \"old\": \"  - milk\", \"op\": \"delete\"}]}"
+      },
+      "remove": [
+        "milk"
+      ],
+      "title": "Groceries"
+    },
+    {
+      "add": [
+        [
+          "Next survey: 14 November"
+        ]
+      ],
+      "ask": "add a final line: 'Next survey: 14 November'",
+      "body": "Field notes from the Harlow wetland survey, autumn round.\n\nTransect A ran from the north gate to the reed bed. Water depth averaged 34 centimetres and the reeds were flattened in two places, probably by deer crossing at night.\n\nTransect B followed the old drainage ditch. We counted eleven moorhens and one grey heron standing on the sluice. The ditch is silting up near the culvert and should be reported to the estate office.\n\nTransect C crossed the open water by boat. Visibility was poor after the rain, so the plankton samples were taken at the buoy instead of the usual pole. Sample jars are labelled C1 to C6.\n\nTransect D skirted the alder carr on the west side. The ground was too soft to reach the third marker, so we recorded from the boardwalk and noted the change on the map.\n\nEquipment: the second dip net has a torn rim and the handheld GPS lost signal under the alders twice. Spare batteries are in the blue box in the van.\n\nWeather was cold and still in the morning, with drizzle from eleven. We stopped at half past two when the light went.\n\nVolunteers this round: four from the county group and two students from the college, all of whom had done the training in spring.\n\nClosing remark: the heron roost on the island was empty again this year, the third year in a row. Worth asking the county recorder whether anyone has seen it elsewhere.",
+      "id": "long-note-append",
+      "keep": [
+        "Transect A ran from the north gate",
+        "eleven moorhens",
+        "Sample jars are labelled C1 to C6",
+        "Spare batteries are in the blue box",
+        "We stopped at half past two",
+        "two students from the college",
+        "the third year in a row",
+        "county recorder"
+      ],
+      "oracle": "{\"edits\": [{\"op\": \"append\", \"old\": \"\", \"new\": \"Next survey: 14 November\"}]}",
+      "recorded": {
+        "qwen3-4b-2507": "{\"edits\": [{\"new\": \"Next survey: 14 November\", \"old\": \"Closing re\", \"op\": \"append\"}]}",
+        "qwen3-vl-4b": "{\n  \"edits\": [\n    {\n      \"new\": \"Next survey: 14 November\",\n      \"old\": \"Closing re\",\n      \"op\": \"append\"\n    }\n  ]\n}"
+      },
+      "remove": [],
+      "title": "Wetland survey"
+    }
+  ]
+}

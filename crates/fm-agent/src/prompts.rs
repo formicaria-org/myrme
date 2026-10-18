@@ -17,6 +17,19 @@ tables, fenced code blocks (for code only), block quotes, callouts (`> [!note]` 
 not invent other syntax, do not add front-matter, and do not answer from memory: use only the \
 provided notes and search results, and say plainly when they do not answer the question.";
 
+/// M5's instruction: say **what to change**, pointing at the note's own words; Rust makes the change
+/// (`crate::edits`). Replaces asking for the whole new body, which small models answered with only
+/// the changed part (2026-10-18, `methods/edits/eval`).
+pub const EDITS_INSTRUCTION: &str = "\
+You change a note the way the person asks, by listing edits. You never rewrite the note: everything you \
+do not name stays exactly as it is. Answer ONLY with a JSON object {\"edits\": [...]}, where each edit has:\n\
+\"op\": \"replace\" (old becomes new), \"insert_after\" (new goes on a new line after the line containing \
+old), \"delete\" (old is removed) or \"append\" (new goes at the end of the note, and old is \"\");\n\
+\"old\": words copied exactly from the note, as few as make them unique in it;\n\
+\"new\": the new text in the note's Markdown, with math as KaTeX ($...$ inline, $$...$$ on its own \
+line), or \"\" for a delete.\n\
+Change only what was asked. If nothing should change, answer {\"edits\": []}.";
+
 /// The system prompt for the optional query-refinement step: rough request in, one clean search
 /// query out. Bounded, single-shot, no tools.
 pub const QUERY_REFINE_INSTRUCTION: &str = "\

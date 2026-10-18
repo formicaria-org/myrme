@@ -98,6 +98,18 @@ pub fn verify(model_output: &str, sources: &[Source]) -> GroundedNote {
         // stray prose) — skip it entirely, so it neither ships nor counts against the metric.
         .filter(|(_, source_id, quote)| source_id.is_some() || quote.is_some())
         .map(|(text, source_id, quote)| {
+            // A claim that names no source is given the one source its quote is in — only when
+            // exactly one source holds it, so the guarantee is unchanged: every claim that ships has
+            // a quote found word for word in the source it is credited to. Small models put the
+            // `[n]` on the quote line or leave it out (2026-10-18, `methods/research/eval`).
+            let source_id = source_id.or_else(|| {
+                let q = quote.as_deref()?;
+                let mut holding = sources.iter().filter(|s| quote_supported(q, &s.text));
+                match (holding.next(), holding.next()) {
+                    (Some(only), None) => Some(only.id),
+                    _ => None,
+                }
+            });
             let verified = match source_id.and_then(|id| sources.iter().find(|s| s.id == id)) {
                 Some(src) => quote.as_deref().is_some_and(|q| quote_supported(q, &src.text)),
                 None => false,
@@ -168,10 +180,16 @@ fn parse_claims(output: &str) -> Vec<(String, Option<usize>, Option<String>)> {
             let (text, id) = split_citation(rest);
             claims.push((text, id, None));
         } else if let Some(rest) = line.strip_prefix("> ") {
-            // Attach the quote to the most recent claim that doesn't have one yet.
+            // Attach the quote to the most recent claim that doesn't have one yet. A `[n]` at the end
+            // of the quote line is the claim's citation put on the wrong line: it is taken off the
+            // quote (it is not in the source) and kept as the citation if the claim had none.
+            let (rest, cited) = split_citation(rest);
             if let Some(last) = claims.last_mut() {
                 if last.2.is_none() {
-                    last.2 = Some(strip_quote_marks(rest));
+                    last.2 = Some(strip_quote_marks(&rest));
+                    if last.1.is_none() {
+                        last.1 = cited;
+                    }
                 }
             }
         }
@@ -218,6 +236,9 @@ fn strip_quote_marks(s: &str) -> String {
 /// straight, non-breaking/thin spaces → space, soft hyphen removed) — so a faithful quote is not
 /// rejected merely because the source's markdown reflowed it. An empty quote is never supported.
 fn quote_supported(quote: &str, source_text: &str) -> bool {
+    // The closing punctuation is not part of the words: a quote that ends "… public library." where
+    // the source goes on ", where readers …" is still word for word.
+    let quote = quote.trim().trim_end_matches(['.', ',', ';', ':', '!', '?']);
     let q = crate::textmatch::fold(quote);
     if q.is_empty() {
         return false;
@@ -228,6 +249,29 @@ fn quote_supported(quote: &str, source_text: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The three ways a small model misplaced a correct answer (2026-10-18, research eval), each
+    /// still verified, and an invented quote still dropped whatever is done with its citation.
+    #[test]
+    fn a_misplaced_citation_or_a_closing_full_stop_does_not_drop_a_true_quote() {
+        let srcs = vec![
+            src(1, "A", "", "The archive was founded in 1873 by the parish council."),
+            src(2, "B", "", "It is kept in the basement of the library, where readers come."),
+        ];
+        // The citation on the quote line, none on the claim.
+        let g = verify("- Founded in 1873.\n> The archive was founded in 1873 [1]", &srcs);
+        assert_eq!((g.verified.len(), g.verified[0].source_id), (1, 1));
+        // No citation at all: the one source holding the quote is credited.
+        let g = verify("- It is in the library.\n> kept in the basement of the library", &srcs);
+        assert_eq!((g.verified.len(), g.verified[0].source_id), (1, 2));
+        // A full stop where the source has a comma.
+        let g =
+            verify("- In the library [2].\n> It is kept in the basement of the library.", &srcs);
+        assert_eq!(g.verified.len(), 1);
+        // Invented words are dropped however they are cited.
+        let g = verify("- Founded in 1874.\n> The archive was founded in 1874 [1]", &srcs);
+        assert_eq!((g.verified.len(), g.dropped.len()), (0, 1));
+    }
 
     fn src(id: usize, title: &str, url: &str, text: &str) -> Source {
         Source { id, title: title.into(), url: url.into(), text: text.into() }
