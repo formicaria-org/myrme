@@ -4,7 +4,7 @@
 # the test answers for the model itself, so what is checked is the door between the two programs.
 #
 #   pixi run integration
-#   FM_CHECKOUT=~/fm-myrme pixi run integration     # a local formicaria branch instead of the pin
+#   FM_CHECKOUT=../formicaria pixi run integration   # a local formicaria checkout instead of the pin
 #
 # The pin is the one `fm-fetch` is taken at (crates/fm-agent-run/Cargo.toml), so there is one
 # formicaria version in this repo. The checkout lives in .fm/ (gitignored), never in a developer's
@@ -30,6 +30,8 @@ elif [ ! -d "$SRC/.git" ]; then
   git -C "$SRC" -c advice.detachedHead=false checkout -q "$TAG"
 fi
 # Default features: the build formicaria ships. No UI is embedded (none is needed over /api).
-cargo build -q --release --manifest-path "$SRC/Cargo.toml" -p fm-serve
+# Built from inside the checkout, so its own Cargo configuration applies (a developer's local
+# `[patch]` of Myrme, for instance), exactly as a build there would.
+(cd "$SRC" && cargo build -q --release -p fm-serve)
 FM_SERVE_BIN="$SRC/target/release/fm-serve" FM_SRC="$SRC" FM_TAG="$TAG" \
   cargo test -q -p fm-agent-run --test integration_fm -- --ignored --nocapture

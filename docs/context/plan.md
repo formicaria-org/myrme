@@ -142,7 +142,7 @@ tested outside the repository. The four steps below are all in it.
     `pixi run agent-serve` here, pointed at `127.0.0.1:8765`. The HTTP door is all it needs.
   - **Linked (when the host side changes):** a separate formicaria worktree on a local branch:
     ```
-    cd ~/formicaria && git worktree add ../fm-lab -b lab
+    cd ../formicaria && git worktree add ../fm-lab -b lab
     cd ../fm-lab && sed -i 's|path = "../fm-agent-run"|path = "../../../myrme/crates/fm-agent-run"|' crates/fm-serve/Cargo.toml
     ```
     - Apply the same edit to `mobile/src-tauri/Cargo.toml` for the phone.
@@ -258,6 +258,11 @@ On branch `myrme-cutover` (worktree `~/fm-myrme`, local only):
   records first; formicaria counted 23 in August.
 
 ## Phase D is done (2026-10-18)
+
+**Its last step, the facade:**
+- **Desktop: done** (Myrme 0.3.0, contract 1.1, `fm_agent_run::host`).
+- **Phone: open.** It needs its own facade, built and checked through formicaria's `android`
+  workflow. Then the 1.0 items nobody uses are removed: contract 2.0.
 
 formicaria `main` links Myrme from this repository; the owner merged the cutover on 2026-10-18.
 From then on:

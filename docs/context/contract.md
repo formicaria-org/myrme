@@ -13,7 +13,7 @@ _Taken from formicaria at tag v0.9.2 (commit e670190) on 2026-10-18; the Rust it
 Two numbers, kept apart:
 - **The release version** (`fm_agent_run::VERSION`, `Cargo.toml`, the `v…` tag) changes with
   every release.
-- **The contract version** (`fm_agent_run::CONTRACT_MAJOR`.`CONTRACT_MINOR`, now **1.0**) changes
+- **The contract version** (`fm_agent_run::CONTRACT_MAJOR`.`CONTRACT_MINOR`, now **1.1**) changes
   only when this document does.
   - **Major:** anything listed below is renamed, removed or changes meaning. formicaria checks the
     major at compile time, so an app written for another major refuses to build and says why. It
@@ -24,12 +24,12 @@ So formicaria can take any newer Myrme release of the same contract major by cha
 nothing else. That is how methods, prompts, evals, models and the runtime reach users without a
 formicaria code change. `docs/context/releases.md` lists every release with its contract version.
 
-The list in part 1 is compile-checked as contract 1.0 (`tests/fm_contract.rs`). Changing it means
+The list in part 1 is compile-checked as contract 1.1 (`tests/fm_contract.rs`). Changing it means
 changing the contract version in the same commit.
 
 ## 1. Rust items formicaria names
 
-To refresh this list, run in `~/formicaria`:
+To refresh this list, run in a formicaria checkout (`../formicaria`):
 
 ```
 git grep -hoE "fm_agent(_run)?::[A-Za-z_]+(::[A-Za-z_]+)*(::\{[^}]*\})?" <tag> -- crates/fm-serve/src mobile/src-tauri/src | sort -u
@@ -50,6 +50,17 @@ git grep -hoE "fm_agent(_run)?::[A-Za-z_]+(::[A-Za-z_]+)*(::\{[^}]*\})?" <tag> -
 | `fm_agent_run::manifest::{Manifest, Manifest::read, Manifest::platform_key, whisper_language}` | the catalogue |
 | `fm_agent_run::nativelib::native_lib_dir` (Android only) | phone: where the bundled runtime lives |
 | `fm_agent_run::watch::{serve_loop, wait_ready}` | phone: the watch loop |
+
+**Contract 1.1 adds the desktop host's facade, `fm_agent_run::host`** (feature `download`):
+- `Tools` over the one folder the app gives Myrme: `catalogue`, `installed`, `is_provisioned`,
+  `bytes`, `remove`, `provision`, `provision_speech`, `speech_staged`, `speech_fetchable`,
+  `speech_wanted` and `launch`;
+- `Stage`, `Progress` and `Launch`;
+- `unsupported()`, `whisper_runtime_key()`, `SERVER_BIN`, `WHISPER_BIN`, `WHISPER_PORT`.
+
+formicaria's desktop host uses these from Myrme 0.3.0. The 1.0 items it used before stay, because
+the phone still uses them. When the phone moves to a facade of its own, the ones nobody uses are
+removed, and that is contract 2.0.
 
 **Versions (contract 1.0):** `fm_agent_run::{VERSION, CONTRACT_MAJOR, CONTRACT_MINOR}`. formicaria
 checks the contract at compile time and reports the version.

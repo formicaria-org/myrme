@@ -296,6 +296,32 @@ severely changed) … the user should not need to think about it and have the fe
 - **`releases.md`** lists every release, its contract version, the formicaria that links it, and
   what changed for users.
 
+## 2026-10-18 (night) — the desktop host's facade, contract 1.1 `#contract`
+
+**The owner:** *"do the facade now."*
+
+**Decision.**
+- **`fm_agent_run::host`** answers what an app asks to host Myrme on a desktop, over the one folder
+  it is given: what is installed, what it takes on disk, fetching it (with the app's progress and
+  cancel), removing it, staging speech, and building the `agent-serve` command. There is also
+  `unsupported()` for whether the machine can run it at all.
+  - The logic and the messages a person reads were moved from formicaria's `fm-serve/src/agent.rs`
+    unchanged, and its tests moved with it.
+  - formicaria keeps what is its own: where the folder is, its settings file, the progress it
+    shows, its cancel counter, the catalogue its release ships, and when it starts the assistant.
+- **Contract 1.1, an addition.** The 1.0 items stay, because **the phone still uses them**. Its host
+  is not moved yet: the phone shell cannot be built on this machine (no NDK), and 937 lines
+  rewritten without a build would be a guess.
+  - When the phone moves to a facade of its own, checked by formicaria's `android` workflow, the
+    items nobody uses are removed. That is contract 2.0.
+- **A bug found on the way.** formicaria's "remove the downloaded model" refused on every installed
+  copy. It took a `models.toml` in the folder for a source checkout, but provisioning copies the
+  catalogue into the per-user tools folder. `Tools::remove` decides "checkout" the way formicaria
+  finds the folder: is it the per-user tools folder. A test holds it
+  (`a_tools_folder_with_a_catalogue_copy_can_still_be_cleared`).
+- **`pixi run integration` builds formicaria from inside its checkout**, so that checkout's own
+  Cargo configuration applies, a developer's local `[patch]` of Myrme included.
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading

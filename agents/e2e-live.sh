@@ -3,7 +3,7 @@
 # a real runtime, and a person's message — nothing stood in for. Where `pixi run integration` plays
 # the model to test the door, this plays nothing.
 #
-#   FM_CHECKOUT=~/fm-myrme MODELS=~/formicaria/agents/models RUNTIME=<dir with llama-server> \
+#   FM_CHECKOUT=../formicaria MODELS=../formicaria/agents/models RUNTIME=<dir with llama-server> \
 #     bash agents/e2e-live.sh [model name, default qwen3-4b-2507]
 #
 # FM_CHECKOUT is a formicaria checkout whose `fm-serve` and `agent-serve` are built in

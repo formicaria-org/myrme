@@ -2,7 +2,7 @@
 
 **Myrme is formicaria's on-device assistant, built for small models that run locally.** It left the
 formicaria repo on 2026-10-18 with its history, so the owner can work on it at its own pace. The
-work is **dedicated methods for dedicated tasks**. formicaria (`~/formicaria`,
+work is **dedicated methods for dedicated tasks**. formicaria (`../formicaria`, beside this checkout in `formicaria-org/`,
 https://github.com/formicaria-org/formicaria) is the notebook Myrme serves. It links these crates
 behind its `agent` feature and must keep building at every step.
 
@@ -20,11 +20,11 @@ Its router names the file to open before you touch each area. The working plan i
     contract lists.
   - Such a change needs a matching formicaria change landed first, then an entry in
     `docs/context/decisions.md`.
-- **Until the cutover, formicaria carries a frozen copy of these crates (fixes only).**
-  - A fix made there is mirrored here the same day.
-  - The paths are identical (`crates/fm-agent*`, `agents/`), so `git format-patch` there and
-    `git am` here apply unchanged.
-  - The protocol is in `plan.md` § *Working in parallel*.
+- **formicaria carries no copy of these crates any more** (cutover, 2026-10-18). It links a
+  Myrme release by tag and checks the contract version at compile time; `releases.md` says which
+  formicaria links which release.
+- **A release** follows `docs/context/releases.md`. An addition to the contract is a new minor; a
+  removal, rename or change of meaning is a new major, and needs formicaria's change ready first.
 - **formicaria pins Myrme by tag, never by branch.** A tag formicaria pins is never moved or
   deleted.
 

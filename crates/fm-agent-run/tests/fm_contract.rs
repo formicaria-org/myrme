@@ -30,12 +30,20 @@ use fm_agent_run::{Agent, ImageReader, CATALOGUE, CONTRACT_MAJOR, CONTRACT_MINOR
 #[cfg(feature = "download")]
 use fm_agent_run::fetch::{ensure_mmproj, ensure_model, ensure_runtime};
 
-/// The contract this file checks is 1.0 (`CONTRACT_MAJOR`/`CONTRACT_MINOR`). Changing what it names
+/// **Contract 1.1:** the desktop host's facade — what formicaria's `fm-serve` uses in place of the
+/// items above that a desktop host needs (the phone still uses them; they stay until it moves).
+#[cfg(feature = "download")]
+use fm_agent_run::host::{
+    unsupported, whisper_runtime_key, Launch, Progress, Stage, Tools, SERVER_BIN, WHISPER_BIN,
+    WHISPER_PORT,
+};
+
+/// The contract this file checks is 1.1 (`CONTRACT_MAJOR`/`CONTRACT_MINOR`). Changing what it names
 /// means changing the contract version too — a removal or rename is a new major, an addition a new
 /// minor — and the two are compared here so one cannot move without the other.
 #[test]
-fn this_list_is_contract_1_0() {
-    assert_eq!((fm_agent_run::CONTRACT_MAJOR, fm_agent_run::CONTRACT_MINOR), (1, 0));
+fn this_list_is_contract_1_1() {
+    assert_eq!((fm_agent_run::CONTRACT_MAJOR, fm_agent_run::CONTRACT_MINOR), (1, 1));
     assert!(
         fm_agent_run::VERSION.split('.').count() == 3,
         "a release version is MAJOR.MINOR.PATCH"

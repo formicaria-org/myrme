@@ -29,7 +29,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// models — and an app moves to them by changing a tag and nothing else.
 pub const CONTRACT_MAJOR: u32 = 1;
 /// See [`CONTRACT_MAJOR`].
-pub const CONTRACT_MINOR: u32 = 0;
+pub const CONTRACT_MINOR: u32 = 1;
 
 /// **The model catalogue** — models, their pins and licences, and the runtime archives per platform
 /// (`models.toml`, beside this crate). Embedded so that whoever links Myrme has it without knowing
@@ -48,6 +48,10 @@ pub mod agent_serve;
 #[cfg(feature = "download")]
 pub mod fetch;
 pub mod fmserve;
+/// What an app needs to host Myrme on a desktop: one folder, a few questions (contract 1.1). With
+/// `download`, which a desktop host has: provisioning is most of what it does.
+#[cfg(feature = "download")]
+pub mod host;
 pub mod installed;
 /// A packet's nutrition label read off a photograph: one transcription, written nowhere.
 pub mod label;
