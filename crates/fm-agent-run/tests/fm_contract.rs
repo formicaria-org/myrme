@@ -37,8 +37,8 @@ fn associated_items_formicaria_calls_exist() {
     let _ = <SystemMonitor as ResourceMonitor>::sample;
 }
 
-/// The catalogue formicaria's release copies (`desktop.yml`, `packaging/formicaria.sh`) parses.
+/// The catalogue formicaria embeds on the phone and writes beside the desktop program parses.
 #[test]
 fn the_shipped_catalogue_parses() {
-    let _ = Manifest::parse(include_str!("../../../agents/models.toml"));
+    let _ = Manifest::parse(fm_agent_run::CATALOGUE);
 }

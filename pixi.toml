@@ -10,7 +10,8 @@ platforms = [{ platform = "linux-64", glibc = "2.34" }, "osx-arm64", "osx-64", "
 rust = "*"
 c-compiler = "*"   # `ring`, under the download feature's TLS
 cargo-deny = "*"
-python = "3.12.*"  # agents/bench and agents/search-proxy.py
+python = "3.12.*"  # agents/bench, agents/search-proxy.py, agents/eval-data.py
+pyarrow = "*"      # reads the pinned eval datasets (agents/eval-data.py)
 
 [tasks]
 test = "cargo test --workspace"
@@ -32,4 +33,6 @@ model-bench = "python3 agents/bench/run.py"
 agent-chat = "cargo run -q -p fm-agent-run --bin agent-chat --"
 eval = "bash agents/eval.sh"
 integration = "bash agents/integration.sh"
+eval-data = "python -I agents/eval-data.py"
+eval-speech = "bash agents/eval-speech.sh"
 check-pins = "cargo test -p fm-agent-run --features download -- --ignored --nocapture every_pinned_runtime"

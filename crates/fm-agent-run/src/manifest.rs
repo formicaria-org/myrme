@@ -481,7 +481,7 @@ mod tests {
     /// projector off the GPU — 8192 with it on the card does not start on a 4 GB GPU (measured).
     #[test]
     fn the_laptop_model_has_the_large_window_and_keeps_its_projector_off_the_gpu() {
-        let m = Manifest::parse(include_str!("../../../agents/models.toml"));
+        let m = Manifest::parse(crate::CATALOGUE);
         assert_eq!(m.model_ctx("qwen3-vl-4b"), 8192);
         assert_eq!(m.model("qwen3-vl-4b").and_then(|x| x.mmproj_offload), Some(false));
         // Who may be handed a nutrition label is a measurement, written beside the model it is of.
@@ -575,7 +575,7 @@ mod tests {
 
     #[test]
     fn every_device_hears_any_language_and_may_choose_to_listen_better() {
-        let m = Manifest::parse(include_str!("../../../agents/models.toml"));
+        let m = Manifest::parse(crate::CATALOGUE);
         let everyday = m.whisper_for(false).expect("an everyday speech model is catalogued");
         assert_eq!(whisper_language(&everyday), "auto", "{everyday} must not be English-only");
         assert_eq!(m.whisper_desktop().as_deref(), Some(everyday.as_str()), "the same everywhere");
@@ -624,7 +624,7 @@ mod tests {
     fn the_shipped_manifest_pins_a_verified_runtime_for_linux() {
         // Reads the real file, so a hand-edit that drops a checksum fails here rather than at a
         // user's first enable.
-        let m = Manifest::parse(include_str!("../../../agents/models.toml"));
+        let m = Manifest::parse(crate::CATALOGUE);
         let rt = m.runtime("linux_x64").expect("linux_x64 must stay pinned and verified");
         assert!(rt.url.starts_with("https://"), "{}", rt.url);
         assert_eq!(rt.sha256.len(), 64, "a sha256 is 64 hex characters: {}", rt.sha256);

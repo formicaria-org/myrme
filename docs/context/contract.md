@@ -32,6 +32,13 @@ git grep -hoE "fm_agent(_run)?::[A-Za-z_]+(::[A-Za-z_]+)*(::\{[^}]*\})?" <tag> -
 | `fm_agent_run::nativelib::native_lib_dir` (Android only) | phone: where the bundled runtime lives |
 | `fm_agent_run::watch::{serve_loop, wait_ready}` | phone: the watch loop |
 
+**Added for formicaria's cutover (2026-10-18)**, used from the release after it:
+- `fm_agent_run::CATALOGUE`: the catalogue, embedded. The phone parses it, and the desktop writes
+  it beside the program.
+- `fm_agent_run::agent_serve::main`: `agent-serve`'s entry point, so formicaria's own three-line
+  crate ships the same binary.
+- `agent-serve --print-catalogue`: prints the catalogue.
+
 **Plan:** collapse these into a small facade (`plan.md`, Phase D) so the insides can change freely.
 
 ## 2. The HTTP door Myrme calls
@@ -45,7 +52,8 @@ some of them.
 
 ## 3. The catalogue
 
-`agents/models.toml`, parsed by `Manifest::parse`. formicaria's release copies it into every
+`crates/fm-agent-run/models.toml` (it was `agents/models.toml` until 2026-10-18), embedded as
+`fm_agent_run::CATALOGUE` and parsed by `Manifest::parse`. formicaria's release copies it into every
 desktop archive (`.github/workflows/desktop.yml:141`, `packaging/formicaria.sh:42`) and stages the
 Android runtime from it (`ci/android-stage-runtime.sh`). **Its keys are a format formicaria reads.**
 Adding a key is safe; renaming or removing one is a contract change. The plan moves it next to the

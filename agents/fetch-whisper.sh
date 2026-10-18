@@ -13,7 +13,8 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONF="$HERE/models.toml"
+# The catalogue lives beside the crate that embeds it; an agents/models.toml, if present, wins.
+CONF="$HERE/models.toml"; [ -f "$CONF" ] || CONF="$HERE/../crates/fm-agent-run/models.toml"
 RUNTIME_DIR="$HERE/runtime"
 MODELS_DIR="$HERE/models"
 

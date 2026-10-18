@@ -158,6 +158,37 @@ pub fn edit_outcome(
     (why.is_empty(), why.join("; "))
 }
 
+/// Word error rate of `hypothesis` against `reference` (M4): word-level edit distance over the
+/// reference's length, after both are lower-cased and every character that is not a letter or a
+/// digit is turned into a space — so a reader's capitals and punctuation do not count, and an
+/// elision (`l'anno`) splits the same way on both sides. A number written as digits against one
+/// spelled out still counts as an error; that is a real difference a person would fix.
+pub fn wer(reference: &str, hypothesis: &str) -> f64 {
+    let words = |s: &str| -> Vec<String> {
+        s.chars()
+            .flat_map(char::to_lowercase)
+            .map(|c| if c.is_alphanumeric() { c } else { ' ' })
+            .collect::<String>()
+            .split_whitespace()
+            .map(str::to_string)
+            .collect()
+    };
+    let (r, h) = (words(reference), words(hypothesis));
+    if r.is_empty() {
+        return if h.is_empty() { 0.0 } else { 1.0 };
+    }
+    let mut prev: Vec<usize> = (0..=h.len()).collect();
+    for (i, rw) in r.iter().enumerate() {
+        let mut cur = vec![i + 1; h.len() + 1];
+        for (j, hw) in h.iter().enumerate() {
+            let sub = prev[j] + usize::from(rw != hw);
+            cur[j + 1] = sub.min(prev[j + 1] + 1).min(cur[j] + 1);
+        }
+        prev = cur;
+    }
+    prev[h.len()] as f64 / r.len() as f64
+}
+
 /// A tally over a case battery, printed the same way by every method's eval.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Tally {
@@ -211,6 +242,14 @@ mod tests {
         assert!(meetings_match(&[], &[]));
         assert!(!meetings_match(&[], &lines(&["fixed 2026-10-16T17:00"])));
         assert!(!meetings_match(&lines(&["fixed 2026-10-16T17:00"]), &[]));
+    }
+
+    #[test]
+    fn wer_ignores_case_and_punctuation_and_counts_word_edits() {
+        assert_eq!(wer("ma per contrario lasceranno", "Ma, per contrario, lasceranno."), 0.0);
+        assert_eq!(wer("l'anno scorso", "L'anno scorso!"), 0.0);
+        assert!((wer("one two three four", "one too three") - 0.5).abs() < 1e-9);
+        assert_eq!(wer("", ""), 0.0);
     }
 
     #[test]

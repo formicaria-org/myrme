@@ -555,8 +555,7 @@ mod tests {
     #[ignore = "downloads ~110 MB; run via `pixi run check-pins`"]
     #[cfg(feature = "download")]
     fn every_pinned_runtime_still_hashes_to_what_the_catalogue_records() {
-        let manifest =
-            crate::manifest::Manifest::parse(include_str!("../../../agents/models.toml"));
+        let manifest = crate::manifest::Manifest::parse(crate::CATALOGUE);
         let dir = scratch("pins");
         fs::create_dir_all(&dir).unwrap();
         let mut checked = 0;

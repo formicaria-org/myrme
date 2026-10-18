@@ -1,0 +1,306 @@
+//! The **resident agent**: launches the model under the watchdog, then watches formicaria's
+//! discussions and **responds when a user `@name`-mentions it** — so you talk to the assistant *in
+//! the app's discussion box*, no CLI needed. It is tied to formicaria's life: when fm-serve stops
+//! answering (app closed), it stops the model and exits — model on with the app, off with it, no
+//! orphan. `/search` (with `--searxng-port`) searches the web; a plain discussion is chat-only.
+//!
+//!   pixi run agent-serve -- --searxng-port 8888
+
+use crate::fmserve::FmServe;
+use crate::manifest::Manifest;
+use crate::Agent;
+use clap::Parser;
+use fm_agent::launch::SupervisedModel;
+use fm_agent::preflight::Need;
+use fm_agent::watchdog::{Limits, SystemMonitor};
+use std::path::PathBuf;
+use std::process::Command;
+
+#[derive(Parser)]
+#[command(
+    name = "agent-serve",
+    about = "Serve the model + answer @name mentions; tied to formicaria's life."
+)]
+struct Args {
+    /// Print the catalogue this binary ships with (`models.toml`) and exit — how a release writes
+    /// it beside the program without knowing where Myrme keeps it.
+    #[arg(long, default_value_t = false)]
+    print_catalogue: bool,
+    /// Where `models.toml`, `models/`, and `runtime/` live — the single manifest resolves the rest.
+    #[arg(long, default_value = "agents")]
+    agents_dir: PathBuf,
+    /// Which catalogued model to run; defaults to the manifest's `default`.
+    #[arg(long)]
+    model: Option<String>,
+    /// The model server port; defaults to the manifest's `port`.
+    #[arg(long)]
+    model_port: Option<u16>,
+    /// The fm-serve port to serve/watch.
+    #[arg(long, default_value_t = 8765)]
+    serve_port: u16,
+    /// The formicaria this assistant belongs to — its `/api/alive` `instance`, passed by the app
+    /// that starts it (2026-10-18). Another app answering on the port means ours is gone. Left out
+    /// (a dev run), the instance answering at start is adopted.
+    #[arg(long)]
+    serve_instance: Option<String>,
+    /// The local web-search proxy port (enables /search); omit to run without the web.
+    #[arg(long)]
+    searxng_port: Option<u16>,
+    /// Search the web **in-process over HTTPS** instead of through the local proxy.
+    ///
+    /// What the phone has always done, and what a desktop without `python3` needs — the proxy is a
+    /// Python script, so a released build that spawns no shell has no way to run it. Ignored when
+    /// `--searxng-port` is given: an explicit proxy wins, because someone who started one meant it.
+    /// Costs the DuckDuckGo engine, which needs HTML scraping the in-process client does not do;
+    /// wikipedia, GitHub and arXiv remain.
+    #[arg(long, default_value_t = false)]
+    web_direct: bool,
+    /// The local `whisper.cpp` server port (enables **/transcribe** audio→transcript). Omit to run
+    /// without audio transcription. When set, a `whisper-server` is launched under the same watchdog
+    /// as the model, from `<agents_dir>/runtime/whisper-server` + `<agents_dir>/models/<whisper-model>.bin`.
+    #[arg(long)]
+    whisper_port: Option<u16>,
+    /// The whisper weights label — the file `models/<whisper-model>.bin` and the transcript provenance.
+    #[arg(long, default_value = "ggml-base")]
+    whisper_model: String,
+    /// The name users address it by (`@name`) and the git author of its proposals; defaults to the model.
+    #[arg(long)]
+    name: Option<String>,
+    /// This device's name for its Myrme (`@Myrme-<device>`; 2026-10-18). The app passes what the
+    /// person set in Settings; `laptop` when nothing was.
+    #[arg(long, default_value = "laptop")]
+    device: String,
+    /// Context window; defaults to the manifest's `ctx`.
+    #[arg(long)]
+    ctx: Option<u32>,
+    /// Inference threads; defaults to the manifest's `threads`.
+    #[arg(long)]
+    threads: Option<u32>,
+    /// GPU layers to offload (`-ngl`); defaults from the manifest's `gpu` policy (99 unless `off`).
+    #[arg(long)]
+    ngl: Option<u32>,
+    /// Longest reply in characters; defaults from the manifest's `max_reply_chars`.
+    #[arg(long)]
+    max_reply_chars: Option<usize>,
+    #[arg(long, default_value_t = 4000)]
+    history_budget: usize,
+    #[arg(long, default_value_t = 1_000_000_000)]
+    headroom: u64,
+    /// How often to check for new mentions. Kept snappy (1s) for fast pickup — a poll only fetches a
+    /// discussion's thread when its message count changed, so an idle poll is one cheap `discussions`
+    /// call, not a scan of every thread.
+    #[arg(long, default_value_t = 1)]
+    poll_secs: u64,
+}
+
+/// `agent-serve`'s entry point. In the library so a program that links Myrme — formicaria's release —
+/// ships the same binary from a three-line crate of its own (Cargo builds binaries only for a
+/// workspace's own members, never for a dependency).
+pub fn main() {
+    if let Err(e) = run() {
+        eprintln!("agent-serve: {e}");
+        std::process::exit(1);
+    }
+}
+
+fn run() -> Result<(), String> {
+    let a = Args::parse();
+    if a.print_catalogue {
+        print!("{}", crate::CATALOGUE);
+        return Ok(());
+    }
+
+    // The manifest is the single source for which model, and the runtime defaults; flags override.
+    // The catalogue on disk if there is one (formicaria copies it into the tools folder; a developer
+    // may edit it); else the one this binary ships with.
+    let on_disk = a.agents_dir.join("models.toml");
+    let manifest = if on_disk.exists() {
+        Manifest::read(&on_disk)?
+    } else {
+        Manifest::parse(crate::CATALOGUE)
+    };
+    let instance = a
+        .serve_instance
+        .clone()
+        .or_else(|| FmServe::local(a.serve_port).answering_instance().ok().flatten());
+    let model_name = a.model.clone().unwrap_or_else(|| manifest.default.clone());
+    let file = manifest.file(&model_name).ok_or_else(|| {
+        format!("model '{model_name}' is not in {}/models.toml", a.agents_dir.display())
+    })?;
+    let model_gguf = a.agents_dir.join("models").join(file);
+    let runtime = a.agents_dir.join("runtime");
+    let name = a.name.clone().unwrap_or_else(|| model_name.clone());
+    let model_port = a.model_port.unwrap_or(manifest.port);
+    // Per-model settings from the manifest (each falls back to the global default), CLI flags override.
+    let ctx = a.ctx.unwrap_or_else(|| manifest.model_ctx(&model_name));
+    let threads = a.threads.unwrap_or_else(|| manifest.model_threads(&model_name));
+    // GPU by default, CPU fallback: `-ngl 99` under the manifest's `gpu` policy. On a machine with a
+    // GPU (and a GPU-capable runtime), the model offloads; with no GPU it silently runs on CPU. `--ngl`
+    // overrides.
+    let ngl = a.ngl.unwrap_or_else(|| manifest.gpu_layers());
+
+    // Launch the model under the watchdog (preflight → resource caps → guaranteed kill). Its
+    // stdout/stderr are inherited (not nulled) so a crash is visible in the agent log.
+    // `EXE_SUFFIX` because the staged file is `llama-server.exe` on Windows, and the `exists()`
+    // check below on the whisper binary would otherwise never pass there.
+    let bin = runtime.join(format!("llama-server{}", std::env::consts::EXE_SUFFIX));
+    // An assistant left by an app that has just gone takes a moment to notice and let the port
+    // go (its watchdog checks every two seconds); wait for that rather than failing to bind.
+    wait_until_free(model_port);
+    let mut cmd = Command::new(&bin);
+    cmd.env("LD_LIBRARY_PATH", &runtime).arg("-m").arg(&model_gguf).args([
+        "--host",
+        "127.0.0.1",
+        "--port",
+        &model_port.to_string(),
+        "-c",
+        &ctx.to_string(),
+        "-t",
+        &threads.to_string(),
+        "-ngl",
+        &ngl.to_string(),
+        "--no-warmup",
+    ]);
+    // The multimodal projector, when this model has one and it has actually been fetched. Present ⇒
+    // the same server also answers image turns; absent ⇒ it serves text-only, exactly as it always
+    // has, and the agent says so rather than asking a blind model to read a picture.
+    let mmproj = manifest.add_projector(&mut cmd, &model_name, &a.agents_dir.join("models"));
+    // The projector is loaded beside the weights, so admission counts it (as the phone does).
+    let model_bytes = std::fs::metadata(&model_gguf).map(|m| m.len()).unwrap_or(500_000_000)
+        + mmproj.as_ref().and_then(|p| std::fs::metadata(p).ok()).map(|m| m.len()).unwrap_or(0);
+    // Resident, not one-shot: no wall-clock cliff (a per-turn cap is already on the model call), so it
+    // stays warm for the whole session instead of being SIGKILLed after 5 minutes.
+    let model = SupervisedModel::launch(
+        cmd,
+        SystemMonitor,
+        &Need::new(model_bytes, a.headroom),
+        Limits::resident(),
+    )?;
+    crate::watch::wait_ready(model_port);
+
+    // Optional audio→transcript runtime: a second supervised process (`whisper-server`), launched only
+    // when `--whisper-port` is given, killed on exit like the model. (The phone launches its own bundled
+    // whisper from `mobile/src-tauri/src/agent.rs`.) If its binary/weights aren't staged, launch fails loudly rather than degrading.
+    let whisper = if let Some(wport) = a.whisper_port {
+        let wbin = runtime.join(format!("whisper-server{}", std::env::consts::EXE_SUFFIX));
+        let wmodel = a.agents_dir.join("models").join(format!("{}.bin", a.whisper_model));
+        if !wbin.exists() || !wmodel.exists() {
+            return Err(format!(
+                "whisper is enabled (--whisper-port {wport}) but its runtime or weights are missing: \
+                 expected {} and {}. Run `pixi run fetch-whisper` first.",
+                wbin.display(),
+                wmodel.display()
+            ));
+        }
+        wait_until_free(wport);
+        let mut wcmd = Command::new(&wbin);
+        wcmd.env("LD_LIBRARY_PATH", &runtime).args([
+            "--host",
+            "127.0.0.1",
+            "--port",
+            &wport.to_string(),
+            "-m",
+            wmodel.to_str().unwrap_or_default(),
+            "-t",
+            &threads.to_string(),
+            "-l",
+            crate::manifest::whisper_language(&a.whisper_model),
+        ]);
+        let wbytes = std::fs::metadata(&wmodel).map(|m| m.len()).unwrap_or(200_000_000);
+        let w = SupervisedModel::launch(
+            wcmd,
+            SystemMonitor,
+            &Need::new(wbytes, a.headroom),
+            Limits::resident(),
+        )?;
+        // Wait for it to accept connections (it loads the model, then listens). Best-effort: the first
+        // /inference blocks until ready anyway.
+        for _ in 0..40 {
+            if std::net::TcpStream::connect(("127.0.0.1", wport)).is_ok() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+        Some(w)
+    } else {
+        None
+    };
+
+    // **The watchdog** (2026-10-18): every two seconds, is the app answering still ours? Its own
+    // thread, so an assistant busy in a long turn still notices; on another app it stops its
+    // models and leaves. Only a *different* answer counts — a slow or missing one is left to the
+    // loop, exactly as before, so a busy app is never mistaken for a gone one.
+    if let Some(ours) = instance.clone() {
+        let probe = FmServe::local(a.serve_port).with_timeout(std::time::Duration::from_secs(5));
+        let stops: Vec<_> =
+            std::iter::once(model.stopper()).chain(whisper.as_ref().map(|w| w.stopper())).collect();
+        std::thread::spawn(move || loop {
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            if let Ok(Some(here)) = probe.answering_instance() {
+                if !crate::fmserve::same_app(Some(&ours), Some(&here)) {
+                    eprintln!("agent-serve: another formicaria is answering — this one has gone; stopping");
+                    stops.iter().for_each(|s| s.stop());
+                    std::thread::sleep(std::time::Duration::from_secs(2));
+                    std::process::exit(0);
+                }
+            }
+        });
+    }
+
+    let agent = Agent {
+        fm: FmServe::local(a.serve_port).with_instance(instance.clone()),
+        model_port,
+        model: name.clone(),
+        searxng_port: a.searxng_port,
+        web_direct: a.web_direct,
+        whisper_port: a.whisper_port,
+        // Vision is a property of the *weights loaded*, not a second server — so it is simply
+        // whether the projector made it onto the command line above.
+        vision: mmproj.is_some(),
+        read_prompt: manifest.read_prompt(&model_name),
+        reads_labels: manifest.reads_labels(&model_name),
+        image_specialist: None,
+        whisper_model: a.whisper_model.clone(),
+        max_reply_chars: a.max_reply_chars.unwrap_or(manifest.max_reply_chars),
+        history_budget: a.history_budget,
+        device: fm_agent::convo::device_word(&a.device).unwrap_or_else(|| "laptop".into()),
+    };
+    println!(
+        "agent '@{}' listening — model warm on :{}, watching fm-serve :{}{}{}. Mention @{} in a discussion.",
+        name,
+        model_port,
+        a.serve_port,
+        if a.searxng_port.is_some() || a.web_direct { ", web on" } else { "" },
+        if a.whisper_port.is_some() { ", audio on" } else { "" },
+        name,
+    );
+
+    // The reusable watch loop — the same one the in-process mobile app runs, just with FmServe here.
+    let stopper = model.stopper();
+    crate::watch::serve_loop(&agent, &name, &runtime, a.poll_secs, &|| model.finished(), &|| {
+        stopper.stop()
+    });
+
+    // Take the whisper runtime down with the agent — no orphaned second process holding its model.
+    if let Some(w) = whisper {
+        w.stopper().stop();
+        let _ = w.wait();
+    }
+
+    let outcome = model.wait();
+    println!("model stopped: {outcome:?}");
+    Ok(())
+}
+
+/// Wait, up to 30 s, for `port` on loopback to be free to bind — logged once if it is not yet.
+fn wait_until_free(port: u16) {
+    for i in 0..60 {
+        if std::net::TcpListener::bind(("127.0.0.1", port)).is_ok() {
+            return;
+        }
+        if i == 0 {
+            eprintln!("agent-serve: port {port} is still in use — waiting for it to be released");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+}

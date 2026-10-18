@@ -14,6 +14,15 @@
 /// compiled in" — two unrelated things.
 pub use fm_agent;
 
+/// **The model catalogue** — models, their pins and licences, and the runtime archives per platform
+/// (`models.toml`, beside this crate). Embedded so that whoever links Myrme has it without knowing
+/// where Myrme keeps it: formicaria's phone parses it directly, and its desktop release writes it
+/// beside the program with `agent-serve --print-catalogue`. A `models.toml` on disk in an agents
+/// directory still wins (a developer's edit, an updated copy); this is what ships.
+pub const CATALOGUE: &str = include_str!("../models.toml");
+
+/// `agent-serve`'s code: the model under the watchdog, answering `@name` mentions.
+pub mod agent_serve;
 /// In-app model downloader (resumable + checksum). Agent-only — behind the `download` feature so a
 /// build that runs an already-provisioned model links no HTTPS/TLS stack. **This** is the item that
 /// gate was always for; without it `fetch.rs` compiled unconditionally while `ureq`/`sha2` did not,
