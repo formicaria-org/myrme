@@ -17,7 +17,9 @@ const CASES: &str =
 const IMAGES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../.eval-data/image-text");
 
 fn load() -> Value {
-    serde_json::from_str(&std::fs::read_to_string(CASES).expect("the case file")).expect("JSON")
+    // `FM_EVAL_CASES` reads another case file (e.g. typed pages), never written back to.
+    let path = std::env::var("FM_EVAL_CASES").unwrap_or_else(|_| CASES.to_string());
+    serde_json::from_str(&std::fs::read_to_string(path).expect("the case file")).expect("JSON")
 }
 
 #[test]
