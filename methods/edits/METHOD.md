@@ -46,8 +46,8 @@ With the whole-body format, **both models returned only the changed part**: the 
 or the one appended line. Accepting such a proposal would have deleted the rest of the note.
 
 **At production settings** (the discussion history as the runner builds it, the runner's sampling),
-the last column became 6/7 for both models. Deciding the kind first brought it to **7/7 for
-qwen3-4b-2507 and 6/7 for qwen3-vl-4b**; `latex`, a reformatting judgment, is what remains.
+the last column became 6/7 for both models. Deciding the kind first, and giving the history without
+Myrme's own mention and commands (`convo::plain`), brought both to **7/7**.
 
 The live end-to-end run (`agents/e2e-live.sh`) found the case the first six missed. With no sign
 the note went on, a model "added a final line" by replacing the last sentence it could see. That

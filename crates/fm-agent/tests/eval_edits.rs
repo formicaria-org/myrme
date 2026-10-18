@@ -54,7 +54,8 @@ fn run<L: LlmStep>(llm: L, case: &Value) -> Result<(String, bool, String), Agent
     };
     // The discussion as the runner gives it (`history`: one `- ` line per message), holding the
     // person's own message — the live run showed the eval must see what production sees.
-    let history = format!("- @Myrme-laptop {} /propose", case["ask"].as_str().unwrap());
+    let said = format!("@Myrme-laptop {} /propose", case["ask"].as_str().unwrap());
+    let history = format!("- {}", fm_agent::convo::plain(&said, "eval"));
     let turn = StudyAssistant::new(llm, NoWeb).turn(&history, &intent, &[note], None)?;
     // As the runner does: the edits go onto the whole note, not the part the model saw.
     let applied = fm_agent::edits::apply(case["body"].as_str().unwrap(), &turn.edits.unwrap());

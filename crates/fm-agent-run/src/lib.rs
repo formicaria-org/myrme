@@ -615,7 +615,9 @@ impl<V: VaultAccess> Agent<V> {
             .as_array()
             .map(|a| {
                 a.iter()
-                    .filter_map(|m| m["body"].as_str().map(|b| format!("- {}", b.trim())))
+                    .filter_map(|m| {
+                        m["body"].as_str().map(|b| format!("- {}", convo::plain(b, &self.model)))
+                    })
                     .collect()
             })
             .unwrap_or_default();

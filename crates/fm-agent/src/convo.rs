@@ -109,6 +109,28 @@ pub fn parse(message: &str) -> Intent {
     Intent { ask: rest.join(" "), search, propose, research, transcribe, recipe }
 }
 
+/// A discussion message as history for a model: without the words that were instructions to Myrme —
+/// its mention (`@Myrme`, `@Myrme-laptop`, `@<model>`) and the commands [`parse`] knows. Left in, a
+/// model copied them into what it wrote: asked to add a line, it added the line followed by
+/// "/propose" (2026-10-18, the live end-to-end run). Anyone else mentioned stays.
+pub fn plain(message: &str, model: &str) -> String {
+    let me = MYRME.to_lowercase();
+    parse(message)
+        .ask
+        .split_whitespace()
+        .filter(|t| {
+            let Some(name) = t.strip_prefix('@') else { return true };
+            let name = name.trim_end_matches(|c: char| ",.;:!?".contains(c)).to_lowercase();
+            !(name == me
+                || name.starts_with(&format!("{me}-"))
+                || name.starts_with(&format!("{me}_"))
+                || name.starts_with(&format!("{me}·"))
+                || name == model.to_lowercase())
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// Which agent, if any, a message addresses — so an agent responds **only when called by name**
 /// (`@name`). This lets several agents (a research model, a math model, …) share a discussion and the
 /// user pick one; a message that names no known agent is ignored (the agent stays quiet). Returns the
@@ -209,6 +231,19 @@ pub fn cap_reply(reply: &str, max_chars: Option<usize>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn history_drops_myrmes_mention_and_commands_and_keeps_everyone_else() {
+        assert_eq!(
+            plain("@Myrme-laptop add a final line: Next survey: 14 November /propose", "qwen3-4b"),
+            "add a final line: Next survey: 14 November"
+        );
+        assert_eq!(plain("@qwen3-4b look this up /search", "qwen3-4b"), "look this up");
+        assert_eq!(
+            plain("@Anna said the meeting moved, @Myrme.", "m"),
+            "@Anna said the meeting moved,"
+        );
+    }
 
     #[test]
     fn every_message_is_exactly_one_command_and_the_specific_pipeline_wins() {

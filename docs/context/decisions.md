@@ -265,6 +265,11 @@ not cure it (5/7 for qwen3-4b-2507).
   - It costs one short extra call. Without the note in view, the request is easy to classify.
   - At production settings: qwen3-4b-2507 **7/7** (6/7 without), qwen3-vl-4b **6/7**. Only `latex`
     is left on qwen3-vl-4b, the reformatting judgment it makes once the history is in view.
+- **History carries messages without Myrme's own tokens** (`convo::plain`): no `@Myrme…` mention,
+  model alias or command; anyone else mentioned stays.
+  - The live run with qwen3-vl-4b appended "Next survey: 14 November **/propose**", copying the
+    command from the history line.
+  - With this, both laptop models score **7/7** at production settings, `latex` included.
 
 ## Rulings inherited from formicaria (before 2026-10-18)
 

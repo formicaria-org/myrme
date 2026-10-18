@@ -47,11 +47,11 @@
       ],
       "oracle": "{\"edits\": [{\"op\": \"append\", \"old\": \"\", \"new\": \"- book the room\"}]}",
       "recorded": {
-        "qwen3-4b-2507": "{\"edits\": [{\"new\": \"book the room\", \"old\": \"order coffee\", \"op\": \"insert_after\"}]}",
+        "qwen3-4b-2507": "{\"edits\": [{\"new\": \"- book the room\", \"old\": \"order coffee\", \"op\": \"append\"}]}",
         "qwen3-4b-2507@kind-first": "{\"edits\": [{\"new\": \"- book the room\", \"old\": \"order coffee\", \"op\": \"append\"}]}",
         "qwen3-4b-2507@t-0": "{\"edits\": [{\"new\": \"- book the room\", \"old\": \"order coffee\", \"op\": \"replace\"}]}",
         "qwen3-4b-2507@t-prod": "{\"edits\": [{\"new\": \"- book the room\", \"old\": \"order coffee\", \"op\": \"insert_after\"}]}",
-        "qwen3-vl-4b": "{\n  \"edits\": [\n    {\n      \"new\": \"book the room\",\n      \"old\": \"\",\n      \"op\": \"append\"\n    }\n  ]\n}",
+        "qwen3-vl-4b": "{\"edits\": [{\"new\": \"book the room\", \"old\": \"\", \"op\": \"append\"}]}",
         "qwen3-vl-4b@kind-first": "{\"edits\": [{\"new\": \"book the room\", \"old\": \"\", \"op\": \"append\"}]}",
         "qwen3-vl-4b@t-0": "{\"edits\": [{\"new\": \"book the room\", \"old\": \"\", \"op\": \"append\"}]}",
         "qwen3-vl-4b@t-prod": "{\"edits\": [{\"new\": \"book the room\", \"old\": \"\", \"op\": \"append\"}]}"
@@ -110,7 +110,7 @@
       ],
       "oracle": "{\"edits\": [{\"op\": \"insert_after\", \"old\": \"velocity squared.\", \"new\": \"$$E_k = \\\\frac{1}{2} m v^2$$\"}]}",
       "recorded": {
-        "qwen3-4b-2507": "{\"edits\": [{\"new\": \"Kinetic energy is one half times mass times velocity squared: $E_k = \\\\frac{1}{2} m v^2$.\", \"old\": \"Kinetic energy is one half times mass times velocity squared.\",\"op\": \"replace\"}]}",
+        "qwen3-4b-2507": "{\"edits\": [{\"new\": \"Kinetic energy is one half times mass times velocity squared: $\\\\frac{1}{2}mv^2$.\", \"old\": \"Kinetic energy is one half times mass times velocity squared.\",\"op\": \"replace\"}]}",
         "qwen3-4b-2507@kind-first": "{\"edits\": [{\"new\": \"Kinetic energy is one half times mass times velocity squared. $\\\\frac{1}{2}mv^2$\", \"old\": \"Kinetic energy is one half times mass times velocity squared.\",\"op\": \"replace\"}]}",
         "qwen3-4b-2507@t-0": "{\"edits\": [{\"new\": \"Kinetic energy is one half times mass times velocity squared. $\\\\frac{1}{2}mv^2$\", \"old\": \"Kinetic energy is one half times mass times velocity squared.\",\"op\": \"replace\"}]}",
         "qwen3-4b-2507@t-prod": "{\"edits\": [{\"new\": \"Kinetic energy is one half times mass times velocity squared. $\\\\frac{1}{2}mv^2$\", \"old\": \"Kinetic energy is one half times mass times velocity squared.\",\"op\": \"replace\"}]}",
