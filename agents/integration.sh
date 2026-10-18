@@ -21,7 +21,13 @@ if [ -n "${FM_CHECKOUT:-}" ]; then
   TAG="$(git -C "$SRC" rev-parse --abbrev-ref HEAD)@$(git -C "$SRC" rev-parse --short HEAD)"
   echo "integration: formicaria from $SRC ($TAG)" >&2
 elif [ ! -d "$SRC/.git" ]; then
-  git clone -q --depth 1 --branch "$TAG" https://github.com/formicaria-org/formicaria.git "$SRC"
+  # Fetched in place rather than cloned: CI's build cache restores $SRC/target first, and `git clone`
+  # refuses a folder that is not empty (exit 128 on GitHub, never locally).
+  mkdir -p "$SRC"
+  git -C "$SRC" init -q
+  git -C "$SRC" remote add origin https://github.com/formicaria-org/formicaria.git
+  git -C "$SRC" fetch -q --depth 1 origin "refs/tags/$TAG:refs/tags/$TAG"
+  git -C "$SRC" -c advice.detachedHead=false checkout -q "$TAG"
 fi
 # Default features: the build formicaria ships. No UI is embedded (none is needed over /api).
 cargo build -q --release --manifest-path "$SRC/Cargo.toml" -p fm-serve
