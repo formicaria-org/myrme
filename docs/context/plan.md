@@ -210,8 +210,15 @@ In order, each gated on its eval beating today's behaviour:
 ### Phase D — cutover in formicaria (one revertible commit) — status: **rehearsed, green**, 2026-10-18
 
 On branch `myrme-cutover` (worktree `~/fm-myrme`, local only):
-- formicaria's whole `pixi run ci` is green with Myrme from GitHub, first at `v0.1.0-rc.1` and then
-  at **`v0.1.0`**.
+- formicaria's whole `pixi run ci` is green with Myrme from GitHub at every pin it took
+  (`v0.1.0-rc.1`, `v0.1.0`, `v0.1.1`, **`v0.1.2`**).
+- **Live, end to end, on `v0.1.2`:** both laptop models, two runs each, all pass. Each run used the
+  branch's own `fm-serve` and `agent-serve`, Myrme's llguidance runtime and a real model; a
+  person's `@Myrme-laptop add a final line … /propose` became a proposal that keeps the whole
+  2,576-character note and ends with the line (`agents/e2e-live.sh`).
+  - The first live runs found two faults the evals had not: a model replacing a sentence that
+    shared a number with the request, and a command copied out of the history. Both are fixed, and
+    the edits eval now runs as production does.
 - formicaria's Android staging takes Myrme's llguidance build and checks its SHA-256.
 - Myrme's `FM_CHECKOUT=~/fm-myrme pixi run integration` passes 3/3.
 - `agents/e2e-live.sh` runs the branch's own binaries with a real model on Myrme's runtime.
@@ -249,6 +256,20 @@ On branch `myrme-cutover` (worktree `~/fm-myrme`, local only):
   is the only way the assistant reaches an iPhone.
 - Per-method LoRA adapters distilled from accepted proposals (NVIDIA's loop). This needs enough
   records first; formicaria counted 23 in August.
+
+## Hand-off: what is the owner's (2026-10-18)
+
+1. **Merge `myrme-cutover` into formicaria `main`** for the next release.
+   - It is in the worktree `~/fm-myrme`, local and not pushed, at `v0.1.2`.
+   - It is five commits on top of `main` as it stood at `697ede4`. If `main` has moved, rebase it;
+     the conflicts would be in `Cargo.lock` and `pixi.toml`.
+2. **Run formicaria's `android` workflow by hand on it.** The phone shell was not compiled here (no
+   NDK). Its only change is that the catalogue is `fm_agent_run::CATALOGUE`, and that the staging
+   script fetches Myrme's Android runtime and checks its checksum.
+3. **Decide** whether formicaria suggests *better listening* to people who speak Italian (36.1% →
+   23.1% WER).
+4. Real recordings and photographs of your own, when convenient. They are the realistic eval sets
+   still missing.
 
 ## Questions for the owner
 
