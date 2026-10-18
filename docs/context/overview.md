@@ -6,7 +6,8 @@ This is the short map of Myrme's repo. When it disagrees with the code, the code
 
 | Touching… | Read first |
 |---|---|
-| Anything formicaria imports, the `/api` calls, `models.toml`'s format, the notes Myrme writes | `contract.md`, and `crates/fm-agent-run/tests/fm_contract.rs` |
+| Anything formicaria imports, the `/api` calls, `models.toml`'s format, the notes Myrme writes | `contract.md` (with its *Versions* rules), and `crates/fm-agent-run/tests/fm_contract.rs` |
+| Cutting a release; which Myrme a formicaria links | `releases.md` |
 | What to build next, the phases, working in parallel with formicaria | `plan.md` |
 | Why something is the way it is | `decisions.md`. Rulings before 2026-10-18 are in formicaria's `docs/context/decisions.md` under `#agent`; the index of them is at the bottom of `decisions.md` here |
 | Choosing a pattern, a framework, a runtime or a protocol | `../research/2026-10-18-small-model-agent-patterns.md` · `../research/2026-10-18-open-standards-frameworks-runtimes.md` |

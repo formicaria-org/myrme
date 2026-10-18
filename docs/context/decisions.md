@@ -271,6 +271,31 @@ not cure it (5/7 for qwen3-4b-2507).
     command from the history line.
   - With this, both laptop models score **7/7** at production settings, `latex` included.
 
+## 2026-10-18 (night) — Myrme has a release version and a contract version; formicaria checks the contract `#contract` `#repo`
+
+**The owner:** *"keep even a small backward compatibility as I envision a modular system: fm can work
+with myrme versions that are different (unless new features are added and or old removed and
+severely changed) … the user should not need to think about it and have the features available."*
+
+**Decision.**
+- **Two numbers** (`contract.md`, *Versions*):
+  - The **release version** is `Cargo.toml`'s `version`, now 0.2.0. A `v…` tag must equal it, and
+    CI refuses one that does not.
+  - The **contract version** is `CONTRACT_MAJOR.CONTRACT_MINOR`, now 1.0. The major changes when
+    anything the contract lists is renamed, removed or changes meaning; the minor when something
+    is only added.
+- **formicaria checks the contract at compile time.** It states the major it was written for and
+  the least minor it needs. A Myrme of another major does not build into it, and says so; any
+  newer release of the same major does, with no change but the tag. That is the compatibility the
+  owner described, enforced where a mismatch cannot reach a user.
+- **Why not more** — a runtime handshake, or a Myrme updated apart from formicaria: the app links
+  Myrme, and `agent-serve` is built in the same release, so a shipped app always holds one
+  matching pair. A runtime check becomes worth having only if Myrme is ever installed or updated
+  on its own (for instance, a newer catalogue fetched by itself); it is noted in `plan.md`, not
+  built.
+- **`releases.md`** lists every release, its contract version, the formicaria that links it, and
+  what changed for users.
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading

@@ -14,6 +14,23 @@
 /// compiled in" — two unrelated things.
 pub use fm_agent;
 
+/// This Myrme's release version (`Cargo.toml`), which a `v<version>` tag must equal.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// **The contract version** — what a Myrme release promises the app that links it
+/// (`docs/context/contract.md`, *Versions*):
+/// - the **major** changes when anything the contract lists is renamed, removed, or changes what it
+///   means. An app written for another major does not build against this one, by design: it
+///   checks this constant at compile time and says why.
+/// - the **minor** changes when something is only added. An app written for 1.0 builds and runs
+///   against 1.3 unchanged, and an app that uses what 1.3 added asks for at least 1.3.
+///
+/// Releases that change neither are free to change anything else — the methods, prompts, evals,
+/// models — and an app moves to them by changing a tag and nothing else.
+pub const CONTRACT_MAJOR: u32 = 1;
+/// See [`CONTRACT_MAJOR`].
+pub const CONTRACT_MINOR: u32 = 0;
+
 /// **The model catalogue** — models, their pins and licences, and the runtime archives per platform
 /// (`models.toml`, beside this crate). Embedded so that whoever links Myrme has it without knowing
 /// where Myrme keeps it: formicaria's phone parses it directly, and its desktop release writes it

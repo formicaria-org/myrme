@@ -7,6 +7,7 @@
 //! An item leaves this file only together with its last use in formicaria.
 #![allow(unused_imports, dead_code)]
 
+use fm_agent_run::agent_serve::main as agent_serve_main;
 use fm_agent_run::fm_agent::convo::{device_word, MYRME};
 use fm_agent_run::fm_agent::launch::SupervisedModel;
 use fm_agent_run::fm_agent::preflight::Need;
@@ -22,12 +23,24 @@ use fm_agent_run::nativelib::lib_dir_from_maps;
 #[cfg(target_os = "android")]
 use fm_agent_run::nativelib::native_lib_dir;
 use fm_agent_run::watch::{serve_loop, wait_ready};
-use fm_agent_run::{Agent, ImageReader};
+use fm_agent_run::{Agent, ImageReader, CATALOGUE, CONTRACT_MAJOR, CONTRACT_MINOR, VERSION};
 
 /// The phone and the desktop's first enable both fetch through these; they exist only with the
 /// `download` feature, which formicaria turns on.
 #[cfg(feature = "download")]
 use fm_agent_run::fetch::{ensure_mmproj, ensure_model, ensure_runtime};
+
+/// The contract this file checks is 1.0 (`CONTRACT_MAJOR`/`CONTRACT_MINOR`). Changing what it names
+/// means changing the contract version too — a removal or rename is a new major, an addition a new
+/// minor — and the two are compared here so one cannot move without the other.
+#[test]
+fn this_list_is_contract_1_0() {
+    assert_eq!((fm_agent_run::CONTRACT_MAJOR, fm_agent_run::CONTRACT_MINOR), (1, 0));
+    assert!(
+        fm_agent_run::VERSION.split('.').count() == 3,
+        "a release version is MAJOR.MINOR.PATCH"
+    );
+}
 
 /// Associated functions formicaria calls by path.
 #[test]

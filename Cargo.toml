@@ -9,7 +9,10 @@ members = ["crates/fm-agent", "crates/fm-agent-run"]
 
 [workspace.package]
 edition = "2021"
-version = "0.0.0"
+# **Myrme's release version.** A tag `v<version>` must equal it (CI refuses one that does not), and
+# formicaria shows it. What a version promises formicaria is the contract version below, in
+# `fm_agent_run` (`docs/context/contract.md`, *Versions*).
+version = "0.2.0"
 license = "MIT"
 
 [workspace.dependencies]
