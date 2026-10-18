@@ -112,7 +112,7 @@ In Myrme:
 | Contract written down (`contract.md`) and compile-checked (`tests/fm_contract.rs`) | ✅ |
 | `CLAUDE.md`, `AGENTS.md`, `README.md`, `docs/context/`, `docs/research/` | ✅ |
 | First push to `github.com/formicaria-org/myrme` | ✅ 2026-10-18 |
-| **Port the uncommitted agent work in formicaria's tree.** On 2026-10-18 another session had uncommitted edits to `fmserve.rs`, `serve.rs` and formicaria's `fm-serve/src/agent.rs` (3 + 3 more tests). Once committed there, mirror them here | ⏳ |
+| **Port the agent work formicaria shipped since the extraction**: v0.9.2's `1db54e2` mirrored with `git am` (its author and message kept); the pin moved to v0.9.2 | ✅ |
 
 In formicaria, each a separate commit with `pixi run ci` green:
 1. **Freeze rule recorded.** A `decisions.md#agent` entry says Myrme lives in its own repo, and the
@@ -160,7 +160,7 @@ In formicaria, each a separate commit with `pixi run ci` green:
 | M5 as anchored edits applied to the whole note | ✅ 3/6 → 5/6 on both laptop models |
 | `Method` enum and `methods/<name>/METHOD.md` for all seven | ✅ |
 | Cases for M3 (images), M4 (speech), M7 (recipe) | ⏳ need real images, recordings and transcripts |
-| Integration test against a real formicaria | ⏳ |
+| Integration test against a real formicaria (`pixi run integration`, a CI job): `/propose` round trip, an unplaceable edit, the recipe headings | ✅ against v0.9.2 |
 
 1. **An eval harness per method.**
    - Grow `agents/bench` into `methods/<name>/eval/`, scored by exact match on structured output.

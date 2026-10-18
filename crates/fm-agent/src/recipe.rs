@@ -128,6 +128,12 @@ pub fn keep_what_was_said(mut p: Parts, said: &str) -> (Parts, usize) {
 }
 
 /// The recipe note's text — the same shape as every recipe's (`ui/src/lib/food/recipeText.ts`):
+/// The recipe template's sections, as formicaria's UI names them (`ui/src/lib/templates.ts`: key,
+/// heading). Part of the contract: a recipe note Myrme writes must read as one made from the
+/// template (`docs/context/contract.md`, part 4).
+pub const TEMPLATE_HEADINGS: [(&str, &str); 4] =
+    [("ingredients", "Ingredients"), ("method", "Method"), ("times", "Times"), ("notes", "Notes")];
+
 /// *Ingredients*, *Method*, *Times*, *Notes*, then where it came from and what was said.
 ///
 /// `from` is the note it was made from, when that is another note; `kept` are the lines the note
@@ -211,17 +217,15 @@ mod tests {
 
     /// **One shape for every recipe note** (2026-10-18): the headings written here are the
     /// template's, read from the UI's own definition so the two cannot drift apart.
+    ///
+    /// Myrme's half: the note has every heading in [`TEMPLATE_HEADINGS`]. formicaria's half — that its
+    /// recipe template (`ui/src/lib/templates.ts`) names the same ones — is checked against the pinned
+    /// formicaria by `pixi run integration` (`tests/integration_fm.rs`), since that file is not in this
+    /// repository (`docs/context/contract.md`, part 4).
     #[test]
     fn its_headings_are_the_recipe_template_s() {
-        let ui = include_str!("../../../ui/src/lib/templates.ts");
         let b = body(&Parts::default(), None, "", &[]);
-        for (key, heading) in [
-            ("ingredients", "Ingredients"),
-            ("method", "Method"),
-            ("times", "Times"),
-            ("notes", "Notes"),
-        ] {
-            assert!(ui.contains(&format!("{key}: '{heading}'")), "the template names {heading}");
+        for (_, heading) in TEMPLATE_HEADINGS {
             assert!(b.contains(&format!("## {heading}\n")), "the note has ## {heading}");
         }
     }

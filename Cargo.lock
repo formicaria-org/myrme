@@ -306,7 +306,7 @@ dependencies = [
 [[package]]
 name = "fm-fetch"
 version = "0.0.0"
-source = "git+https://github.com/formicaria-org/formicaria.git?tag=v0.9.1#407710d35f455bec3350d8ec71ee5287bfa599a4"
+source = "git+https://github.com/formicaria-org/formicaria.git?tag=v0.9.2#e670190b6298980c1f2431ddbd449dfb06593e79"
 dependencies = [
  "flate2",
  "sha2",

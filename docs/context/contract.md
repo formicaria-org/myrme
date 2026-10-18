@@ -2,10 +2,11 @@
 
 Everything formicaria depends on, in four parts. **Changing any of it breaks formicaria's `main`
 unless formicaria changes first.** The Rust part is compile-checked by
-`crates/fm-agent-run/tests/fm_contract.rs`; the other three are checked by hand until the
-integration test in `plan.md` (Phase B) exists.
+`crates/fm-agent-run/tests/fm_contract.rs`. The other three are checked against a real `fm-serve`
+built from the pinned tag by `pixi run integration` (`tests/integration_fm.rs`), so far for
+proposals, replies and the recipe headings.
 
-_Taken from formicaria at tag v0.9.1 (commit 407710d) on 2026-10-18._
+_Taken from formicaria at tag v0.9.2 (commit e670190) on 2026-10-18; the Rust items did not change from v0.9.1._
 
 ## 1. Rust items formicaria names
 
@@ -56,5 +57,10 @@ crate (`plan.md`, Phase A), so formicaria stops naming the path `agents/`.
 - **Proposals:** a branch plus a proposal note. Only allow-listed properties may be proposed (in
   formicaria, `apply_props`: `start`, `due`, `location`, tags, and `title` since 2026-10-15).
 - **Meeting notes** from the mail pass.
+- **Recipe notes** (`/recipe`) carry the recipe template's sections: `## Ingredients`, `## Method`,
+  `## Times`, `## Notes` (`fm_agent::recipe::TEMPLATE_HEADINGS`).
+  - formicaria defines them in `ui/src/lib/templates.ts`.
+  - Myrme's unit test checks the note; `pixi run integration` checks formicaria's template at the
+    pin.
 
 formicaria's rulings (`decisions.md#agent`, `#git`) govern how these are reviewed and merged.

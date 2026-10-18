@@ -109,6 +109,22 @@ maps), so their order is not something this decision controls.
 - **Methods are a closed `enum`** (`fm_agent::method::Method`), each with `methods/<name>/METHOD.md`
   in Agent Skills format. A test fails if a method has no folder or a folder is not a method.
 
+## 2026-10-18 (evening) — the pin follows formicaria's release; its agent changes are mirrored; a cross-repo check moves to the integration run `#contract` `#repo`
+
+- **The pin is v0.9.2** (the owner: *"it's already 0.9.2"*). There is one pin: `fm-fetch`'s tag in
+  `crates/fm-agent-run/Cargo.toml`, which `pixi run integration` also reads. The Rust contract
+  items did not change from v0.9.1.
+- **v0.9.2's agent changes were mirrored** (`1db54e2`, applied with `git am -3`, its author and
+  message kept). That is the parallel-work rule from `plan.md` working as intended: a change made
+  in formicaria's copy arrives here unchanged.
+- **The recipe-heading check is split across the two repos.**
+  - That test read `ui/src/lib/templates.ts` from formicaria's tree, which does not exist here.
+  - The headings are now `recipe::TEMPLATE_HEADINGS`, part of the contract (part 4).
+  - The note is checked by a unit test here; formicaria's template is checked against the pinned
+    checkout by `pixi run integration`.
+- **`pixi run integration` is a CI job.** It builds `fm-serve` from the pin and checks a
+  `/propose` round trip, an unplaceable edit and the recipe headings, with a stand-in model.
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading
