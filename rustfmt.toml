@@ -1,0 +1,20 @@
+# **Pinned, not defaulted**, so a toolchain that changes a default cannot silently reformat 235k
+# lines under a `--check` gate. Both values were measured against the code as written rather than
+# chosen, on 2026-09-07 when formatting was first enforced.
+
+# What this code already is: excluding comments, the 99th percentile of line length is 101
+# characters and the 95th is 88. Widening to 120 cut the adoption diff by only 22% and would have
+# left this file disagreeing with every author.
+max_width = 100
+
+# **The one that matters here.** rustfmt's default `chain_width` is 60% of `max_width`, so a
+# perfectly readable 82-character method chain gets exploded across five lines. This codebase
+# writes them on one line, and "Max" says so: sub-widths follow `max_width` instead of a fraction
+# of it. Measured — it takes the adoption diff from 1,480 hunks to 685, which is the difference
+# between recording the house style and overwriting it.
+use_small_heuristics = "Max"
+
+# **Comments are left alone, and that is load-bearing.** The doc comments here are prose —
+# arguments, incident reports, the reasoning behind a ruling — hand-wrapped for reading.
+# `wrap_comments` and `format_code_in_doc_comments` are nightly-only and stay off; they are named
+# here for whoever finds them and thinks they look tidy. They are not.

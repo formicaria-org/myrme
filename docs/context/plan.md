@@ -1,0 +1,226 @@
+# Myrme — the plan (2026-10-18)
+
+> **A plan, not a ruling.** The rulings it asks for go in `decisions.md` when the owner makes them.
+> Evidence is in `../research/` (three reports, 2026-10-18). Status lines are updated as work lands.
+
+## The owner's direction
+
+> *"Move the agentic part out of the fm repo since I want to focus more on it, specifically by
+> thinking about dedicated methods for dedicated tasks… we target small models that run on chip to
+> allow people to use them locally."* — *"make sure we do not break current main fm. We need to act
+> in parallel in the dev phase."*
+
+## Part 1 — What the research says, and what Myrme takes from it
+
+The three reports agree, and they agree with how formicaria already built the assistant:
+
+| Finding | Evidence | What Myrme does |
+|---|---|---|
+| **Small models do single calls well and multi-step loops badly.** At 1.7–8B, single-call accuracy is 83–88%; multi-turn is 0–22% at ≤4B for general models | BFCL v4, official CSV | **Workflows, not autonomous agents.** A method is a fixed pipeline in Rust with at most a few single-shot model calls. No ReAct loop on a device |
+| **Fewer visible tools, shorter prompts** raise accuracy (TinyAgent: ~4 tools at 0.998 recall from a tiny classifier) | TinyAgent; arXiv 2411.15399 | **Code selects the method** (kept from formicaria, 2026-10-10). If free-text intent is ever routed, it goes through a small classifier with an *ask-the-person* fallback, never an LLM over a list |
+| **Constrained decoding** guarantees a parse and slightly helps quality; llguidance covers far more schemas than llama.cpp's GBNF and is faster | JSONSchemaBench (ICML 2025) | **Every model output is grammar-constrained**, to span offsets, ids or enums wherever possible. That is "the model points, Rust computes", enforced |
+| **Specialists beat generalists on narrow tasks** | xLAM-2, TinyAgent, FunctionGemma, LFM2-Extract; NVIDIA arXiv 2506.02153 | **Dedicated methods**, each with the cheapest method that works: no model, then a small encoder, then a small LLM |
+| **Fixed research loops work at 3–8B**; multi-agent research does not | local-deep-researcher; judgement | Research is a fixed loop: query → search → extract → rank → write from chunks → check citations in Rust |
+| **Frameworks don't fit** a Rust, std-only, mobile codebase (tokio, churn, built for big models) | framework survey | **Keep the hand-rolled loop.** Borrow designs from Pydantic AI and goose; depend on none of them |
+| **MCP and Agent Skills are the open standards** the community builds on (MCP is under the Linux Foundation's AAIF; `rmcp` needs tokio) | standards survey | **Later, at the edge, never in the core.** An optional `myrme-mcp` binary, and method prompts kept as `SKILL.md`-style folders (Part 2) |
+| **llama.cpp is the runtime that reaches every platform**, in-process on iOS; Apple Foundation Models and LiteRT-LM are credible later backends | runtime survey | A **`Backend` seam**: llama-server over HTTP now; others plug in behind it |
+| **Logging accept/reject turns usage into eval and training data** | NVIDIA's conversion loop | Read formicaria's supervision records (`supervision-datasheet.md` there) into per-method eval sets |
+
+What the research **does not** change: proposals, nothing downloaded unasked, the live memory
+reading that decides support, and the notes-only build of formicaria.
+
+## Part 2 — The shape of Myrme
+
+### A method
+
+**A method is one dedicated task, end to end:**
+- a **trigger** (command, MIME type, schedule or UI surface);
+- the **capabilities** it needs (`llm`, `vision`, `asr`, `encoder`, `web`);
+- a **pipeline** of deterministic steps and constrained model calls;
+- a **proposal** as its only output.
+
+Methods are a **closed `enum`**. Adding one is a `decisions.md` entry, the same discipline as
+formicaria's `Renderer` and `Command`, so there is still no registry.
+
+Each method also has a folder of **data**, not code:
+
+```
+methods/<name>/
+  METHOD.md      SKILL.md-compatible: frontmatter name + description, then the prompt(s)
+  schema.json    the output schema the grammar is built from
+  eval/          golden cases: input, expected structured output, "nothing" cases
+```
+
+Keeping the prompt in Agent Skills' format costs nothing. It lets anyone who knows that format read
+and improve a method, and it lets the Phase E MCP server expose methods to other agents unchanged.
+The Rust stays the authority on what runs.
+
+### The methods, with the dedicated approach each gets
+
+The order is the rough priority. "Today" means already shipped inside formicaria.
+
+| # | Method | Today | Dedicated approach (from the per-task report) |
+|---|---|---|---|
+| M1 | **Meetings from mail** | ✅ the model points, Rust reads dates | **ICS first.** A `text/calendar` part settles invites, moves and call-offs with no model. Then Rust dates, then the LLM pointing under a span grammar. Later, a GLiNER2-class encoder for intent and entities |
+| M2 | **Research** | ✅ `/search`, `/research` | **local-deep-researcher's fixed loop**, plus main-content extraction, BM25 plus a small embedder, and **a Rust check that every cited span exists in its source** |
+| M3 | **Image → text** | ✅ LFM2.5-VL-450M on the phone | **Route by content.** Printed text: PP-OCRv5 (ONNX, ~20 MB), escalating to the VLM only on low confidence. Math crops: PP-FormulaNet-S or Texo. Handwriting: VLM. Needs a 50-image eval from the owner's notes first |
+| M4 | **Audio → text, dictation** | ✅ whisper, any language | Add **VAD** (Silero) in front. Try **Moonshine** for live English dictation; whisper stays for multilingual |
+| M5 | **Note edits** | ✅ `/propose` | Output constrained to `{edits:[{op, anchor, old, new, reason}]}`, never a whole-note rewrite |
+| M6 | **Food from a sentence** | ❌ (the tracker exists in fm, no assistant path) | An encoder for `food, quantity, unit` spans, rules for numbers, then a lookup through formicaria's own food tool via `dispatch`. **The portion-defaults table matters more than the model** |
+| M7 | **Recipe from a recording** | ✅ `/recipe` | ASR, then the LLM under a `{title, ingredients[], steps[]}` grammar, then a per-line ingredient parser |
+| M8 | **Pose coaching** | ❌ | Probably **not a Myrme method**: it is a real-time camera loop (MediaPipe in formicaria's UI) that writes `log: workout` notes. Decide separately |
+
+### The seams inside Myrme
+
+- **`Backend`**: `complete(prompt, constraint) -> text`.
+  - First implementation: llama-server's OpenAI-compatible API, with `json_schema` for the
+    constraint. Test a llama.cpp build with **llguidance** for the coverage and speed the
+    benchmarks show.
+  - Later implementations: in-process libllama (iOS), Apple Foundation Models, LiteRT-LM.
+- **`Encoder`**: span or label extraction and embeddings. **ONNX Runtime** is the second and last
+  general runtime. Keep to two runtimes, plus MediaPipe only if pose ever lands here.
+- **`Vault`**: the existing `VaultAccess` over formicaria's `/api`. Unchanged.
+
+### Which models
+
+The catalogue keeps its rule: a live memory reading decides, and nothing is fetched unasked. Each
+specialist joins `models.toml` with its size and licence.
+
+| Tier | Candidates |
+|---|---|
+| Phone (≤1.2B) | LFM2.5-1.2B, Granite-4.0-1B, xLAM-2-1b |
+| Laptop (3–8B) | Qwen3-4B-Instruct-2507 (87.9 single-call), xLAM-2-3b/8b (best multi-turn) |
+
+**Licences to avoid:** CC-BY-NC weights (GLiNER v0/v1, jina rerankers), NuExtract-4B, and
+Moonshine's legacy non-English weights.
+
+## Part 3 — Phases
+
+Each phase leaves both repos green. **formicaria's `main` changes only in Phase A and Phase D**, each
+time by an ordinary commit that its gate checks.
+
+### Phase A — the port (status: **in progress**, 2026-10-18)
+
+In Myrme:
+
+| Step | Status |
+|---|---|
+| Repo created; `crates/fm-agent`, `crates/fm-agent-run` and `agents/` extracted from formicaria v0.9.1 with their history (78 commits) | ✅ 2026-10-18 |
+| Standalone workspace; `fm-fetch` from formicaria pinned by tag `v0.9.1`; pixi toolchain | ✅ |
+| `pixi run ci` locally: fmt, clippy, 122 + 44 tests (56 with `download`), cargo-deny | ✅ green |
+| `.github/workflows/ci.yml` (push to main and PRs) | written, not yet run on GitHub |
+| Contract written down (`contract.md`) and compile-checked (`tests/fm_contract.rs`) | ✅ |
+| `CLAUDE.md`, `AGENTS.md`, `README.md`, `docs/context/`, `docs/research/` | ✅ |
+| First push to `github.com/formicaria-org/myrme` | ✅ 2026-10-18 |
+| **Port the uncommitted agent work in formicaria's tree.** On 2026-10-18 another session had uncommitted edits to `fmserve.rs`, `serve.rs` and formicaria's `fm-serve/src/agent.rs` (3 + 3 more tests). Once committed there, mirror them here | ⏳ |
+
+In formicaria, each a separate commit with `pixi run ci` green:
+1. **Freeze rule recorded.** A `decisions.md#agent` entry says Myrme lives in its own repo, and the
+   in-tree copy takes fixes only, mirrored the same day.
+2. **The catalogue travels with the crate.** Move `agents/models.toml` to
+   `crates/fm-agent-run/models.toml`, export it as `fm_agent_run::CATALOGUE`, and make the three
+   places that copy it (`desktop.yml`, `packaging/formicaria.sh`, `ci/android-stage-runtime.sh`)
+   take it from `agent-serve --print-catalogue`.
+   - Do it in Myrme first and mirror it, so the paths stay identical.
+3. **A guard in `ci/checks.sh`.** Every `fm-agent*` dependency is either in-tree or a git
+   dependency pinned by `tag` on a public URL.
+4. **An agent-off build** of `fm-serve` and of the mobile shell in CI, so a broken Myrme can always
+   be shipped around.
+
+### Working in parallel (from now until Phase D)
+
+- **formicaria `main`** ships its in-tree copy. Fixes only.
+  - Mirroring a fix: `git format-patch -1 <sha> -- crates/fm-agent crates/fm-agent-run agents` in
+    formicaria, then `git am` in Myrme. The paths are identical, so no rewriting is needed.
+- **Myrme `main`** is where all new agent work happens. Its CI must be green. It never needs
+  formicaria to change.
+- **Trying Myrme inside the real app** takes two routes. Neither touches formicaria's checkout:
+  - **Out of process (the usual case):** `pixi run serve` in formicaria, then
+    `pixi run agent-serve` here, pointed at `127.0.0.1:8765`. The HTTP door is all it needs.
+  - **Linked (when the host side changes):** a separate formicaria worktree on a local branch:
+    ```
+    cd ~/formicaria && git worktree add ../fm-lab -b lab
+    cd ../fm-lab && sed -i 's|path = "../fm-agent-run"|path = "../../../myrme/crates/fm-agent-run"|' crates/fm-serve/Cargo.toml
+    ```
+    - Apply the same edit to `mobile/src-tauri/Cargo.toml` for the phone.
+    - Build with `pixi run serve` in that worktree.
+    - The `lab` branch is never pushed.
+    - Before Phase D, formicaria depends on these crates by *path*, and Cargo's `[patch]` cannot
+      override a path dependency. That is why it takes a worktree and not a config file.
+
+### Phase B — foundations (in Myrme only; formicaria unaffected)
+
+1. **An eval harness per method.**
+   - Grow `agents/bench` into `methods/<name>/eval/`, scored by exact match on structured output.
+   - Report the parse-valid rate separately and include "nothing" cases.
+   - Recorded model outputs run in `pixi run ci`; live model runs stay `#[ignore]` (as
+     `tests/live_*.rs` already are).
+   - Seed the cases from formicaria's supervision records.
+2. **The `Backend` seam and constrained calls.**
+   - Route every model call through one function that takes a schema.
+   - Measure llama-server's `json_schema` against an llguidance build on the meeting eval before
+     choosing one.
+3. **The `Method` enum and `methods/` folders.** The existing four commands and the meeting pass
+   become methods M1–M7, with no behaviour change, proven by the evals from step 1.
+4. **An integration test against a real formicaria.**
+   - Build `fm-serve` from the pinned formicaria tag, start it on a temporary vault, and drive one
+     proposal end to end over HTTP.
+   - This makes contract parts 2–4 machine-checked.
+
+### Phase C — the dedicated methods (in Myrme; reaches users only through Phase D)
+
+In order, each gated on its eval beating today's behaviour:
+
+1. M1 ICS-first
+2. M2 research loop with checked citations
+3. M3 OCR routing (adds ONNX Runtime; a `decisions.md` entry, since it widens what ships)
+4. M6 food from a sentence
+5. M4 VAD and dictation
+
+### Phase D — cutover in formicaria (one revertible commit)
+
+1. Tag Myrme (`v0.1.0`), with the contract test and integration test green against formicaria
+   `main`.
+2. In formicaria, in one commit:
+   - delete `crates/fm-agent`, `crates/fm-agent-run` and `agents/`;
+   - depend on `{ git = "https://github.com/formicaria-org/myrme.git", tag = "v0.1.0" }` in
+     `fm-serve` and the mobile shell;
+   - add a `[patch]` so Myrme's `fm-fetch` resolves to formicaria's in-tree crate (one copy);
+   - update `THIRD-PARTY.md`.
+3. **Before it lands:**
+   - `pixi run ci` green;
+   - the release archive's file list matches the previous release (`agent-serve` and the
+     catalogue present);
+   - the `android` and `cross` workflows run by hand on that commit.
+4. **From then on, a pin bump that changes what Myrme does is a formicaria `decisions.md` entry**,
+   with the eval numbers.
+5. After the cutover, the linked dev route becomes a gitignored `.cargo/config.toml` `[patch]`
+   pointing at `../myrme/crates/*`.
+6. **Then narrow the contract.** Replace the ~20 items with a facade crate (provision, status,
+   serve loop, device word). Each item struck from `contract.md` is one fewer way to break
+   formicaria.
+
+### Phase E — outward, optional, and each its own ruling
+
+- `myrme-mcp`: a separate binary with tokio confined to it. It is an MCP server exposing notes
+  search and read plus Myrme's methods, so goose, Claude Code and Codex can use formicaria. It could
+  also act as an MCP client on the desktop for community tools.
+- An iOS backend: in-process libllama or Apple Foundation Models. iOS forbids subprocesses, so this
+  is the only way the assistant reaches an iPhone.
+- Per-method LoRA adapters distilled from accepted proposals (NVIDIA's loop). This needs enough
+  records first; formicaria counted 23 in August.
+
+## Questions for the owner
+
+Answered 2026-10-18 (*"commit and push the scaffold, keep the defaults"*); recorded in
+`decisions.md`:
+- **Pushed:** yes.
+- **Crate names:** keep `fm-agent*` until after Phase D.
+- **formicaria's in-tree copy:** fixes only until Phase D.
+- **Pose coaching:** not a Myrme method.
+
+Still open:
+
+| Question | Default if unanswered |
+|---|---|
+| Phase E's MCP server: wanted, and on which side (Myrme or formicaria)? | not started |

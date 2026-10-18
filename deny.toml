@@ -1,0 +1,109 @@
+# cargo-deny: the license gate. The stack is deliberately permissive-only; any
+# GPL/AGPL/SSPL/BUSL/source-available crate that is *linked* (not shelled out to)
+# must fail the build. GPL tools like pdftotext/libvips are invoked as
+# subprocesses and never appear in this graph.
+#
+# ONE named exception, below: libgit2, for any device with NO git binary — the phone, and
+# Windows, which ships none (widened 2026-08-28, `decisions.md#git`). The rule above is unchanged and
+# still applies to everything else — the exception is scoped to a single crate on purpose,
+# rather than widening `allow`, so nothing else can arrive under the same licence unnoticed.
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CC0-1.0",
+    "ISC",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "MPL-2.0",
+    # webpki-roots ships the Mozilla CA root store (a *data* set, not code) under the Community
+    # Data License Agreement — Permissive 2.0, a genuinely permissive licence. It arrives via
+    # `ureq`'s rustls TLS, behind the agent-only `fm-agent-run/download` feature (the in-app model
+    # fetcher); the notes core never links it.
+    "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.8
+
+# Several allowed licenses aren't used yet but will be as deps grow (notify=CC0,
+# kamadak-exif=BSD-2, ...). Don't warn about the allowlist running ahead.
+unused-allowed-license = "allow"
+
+# ---------------------------------------------------------------------------------------
+# THE ONE LICENCE EXCEPTION: libgit2, on any device with no git binary (owner's ruling,
+# 2026-07-19, widened to Windows 2026-08-28 — see `decisions.md#git`).
+#
+# WHY: a phone has no `git` binary to shell out to — Android ships none, iOS forbids
+# executing one — so the subprocess stance that keeps this gate clean on the desktop cannot
+# work there. `git2`/libgit2 is the mature option; `gix` push is still unimplemented, and
+# hand-writing the push protocol on the corruption-critical path is the larger risk. Behind
+# the non-default `fm-core/native-git` feature: the desktop still shells out, unaffected.
+#
+# WHY IT IS SAFE: libgit2 is GPL-2.0-only *with its own linking exception*, read verbatim
+# from the vendored COPYING at the pinned version — "the authors give you unlimited
+# permission to link the compiled version of this library into combinations with other
+# programs, and to distribute those combinations without any restriction". Linking is
+# precisely what the exception exists to permit. What survives is the NOTICE obligation, and
+# the duty to publish any modification we make to libgit2 itself. We make none.
+#
+# **AND HERE IS THE PART TO READ TWICE: cargo-deny CANNOT SEE ANY OF THIS.**
+#
+# `libgit2-sys` declares `license = "MIT OR Apache-2.0"` — true of its Rust wrapper, silent
+# about the ~230k lines of GPL C it vendors. cargo-deny treats a valid `license` field as
+# authoritative, so it never reads the licence files, and `[[licenses.clarify]]` never fires
+# no matter what path or hash it is given (tested against cargo-deny 0.20.2: a clarify entry
+# is silently inert, and a paired `[[licenses.exceptions]]` reports
+# `license-exception-not-encountered`). Both were tried here and removed rather than left in
+# place looking effective — dead config that appears to enforce something is worse than none.
+#
+# So `cargo deny` reports `licenses ok` for libgit2 **and always will**, on the metadata
+# technicality the 2026-07-18 `git2` rejection named. That means:
+#
+#   THE ENFORCEMENT LIVES IN ci/checks.sh AND ci/third-party.sh, NOT HERE.
+#
+# `ci/third-party.sh` carries an override so the shipped notice states libgit2's real
+# licence, and `ci/checks.sh` fails if libgit2-sys enters the graph without that override —
+# so the dependency cannot arrive without the notice that legally must travel with it.
+# If you are adding another dependency that vendors code under a licence it does not
+# declare, this gate will not catch it either. Add it there.
+# ---------------------------------------------------------------------------------------
+
+[advisories]
+version = 2
+# No advisory waivers: the Tauri/gtk3 tree that required them was removed with the
+# native window. Any real vulnerability, unsound, or unmaintained advisory now
+# surfaces on its own; add a documented `ignore` entry only if one reappears.
+#
+# One reappeared on 2026-10-12 (`decisions.md#toolchain`, that date):
+ignore = [
+    # `unsafe-libyaml` is *unmaintained* (its repository was archived in March 2024) — not a
+    # vulnerability and not unsound. It is the C-to-Rust translation of libyaml under
+    # `serde_yaml_ng`, which reads every note's front matter and every `.view` file. The advisory
+    # names no safe upgrade; the alternative is a different YAML parser under the one format
+    # every file in every vault depends on, which is a migration to plan and test on real vaults,
+    # not a change to make because a gate turned red on a release day. Waived until that
+    # migration is decided (`outstanding.md`, *the YAML parser*). Remove this entry with it.
+    { id = "RUSTSEC-2024-0449", reason = "unmaintained, no safe upgrade; replacing the YAML parser is a planned migration, see decisions.md 2026-10-12 #toolchain" },
+    # **Three on `zip` 2.4.2, waived together on 2026-10-17** (`decisions.md#toolchain`, that date).
+    # All three are about `ZipArchive::extract` / `ZipStreamReader::extract`, which nothing here
+    # calls: `fm-fetch` and `fm-agent-run` walk entries with `by_index` + `enclosed_name`, refuse
+    # links, and write regular files themselves. The one that applied in spirit — SUID/SGID kept —
+    # is fixed in `fm-fetch`'s own code (`m & 0o777`, tar `preserve_permissions(false)`) and tested.
+    # The fixed line, zip 9, was eight days old on that date. Remove all three on moving to it.
+    { id = "RUSTSEC-2026-0367", reason = "extract() only, never called; our own unpack masks to 0o777 since 2026-10-17; move to zip 9 once settled, see decisions.md 2026-10-17 #toolchain" },
+    { id = "RUSTSEC-2026-0368", reason = "extract() only, never called; links are refused; move to zip 9 once settled, see decisions.md 2026-10-17 #toolchain" },
+    { id = "RUSTSEC-2026-0369", reason = "extract()/ZipStreamReader only, never called; links are refused; move to zip 9 once settled, see decisions.md 2026-10-17 #toolchain" },
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

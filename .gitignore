@@ -1,0 +1,8 @@
+/target/
+**/target/
+.pixi/
+__pycache__/
+.DS_Store
+*.swp
+*~
+.claude/settings.local.json

@@ -1,0 +1,33 @@
+[workspace]
+name = "myrme"
+version = "0.0.0"
+description = "Myrme, formicaria's on-device assistant for small local models"
+channels = ["conda-forge"]
+platforms = [{ platform = "linux-64", glibc = "2.34" }, "osx-arm64", "osx-64", "win-64"]
+
+# Toolchain only. Crate dependencies are pinned in Cargo.lock; this file pins rustc.
+[dependencies]
+rust = "*"
+c-compiler = "*"   # `ring`, under the download feature's TLS
+cargo-deny = "*"
+python = "3.12.*"  # agents/bench and agents/search-proxy.py
+
+[tasks]
+test = "cargo test --workspace"
+test-download = "cargo test -p fm-agent-run --features download"
+fmt = "cargo fmt --all -- --check"
+clippy = "cargo clippy --workspace --all-targets --features fm-agent-run/download -- -D warnings"
+deny = "cargo deny check"
+build = "cargo build --release -p fm-agent-run --features fm-agent-run/download"
+# The single gate: CI runs exactly this.
+ci = { depends-on = ["fmt", "clippy", "test", "test-download", "deny"] }
+
+# Running the assistant by hand, unchanged from formicaria (paths are relative to this repo).
+fetch-model = "bash agents/fetch.sh"
+fetch-whisper = "bash agents/fetch-whisper.sh"
+serve-model = "bash agents/serve.sh"
+agent-serve = "bash agents/agent-serve.sh"
+search-proxy = "python3 agents/search-proxy.py 8888"
+model-bench = "python3 agents/bench/run.py"
+agent-chat = "cargo run -q -p fm-agent-run --bin agent-chat --"
+check-pins = "cargo test -p fm-agent-run --features download -- --ignored --nocapture every_pinned_runtime"

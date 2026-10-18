@@ -1,0 +1,25 @@
+# Myrme — the on-device assistant for formicaria, in its own repo since 2026-10-18.
+#
+# The two crates were extracted from formicaria with their history (78 commits). Their layout is
+# kept exactly (`crates/`, `agents/`), so every `include_str!` and script path still holds and the
+# extraction commit changes no code. formicaria links them behind its `agent` feature.
+[workspace]
+resolver = "2"
+members = ["crates/fm-agent", "crates/fm-agent-run"]
+
+[workspace.package]
+edition = "2021"
+version = "0.0.0"
+license = "MIT"
+
+[workspace.dependencies]
+time = { version = "0.3", features = ["macros", "formatting", "parsing"] }
+thiserror = "2"
+clap = { version = "4", features = ["derive", "env"] }
+
+# The same release profile as formicaria's, so `agent-serve` built here matches the one it ships.
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 1
+opt-level = 3
