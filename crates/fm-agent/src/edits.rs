@@ -60,6 +60,41 @@ pub fn answer_schema() -> Value {
     })
 }
 
+/// The kinds of change [`crate::prompts::EDIT_KIND_INSTRUCTION`] chooses between: the four ops, or
+/// `several` when the request needs more than one kind.
+pub const KINDS: [&str; 5] = ["append", "insert_after", "replace", "delete", "several"];
+
+/// The one-word answer that names the kind of change.
+pub fn kind_schema() -> Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": { "kind": { "enum": KINDS } },
+        "required": ["kind"],
+        "additionalProperties": false,
+    })
+}
+
+/// The kind the model chose; `None` for `several`, or an answer that is not one of them — and then
+/// every op stays allowed.
+pub fn read_kind(answer: &str) -> Option<String> {
+    let t = answer.trim();
+    let v: Value =
+        serde_json::from_str(t.find('{').zip(t.rfind('}')).map(|(a, b)| &t[a..=b])?).ok()?;
+    let k = v.get("kind")?.as_str()?;
+    (KINDS.contains(&k) && k != "several").then(|| k.to_string())
+}
+
+/// [`answer_schema`] with the op held to `kind` when one was chosen, so the edits must be of that
+/// kind; with no kind, every op.
+pub fn answer_schema_for(kind: Option<&str>) -> Value {
+    let mut schema = answer_schema();
+    if let Some(k) = kind {
+        schema["properties"]["edits"]["items"]["properties"]["op"] =
+            serde_json::json!({ "enum": [k] });
+    }
+    schema
+}
+
 /// Read the model's answer; `None` when it is not the object asked for (a cut-off answer, prose).
 pub fn parse(answer: &str) -> Option<Vec<Edit>> {
     let t = answer.trim();
@@ -199,6 +234,19 @@ mod tests {
 
     fn e(op: &str, old: &str, new: &str) -> Edit {
         Edit { op: op.into(), old: old.into(), new: new.into() }
+    }
+
+    #[test]
+    fn a_chosen_kind_holds_the_op_and_several_leaves_every_op() {
+        assert_eq!(read_kind(r#"{"kind":"append"}"#).as_deref(), Some("append"));
+        assert_eq!(read_kind(r#"{"kind":"several"}"#), None);
+        assert_eq!(read_kind("not json"), None);
+        let held = answer_schema_for(Some("append"));
+        assert_eq!(
+            held["properties"]["edits"]["items"]["properties"]["op"]["enum"],
+            serde_json::json!(["append"])
+        );
+        assert_eq!(answer_schema_for(None), answer_schema());
     }
 
     #[test]

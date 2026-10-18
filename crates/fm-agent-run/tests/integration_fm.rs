@@ -189,7 +189,11 @@ fn a_proposed_edit_goes_through_formicaria_and_comes_back_whole() {
     let intent = convo::parse("add a final line: Next survey: 14 November /propose");
     let (reply, reply_id) = agent(port, model_port).handle(&id, &intent, &|_| {}).unwrap();
 
-    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1, "one model call");
+    assert_eq!(
+        calls.load(std::sync::atomic::Ordering::SeqCst),
+        2,
+        "the kind of change, then the edits"
+    );
     assert_eq!(reply, fm_agent_run::fm_agent::PROPOSAL_ACK);
     assert!(reply_id.is_some(), "the reply was posted and formicaria gave it an id");
 

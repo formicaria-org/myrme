@@ -15,8 +15,12 @@ Each task gets a dedicated method instead of one general agent:
 
 Whatever Myrme produces arrives in formicaria as a **proposal** you accept or reject.
 
-**Status:** moved out of the formicaria repo on 2026-10-18 with its history. formicaria still ships
-its own copy until the cutover in [`docs/context/plan.md`](./docs/context/plan.md).
+**Status (2026-10-18):** `v0.1.0`.
+- Every method is measured on its own cases (`methods/*/METHOD.md`).
+- The model runtime is built here with llguidance for every platform (release `runtime-llg-3`).
+- formicaria's switch to linking this repository by tag is rehearsed and green on a branch. It
+  ships from the formicaria release that merges it; until then formicaria ships its own copy. See
+  [`docs/context/plan.md`](./docs/context/plan.md).
 
 ## Build and test
 

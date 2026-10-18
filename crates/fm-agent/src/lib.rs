@@ -341,11 +341,23 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
         // The edits to propose, when asked: what to change, pointing at the note's own words, held
         // to the edits schema (`edits`). Math in the new text gets the note's delimiters.
         let edits = if intent.propose {
+            // First the kind of change, from the request alone: with the note in view a model
+            // turned "add a final line: …14 November" into replacing the sentence ending "round 14"
+            // (2026-10-18, the live end-to-end run). Without it, the request is a one-word answer.
+            let kind = self
+                .llm
+                .complete_constrained(
+                    prompts::EDIT_KIND_INSTRUCTION,
+                    intent.ask.trim(),
+                    &edits::kind_schema(),
+                )
+                .ok()
+                .and_then(|r| edits::read_kind(&r.content));
             let user = format!("{ctx}\n\n{}\n{}", heading::TASK, intent.ask.trim());
             let resp = self.llm.complete_constrained(
                 prompts::EDITS_INSTRUCTION,
                 &user,
-                &edits::answer_schema(),
+                &edits::answer_schema_for(kind.as_deref()),
             )?;
             if resp.truncated() {
                 return Err(AgentError::new(
@@ -572,7 +584,7 @@ mod tests {
         let web = FakeWeb { hits: vec![], seen: RefCell::new(Vec::new()) };
         // Only one canned reply is needed — the edits; the acknowledgement is deterministic.
         let answer = r#"{"edits":[{"op":"append","old":"","new":"- \\(x\\) point"}]}"#;
-        let agent = StudyAssistant::new(FakeLlm::new(&[answer]), web);
+        let agent = StudyAssistant::new(FakeLlm::new(&[r#"{"kind":"append"}"#, answer]), web);
         let intent = Intent {
             ask: "tidy this".into(),
             search: false,
@@ -586,7 +598,10 @@ mod tests {
         assert_eq!(edits.len(), 1);
         assert_eq!(edits[0].new, "- $x$ point", "math gets the note's delimiters");
         assert_eq!(turn.reply.as_deref(), Some(super::PROPOSAL_ACK));
-        assert_eq!(agent.llm.seen.borrow().len(), 1, "one call to write; the ack is deterministic");
+        let seen = agent.llm.seen.borrow();
+        assert_eq!(seen.len(), 2, "the kind, then the edits; the ack is deterministic");
+        assert_eq!(seen[0].0, prompts::EDIT_KIND_INSTRUCTION);
+        assert_eq!(seen[0].1, "tidy this", "the kind is read from the request alone");
     }
 
     #[test]

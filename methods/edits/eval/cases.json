@@ -18,7 +18,13 @@
       "oracle": "{\"edits\": [{\"op\": \"replace\", \"old\": \"we discus chapter\", \"new\": \"we discuss chapter\"}]}",
       "recorded": {
         "qwen3-4b-2507": "{\"edits\": [{\"new\": \"This week we discuss chapter three of the book, on memory and sleep.\", \"old\": \"This week we discus chapter three of the book, on memory and sleep.\", \"op\": \"replace\"}]}",
-        "qwen3-vl-4b": "{\n  \"edits\": [\n    {\n      \"new\": \"discuss\",\n      \"old\": \"discus\",\n      \"op\": \"replace\"\n    }\n  ]\n}"
+        "qwen3-4b-2507@kind-first": "{\"edits\": [{\"new\": \"This week we discuss chapter three of the book, on memory and sleep.\", \"old\": \"This week we discus chapter three of the book, on memory and sleep.\", \"op\": \"replace\"}]}",
+        "qwen3-4b-2507@t-0": "{\"edits\": [{\"new\": \"This week we discuss chapter three of the book, on memory and sleep.\", \"old\": \"This week we discus chapter three of the book, on memory and sleep.\",\"op\": \"replace\"}]}",
+        "qwen3-4b-2507@t-prod": "{\"edits\": [{\"new\": \"This week we discuss chapter three of the book, on memory and sleep.\", \"old\": \"This week we discus chapter three of the book, on memory and sleep.\", \"op\": \"replace\"}]}",
+        "qwen3-vl-4b": "{\n  \"edits\": [\n    {\n      \"new\": \"discuss\",\n      \"old\": \"discus\",\n      \"op\": \"replace\"\n    }\n  ]\n}",
+        "qwen3-vl-4b@kind-first": "{\n  \"edits\": [\n    {\n      \"new\": \"discuss\",\n      \"old\": \"discus\",\n      \"op\": \"replace\"\n    }\n  ]\n}",
+        "qwen3-vl-4b@t-0": "{\n  \"edits\": [\n    {\n      \"new\": \"discuss\",\n      \"old\": \"discus\",\n      \"op\": \"replace\"\n    }\n  ]\n}",
+        "qwen3-vl-4b@t-prod": "{\n  \"edits\": [\n    {\n      \"new\": \"discuss\",\n      \"old\": \"discus\",\n      \"op\": \"replace\"\n    }\n  ]\n}"
       },
       "remove": [
         "discus chapter"
@@ -42,7 +48,13 @@
       "oracle": "{\"edits\": [{\"op\": \"append\", \"old\": \"\", \"new\": \"- book the room\"}]}",
       "recorded": {
         "qwen3-4b-2507": "{\"edits\": [{\"new\": \"book the room\", \"old\": \"order coffee\", \"op\": \"insert_after\"}]}",
-        "qwen3-vl-4b": "{\n  \"edits\": [\n    {\n      \"new\": \"book the room\",\n      \"old\": \"\",\n      \"op\": \"append\"\n    }\n  ]\n}"
+        "qwen3-4b-2507@kind-first": "{\"edits\": [{\"new\": \"- book the room\", \"old\": \"order coffee\", \"op\": \"append\"}]}",
+        "qwen3-4b-2507@t-0": "{\"edits\": [{\"new\": \"- book the room\", \"old\": \"order coffee\", \"op\": \"replace\"}]}",
+        "qwen3-4b-2507@t-prod": "{\"edits\": [{\"new\": \"- book the room\", \"old\": \"order coffee\", \"op\": \"insert_after\"}]}",
+        "qwen3-vl-4b": "{\n  \"edits\": [\n    {\n      \"new\": \"book the room\",\n      \"old\": \"\",\n      \"op\": \"append\"\n    }\n  ]\n}",
+        "qwen3-vl-4b@kind-first": "{\"edits\": [{\"new\": \"book the room\", \"old\": \"\", \"op\": \"append\"}]}",
+        "qwen3-vl-4b@t-0": "{\"edits\": [{\"new\": \"book the room\", \"old\": \"\", \"op\": \"append\"}]}",
+        "qwen3-vl-4b@t-prod": "{\"edits\": [{\"new\": \"book the room\", \"old\": \"\", \"op\": \"append\"}]}"
       },
       "remove": [],
       "title": "Workshop prep"
@@ -66,7 +78,13 @@
       "oracle": "{\"edits\": [{\"op\": \"replace\", \"old\": \"Wear goggles at the bench. Never pipette by mouth. Label every bottle with the date and your initials. Report spills to the technician at once.\", \"new\": \"- Wear goggles at the bench.\\n- Never pipette by mouth.\\n- Label every bottle with the date and your initials.\\n- Report spills to the technician at once.\"}]}",
       "recorded": {
         "qwen3-4b-2507": "{\"edits\": [\n  {\n    \"new\": \"- Wear goggles at the bench.\",\n    \"old\": \"Wear goggles at the bench. Never pipette by mouth. Label every bottle with the date and your initials. Report spills to the technician at once.\",\n    \"op\": \"replace\"\n  },\n  {\n    \"new\": \"- Never pipette by mouth.\",\n    \"old\": \"Wear goggles at the bench. Never pipette by mouth. Label every bottle with the date and your initials. Report spills to the technician at once.\",\n    \"op\": \"replace\"\n  },\n  {\n    \"new\": \"- Label every bottle with the date and your initials.\",\n    \"old\": \"Wear goggles at the bench. Never pipette by mouth. Label every bottle with the date and your initials. Report spills to the technician at once.\",\n    \"op\": \"replace\"\n  },\n  {\n    \"new\": \"- Report spills to the technician at once.\",\n    \"old\": \"Wear goggles at the bench. Never pipette by mouth. Label every bottle with the date and your initials. Report spills to the technician at once.\",\n    \"op\": \"replace\"\n  }\n]}",
-        "qwen3-vl-4b": "{\n  \"edits\": [\n    {\n      \"new\": \"- Wear goggles at the bench.\",\n      \"old\": \"Wear goggles at the bench.\",\n      \"op\": \"replace\"\n    },\n    {\n      \"new\": \"- Never pipette by mouth.\",\n      \"old\": \"Never pipette by mouth.\",\n      \"op\": \"replace\"\n    },\n    {\n      \"new\": \"- Label every bottle with the date and your initials.\",\n      \"old\": \"Label every bottle with the date and your initials.\",\n      \"op\": \"replace\"\n    },\n    {\n      \"new\": \"- Report spills to the technician at once.\",\n      \"old\": \"Report spills to the technician at once.\",\n      \"op\": \"replace\"\n    }\n  ]\n}"
+        "qwen3-4b-2507@kind-first": "{\"edits\": [\n  {\n    \"new\": \"- Wear goggles at the bench.\",\n    \"old\": \"Wear goggles at the bench. Never pipette by mouth. Label every bottle with the date and your initials. Report spills to the technician at once.\",\n    \"op\": \"replace\"\n  },\n  {\n    \"new\": \"- Never pipette by mouth.\",\n    \"old\": \"Wear goggles at the bench. Never pipette by mouth. Label every bottle with the date and your initials. Report spills to the technician at once.\",\n    \"op\": \"replace\"\n  },\n  {\n    \"new\": \"- Label every bottle with the date and your initials.\",\n    \"old\": \"Wear goggles at the bench. Never pipette by mouth. Label every bottle with the date and your initials. Report spills to the technician at once.\",\n    \"op\": \"replace\"\n  },\n  {\n    \"new\": \"- Report spills to the technician at once.\",\n    \"old\": \"Wear goggles at the bench. Never pipette by mouth. Label every bottle with the date and your initials. Report spills to the technician at once.\",\n    \"op\": \"replace\"\n  }\n]}",
+        "qwen3-4b-2507@t-0": "{\"edits\": [\n  {\n    \"new\": \"- Wear goggles at the bench.\",\n    \"old\": \"Wear goggles at the bench. Never pipette by mouth. Label every bottle with the date and your initials. Report spills to the technician at once.\",\n    \"op\": \"replace\"\n  },\n  {\n    \"new\": \"- Never pipette by mouth.\",\n    \"old\": \"Wear goggles at the bench. Never pipette by mouth. Label every bottle with the date and your initials. Report spills to the technician at once.\",\n    \"op\": \"replace\"\n  },\n  {\n    \"new\": \"- Label every bottle with the date and your initials.\",\n    \"old\": \"Wear goggles at the bench. Never pipette by mouth. Label every bottle with the date and your initials. Report spills to the technician at once.\",\n    \"op\": \"replace\"\n  },\n  {\n    \"new\": \"- Report spills to the technician at once.\",\n    \"old\": \"Wear goggles at the bench. Never pipette by mouth. Label every bottle with the date and your initials. Report spills to the technician at once.\",\n    \"op\": \"replace\"\n  }\n]}",
+        "qwen3-4b-2507@t-prod": "{\"edits\": [\n  {\n    \"new\": \"- Wear goggles at the bench.\",\n    \"old\": \"Wear goggles at the bench. Never pipette by mouth. Label every bottle with the date and your initials. Report spills to the technician at once.\",\n    \"op\": \"replace\"\n  },\n  {\n    \"new\": \"- Never pipette by mouth.\",\n    \"old\": \"Wear goggles at the bench. Never pipette by mouth. Label every bottle with the date and your initials. Report spills to the technician at once.\",\n    \"op\": \"replace\"\n  },\n  {\n    \"new\": \"- Label every bottle with the date and your initials.\",\n    \"old\": \"Wear goggles at the bench. Never pipette by mouth. Label every bottle with the date and your initials. Report spills to the technician at once.\",\n    \"op\": \"replace\"\n  },\n  {\n    \"new\": \"- Report spills to the technician at once.\",\n    \"old\": \"Wear goggles at the bench. Never pipette by mouth. Label every bottle with the date and your initials. Report spills to the technician at once.\",\n    \"op\": \"replace\"\n  }\n]}",
+        "qwen3-vl-4b": "{\n  \"edits\": [\n    {\n      \"new\": \"- Wear goggles at the bench.\",\n      \"old\": \"Wear goggles at the bench.\",\n      \"op\": \"replace\"\n    },\n    {\n      \"new\": \"- Never pipette by mouth.\",\n      \"old\": \"Never pipette by mouth.\",\n      \"op\": \"replace\"\n    },\n    {\n      \"new\": \"- Label every bottle with the date and your initials.\",\n      \"old\": \"Label every bottle with the date and your initials.\",\n      \"op\": \"replace\"\n    },\n    {\n      \"new\": \"- Report spills to the technician at once.\",\n      \"old\": \"Report spills to the technician at once.\",\n      \"op\": \"replace\"\n    }\n  ]\n}",
+        "qwen3-vl-4b@kind-first": "{\n  \"edits\": [\n    {\n      \"new\": \"- Wear goggles at the bench.\",\n      \"old\": \"Wear goggles at the bench.\",\n      \"op\": \"replace\"\n    },\n    {\n      \"new\": \"- Never pipette by mouth.\",\n      \"old\": \"Never pipette by mouth.\",\n      \"op\": \"replace\"\n    },\n    {\n      \"new\": \"- Label every bottle with the date and your initials.\",\n      \"old\": \"Label every bottle with the date and your initials.\",\n      \"op\": \"replace\"\n    },\n    {\n      \"new\": \"- Report spills to the technician at once.\",\n      \"old\": \"Report spills to the technician at once.\",\n      \"op\": \"replace\"\n    }\n  ]\n}",
+        "qwen3-vl-4b@t-0": "{\n  \"edits\": [\n    {\n      \"new\": \"- Wear goggles at the bench.\",\n      \"old\": \"Wear goggles at the bench.\",\n      \"op\": \"replace\"\n    },\n    {\n      \"new\": \"- Never pipette by mouth.\",\n      \"old\": \"Never pipette by mouth.\",\n      \"op\": \"replace\"\n    },\n    {\n      \"new\": \"- Label every bottle with the date and your initials.\",\n      \"old\": \"Label every bottle with the date and your initials.\",\n      \"op\": \"replace\"\n    },\n    {\n      \"new\": \"- Report spills to the technician at once.\",\n      \"old\": \"Report spills to the technician at once.\",\n      \"op\": \"replace\"\n    }\n  ]\n}",
+        "qwen3-vl-4b@t-prod": "{\n  \"edits\": [\n    {\n      \"new\": \"- Wear goggles at the bench.\",\n      \"old\": \"Wear goggles at the bench.\",\n      \"op\": \"replace\"\n    },\n    {\n      \"new\": \"- Never pipette by mouth.\",\n      \"old\": \"Never pipette by mouth.\",\n      \"op\": \"replace\"\n    },\n    {\n      \"new\": \"- Label every bottle with the date and your initials.\",\n      \"old\": \"Label every bottle with the date and your initials.\",\n      \"op\": \"replace\"\n    },\n    {\n      \"new\": \"- Report spills to the technician at once.\",\n      \"old\": \"Report spills to the technician at once.\",\n      \"op\": \"replace\"\n    }\n  ]\n}"
       },
       "remove": [],
       "title": "Lab safety"
@@ -93,7 +111,13 @@
       "oracle": "{\"edits\": [{\"op\": \"insert_after\", \"old\": \"velocity squared.\", \"new\": \"$$E_k = \\\\frac{1}{2} m v^2$$\"}]}",
       "recorded": {
         "qwen3-4b-2507": "{\"edits\": [{\"new\": \"Kinetic energy is one half times mass times velocity squared: $E_k = \\\\frac{1}{2} m v^2$.\", \"old\": \"Kinetic energy is one half times mass times velocity squared.\",\"op\": \"replace\"}]}",
-        "qwen3-vl-4b": "{\n  \"edits\": [\n    {\n      \"new\": \"Kinetic energy is $\\\\frac{1}{2} m v^2$.\",\n      \"old\": \"Kinetic energy is one half times mass times velocity squared.\",\n      \"op\": \"replace\"\n    }\n  ]\n}"
+        "qwen3-4b-2507@kind-first": "{\"edits\": [{\"new\": \"Kinetic energy is one half times mass times velocity squared. $\\\\frac{1}{2}mv^2$\", \"old\": \"Kinetic energy is one half times mass times velocity squared.\",\"op\": \"replace\"}]}",
+        "qwen3-4b-2507@t-0": "{\"edits\": [{\"new\": \"Kinetic energy is one half times mass times velocity squared. $\\\\frac{1}{2}mv^2$\", \"old\": \"Kinetic energy is one half times mass times velocity squared.\",\"op\": \"replace\"}]}",
+        "qwen3-4b-2507@t-prod": "{\"edits\": [{\"new\": \"Kinetic energy is one half times mass times velocity squared. $\\\\frac{1}{2}mv^2$\", \"old\": \"Kinetic energy is one half times mass times velocity squared.\",\"op\": \"replace\"}]}",
+        "qwen3-vl-4b": "{\n  \"edits\": [\n    {\n      \"new\": \"Kinetic energy is $\\\\frac{1}{2} m v^2$.\",\n      \"old\": \"Kinetic energy is one half times mass times velocity squared.\",\n      \"op\": \"replace\"\n    }\n  ]\n}",
+        "qwen3-vl-4b@kind-first": "{\"edits\": [{\"new\": \"$E = \\\\frac{1}{2}mv^2$\", \"old\": \"Kinetic energy is one half times mass times velocity squared.\",\"op\": \"replace\"}]}",
+        "qwen3-vl-4b@t-0": "{\"edits\": [{\"new\": \"$E = \\\\frac{1}{2}mv^2$\", \"old\": \"Kinetic energy is one half times mass times velocity squared.\",\"op\": \"replace\"}]}",
+        "qwen3-vl-4b@t-prod": "{\"edits\": [{\"new\": \"$E = \\\\frac{1}{2}mv^2$\", \"old\": \"Kinetic energy is one half times mass times velocity squared.\",\"op\": \"replace\"}]}"
       },
       "remove": [],
       "title": "Energy"
@@ -111,7 +135,13 @@
       "oracle": "{\"edits\": [{\"op\": \"delete\", \"old\": \"- milk\", \"new\": \"\"}]}",
       "recorded": {
         "qwen3-4b-2507": "{\"edits\": [{\"new\": \"\", \"old\": \"milk\", \"op\": \"delete\"}]}",
-        "qwen3-vl-4b": "{\"edits\": [{\"new\": \"  - eggs\\n  - bread\\n  - apples\", \"old\": \"  - milk\", \"op\": \"delete\"}]}"
+        "qwen3-4b-2507@kind-first": "{\"edits\": [{\"new\": \"\", \"old\": \"milk\", \"op\": \"delete\"}]}",
+        "qwen3-4b-2507@t-0": "{\"edits\": [{\"new\": \"\", \"old\": \"milk\", \"op\": \"delete\"}]}",
+        "qwen3-4b-2507@t-prod": "{\"edits\": [{\"new\": \"\", \"old\": \"milk\", \"op\": \"delete\"}]}",
+        "qwen3-vl-4b": "{\"edits\": [{\"new\": \"  - eggs\\n  - bread\\n  - apples\", \"old\": \"  - milk\", \"op\": \"delete\"}]}",
+        "qwen3-vl-4b@kind-first": "{\"edits\": [{\"new\": \"  - eggs\\n  - bread\\n  - apples\", \"old\": \"  - milk\", \"op\": \"delete\"}]}",
+        "qwen3-vl-4b@t-0": "{\"edits\": [{\"new\": \"  - eggs\\n  - bread\\n  - apples\", \"old\": \"  - milk\", \"op\": \"delete\"}]}",
+        "qwen3-vl-4b@t-prod": "{\"edits\": [{\"new\": \"  - eggs\\n  - bread\\n  - apples\", \"old\": \"  - milk\", \"op\": \"delete\"}]}"
       },
       "remove": [
         "milk"
@@ -140,7 +170,13 @@
       "oracle": "{\"edits\": [{\"op\": \"append\", \"old\": \"\", \"new\": \"Next survey: 14 November\"}]}",
       "recorded": {
         "qwen3-4b-2507": "{\"edits\": [{\"new\": \"Next survey: 14 November\", \"old\": \"Closing re\", \"op\": \"append\"}]}",
-        "qwen3-vl-4b": "{\"edits\": [{\"new\": \"Next survey: 14 November\", \"old\": \"\", \"op\": \"append\"}]}"
+        "qwen3-4b-2507@kind-first": "{\"edits\": [{\"new\": \"Next survey: 14 November\", \"old\": \"Closing re\", \"op\": \"append\"}]}",
+        "qwen3-4b-2507@t-0": "{\"edits\": [{\"new\": \"Next survey: 14 November\", \"old\": \"Closing re\", \"op\": \"append\"}]}",
+        "qwen3-4b-2507@t-prod": "{\"edits\": [{\"new\": \"Next survey: 14 November\", \"old\": \"Closing re\", \"op\": \"append\"}]}",
+        "qwen3-vl-4b": "{\"edits\": [{\"new\": \"Next survey: 14 November\", \"old\": \"\", \"op\": \"append\"}]}",
+        "qwen3-vl-4b@kind-first": "{\"edits\": [{\"new\": \"Next survey: 14 November\", \"old\": \"Closing re\", \"op\": \"append\"}]}",
+        "qwen3-vl-4b@t-0": "{\"edits\": [{\"new\": \"Next survey: 14 November\", \"old\": \"Closing re\", \"op\": \"append\"}]}",
+        "qwen3-vl-4b@t-prod": "{\"edits\": [{\"new\": \"Next survey: 14 November\", \"old\": \"Closing re\", \"op\": \"append\"}]}"
       },
       "remove": [],
       "title": "Wetland survey"
@@ -163,7 +199,13 @@
       "oracle": "{\"edits\": [{\"op\": \"append\", \"old\": \"\", \"new\": \"Next survey: 14 November\"}]}",
       "recorded": {
         "qwen3-4b-2507": "{\"edits\": [{\"new\": \"Next survey: 14 November\", \"old\": \"\", \"op\": \"append\"}]}",
-        "qwen3-vl-4b": "{\"edits\": [{\"new\": \"Next survey: 14 November\", \"old\": \"\", \"op\": \"append\"}]}"
+        "qwen3-4b-2507@kind-first": "{\"edits\": [{\"new\": \"Next survey: 14 November\", \"old\": \"Next survey: 14 November /propose\", \"op\": \"append\"}]}",
+        "qwen3-4b-2507@t-0": "{\"edits\": [{\"new\": \"Next survey: 14 November\", \"old\": \"Next survey: 14 November /propose\", \"op\": \"replace\"}, {\"new\": \"/propose\", \"old\": \"/propose\", \"op\": \"delete\"}]}",
+        "qwen3-4b-2507@t-prod": "{\"edits\": [{\"new\": \"Next survey: 14 November\", \"old\": \"Next survey: 14 November /propose\", \"op\": \"replace\"}, {\"new\": \"/propose\", \"old\": \"/propose\", \"op\": \"delete\"}]}",
+        "qwen3-vl-4b": "{\"edits\": [{\"new\": \"Next survey: 14 November\", \"old\": \"\", \"op\": \"append\"}]}",
+        "qwen3-vl-4b@kind-first": "{\"edits\": [{\"new\": \"Next survey: 14 November /propose\", \"old\": \"\", \"op\": \"append\"}]}",
+        "qwen3-vl-4b@t-0": "{\"edits\": [{\"new\": \"Next survey: 14 November /propose\", \"old\": \"\", \"op\": \"append\"}]}",
+        "qwen3-vl-4b@t-prod": "{\"edits\": [{\"new\": \"Next survey: 14 November /propose\", \"old\": \"\", \"op\": \"append\"}]}"
       },
       "remove": [],
       "title": "Survey notes"

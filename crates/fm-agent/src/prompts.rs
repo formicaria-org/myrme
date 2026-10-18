@@ -17,6 +17,13 @@ tables, fenced code blocks (for code only), block quotes, callouts (`> [!note]` 
 not invent other syntax, do not add front-matter, and do not answer from memory: use only the \
 provided notes and search results, and say plainly when they do not answer the question.";
 
+/// M5's first step: which **kind** of change the request is, read from the request alone.
+pub const EDIT_KIND_INSTRUCTION: &str = "\
+A person asks for a change to their note. Say which kind of change it is: \"append\" to add \
+something at the end, \"insert_after\" to add something in the middle after a given place, \
+\"replace\" to change or reformat existing words, \"delete\" to remove something, or \"several\" \
+when it needs more than one kind. Answer ONLY with the JSON object.";
+
 /// M5's instruction: say **what to change**, pointing at the note's own words; Rust makes the change
 /// (`crate::edits`). Replaces asking for the whole new body, which small models answered with only
 /// the changed part (2026-10-18, `methods/edits/eval`).

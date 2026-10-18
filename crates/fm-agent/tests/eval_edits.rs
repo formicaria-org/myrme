@@ -52,7 +52,10 @@ fn run<L: LlmStep>(llm: L, case: &Value) -> Result<(String, bool, String), Agent
         label: format!("{} (this note)", case["title"].as_str().unwrap()),
         text: fm_agent::shown_note(case["body"].as_str().unwrap()),
     };
-    let turn = StudyAssistant::new(llm, NoWeb).turn("", &intent, &[note], None)?;
+    // The discussion as the runner gives it (`history`: one `- ` line per message), holding the
+    // person's own message — the live run showed the eval must see what production sees.
+    let history = format!("- @Myrme-laptop {} /propose", case["ask"].as_str().unwrap());
+    let turn = StudyAssistant::new(llm, NoWeb).turn(&history, &intent, &[note], None)?;
     // As the runner does: the edits go onto the whole note, not the part the model saw.
     let applied = fm_agent::edits::apply(case["body"].as_str().unwrap(), &turn.edits.unwrap());
     let proposal = applied.body;
@@ -120,7 +123,12 @@ fn a_live_model_against_the_cases() {
             Ok(r)
         }
     }
-    let llm = Recording(OpenAiStep::local(port, &model).with_temperature(0.0), Default::default());
+    // Production's sampling (the runner's `llm()`), unless FM_EVAL_TEMPERATURE says otherwise.
+    let mut step = OpenAiStep::local(port, &model);
+    if let Some(t) = std::env::var("FM_EVAL_TEMPERATURE").ok().and_then(|t| t.parse::<f32>().ok()) {
+        step = step.with_temperature(t);
+    }
+    let llm = Recording(step, Default::default());
 
     let mut file = load();
     let (mut n, mut pass) = (0, 0);

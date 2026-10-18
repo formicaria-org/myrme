@@ -163,6 +163,10 @@ tested outside the repository. The four steps below are all in it.
 | M5 as anchored edits applied to the whole note | ✅ 3/6 → 5/6 on both laptop models |
 | `Method` enum and `methods/<name>/METHOD.md` for all seven | ✅ |
 | Cases for M3 (images), M4 (speech), M7 (recipe), from openly licensed data (`agents/eval-data.py`) | ✅ GNHK 30 photos, MLS + LibriSpeech 60 clips, Wikibooks 30 recipes |
+| M3 laptop reader capped at 1024 image tokens (catalogue `image_max_tokens`) | ✅ every page timing out → 17.9% median WER, ≈35 s a page |
+| M4 measured: `ggml-base` 6.3% EN / 36.1% IT; `ggml-small` 4.1% / 23.1% | ✅ recorded; suggesting *better listening* by language is the owner's call |
+| M7 measured: 28/30 on the laptop default; the schema bought nothing and stays off | ✅ |
+| The runtime with llguidance on every platform (`runtime.yml`, release `runtime-llg-3`), in the catalogue | ✅ ~17% faster on the GPU, ~20% on the CPU, as accurate |
 | M2 held to a schema with `answerable` first | ✅ 7/8 → 8/8 on both laptop models |
 | M5: a cut note is marked; append and replace rules (found by the live run) | ✅ 5/6 → 7/7 on both laptop models |
 | Integration test against a real formicaria (`pixi run integration`, a CI job): `/propose` round trip, an unplaceable edit, the recipe headings | ✅ against v0.9.2 |
@@ -186,6 +190,15 @@ tested outside the repository. The four steps below are all in it.
 
 ### Phase C — the dedicated methods (in Myrme; reaches users only through Phase D)
 
+**Next, by what the evals show matters most:**
+1. **Handwriting on the phone.** The phone's vision model cannot read handwriting (82.7% median WER).
+   Try a dedicated reader (PaddleOCR-VL, or printed-text OCR first). This adds a runtime, so it needs
+   a `decisions.md` entry.
+2. **Italian speech** with `ggml-base` (36.1% WER). Decide whether *better listening* is suggested by
+   language, and measure the owner's own recordings.
+3. The items below.
+
+
 In order, each gated on its eval beating today's behaviour:
 
 1. M1 ICS-first
@@ -197,7 +210,9 @@ In order, each gated on its eval beating today's behaviour:
 ### Phase D — cutover in formicaria (one revertible commit) — status: **rehearsed, green**, 2026-10-18
 
 On branch `myrme-cutover` (worktree `~/fm-myrme`, local only):
-- formicaria's whole `pixi run ci` is green with Myrme from GitHub at `v0.1.0-rc.1`.
+- formicaria's whole `pixi run ci` is green with Myrme from GitHub, first at `v0.1.0-rc.1` and then
+  at **`v0.1.0`**.
+- formicaria's Android staging takes Myrme's llguidance build and checks its SHA-256.
 - Myrme's `FM_CHECKOUT=~/fm-myrme pixi run integration` passes 3/3.
 - `agents/e2e-live.sh` runs the branch's own binaries with a real model on Myrme's runtime.
 - **What is left is the owner's:** merge the branch into `main` for the next release, and run the

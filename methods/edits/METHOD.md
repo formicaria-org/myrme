@@ -12,14 +12,16 @@ description: Propose an edit to the note a discussion is about, as the person as
 1. The context holds the conversation, the note and its linked notes.
    - The note is given as `fm_agent::shown_note` gives it: its first 1200 characters, plus a line
      saying it goes on when it does.
-2. **One call, held to `edits::answer_schema()`**, under `prompts::EDITS_INSTRUCTION`. The answer
+2. **First, the kind of change, from the request alone** (`prompts::EDIT_KIND_INSTRUCTION`,
+   `edits::kind_schema`): append, insert_after, replace, delete, or several.
+3. **Then one call, held to `edits::answer_schema_for(kind)`**, under `prompts::EDITS_INSTRUCTION`. The answer
    is a list of edits: `replace` / `insert_after` / `delete` / `append`, each pointing at words
    copied from the note.
-3. **Rust applies them to the whole note** (`edits::apply`), however much of it the model saw:
+4. **Rust applies them to the whole note** (`edits::apply`), however much of it the model saw:
    - an edit whose words are not found exactly once is dropped and counted;
    - consecutive replaces with the same anchor are one replacement written in pieces;
    - an anchor with an escaped line break is found.
-4. The runner proposes the result only if something applied. Otherwise it says it could not place
+5. The runner proposes the result only if something applied. Otherwise it says it could not place
    the change.
 
 ## Eval
@@ -42,6 +44,10 @@ Each is checked for what must stay, what must appear and what must go.
 
 With the whole-body format, **both models returned only the changed part**: the one fixed sentence,
 or the one appended line. Accepting such a proposal would have deleted the rest of the note.
+
+**At production settings** (the discussion history as the runner builds it, the runner's sampling),
+the last column became 6/7 for both models. Deciding the kind first brought it to **7/7 for
+qwen3-4b-2507 and 6/7 for qwen3-vl-4b**; `latex`, a reformatting judgment, is what remains.
 
 The live end-to-end run (`agents/e2e-live.sh`) found the case the first six missed. With no sign
 the note went on, a model "added a final line" by replacing the last sentence it could see. That

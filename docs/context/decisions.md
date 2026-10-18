@@ -242,6 +242,30 @@ attribution sit beside each case file.
   both free and held to `recipe::answer_schema()`, and the schema was slower. qwen3-4b-2507 scored
   26/30 both ways.
 
+## 2026-10-18 (night) — an edit's kind is decided from the request alone; the evals run as production runs `#method`
+
+**What the live run showed, the second time.** After the cut-note fix, `agents/e2e-live.sh` still
+got a proposal that replaced "A sentence of field notes …, round 14." with "Next survey: 14
+November". The model had matched the request's *14* to a sentence in the note, not to its end.
+
+**Why the eval had missed it.** It gave the turn no discussion history and ran at temperature 0.
+Production gives the person's message as history (`- @Myrme-laptop … /propose`) and runs at the
+client's default, 0.2. With both mirrored, the eval reproduced the failure, and temperature 0 did
+not cure it (5/7 for qwen3-4b-2507).
+
+**Decision.**
+- **The evals run as production runs.**
+  - The edits eval passes the history line the runner builds, and uses the runner's sampling
+    unless `FM_EVAL_TEMPERATURE` says otherwise.
+  - The others will be brought to the same rule as they are next touched.
+- **M5 first decides the kind of change from the request alone** (`EDIT_KIND_INSTRUCTION`,
+  `edits::kind_schema`): `append`, `insert_after`, `replace`, `delete` or `several`.
+  - The edits are then held to that op (`edits::answer_schema_for`); `several`, or no answer,
+    allows all four.
+  - It costs one short extra call. Without the note in view, the request is easy to classify.
+  - At production settings: qwen3-4b-2507 **7/7** (6/7 without), qwen3-vl-4b **6/7**. Only `latex`
+    is left on qwen3-vl-4b, the reformatting judgment it makes once the history is in view.
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading
