@@ -106,8 +106,10 @@ some of them.
 desktop archive (`.github/workflows/desktop.yml:141`, `packaging/formicaria.sh:42`) and stages the
 Android runtime from it (`ci/android-stage-runtime.sh`). **Its keys are a format formicaria reads.**
 Adding a key is safe; renaming or removing one is a contract change. Added since the
-extraction: `image_max_tokens` (per model, 2026-10-18); `phone_label` and `thinking` (per model,
-2026-10-19), read through `Manifest::phone_choices` and `Manifest::add_template_flags`. **Contract 1.4** (Myrme 0.5.0) adds the
+extraction: `image_max_tokens` (per model, 2026-10-18); `phone_label`, `thinking` and
+`shared_mail_prompt` (per model, 2026-10-19), read through `Manifest::phone_choices`,
+`Manifest::add_template_flags` and `Manifest::shared_mail_prompt`. `Agent` gained the field
+`shared_mail_prompt` (2026-10-19), an addition. **Contract 1.4** (Myrme 0.5.0) adds the
 phone's runtimes, which formicaria's packaging reads from here instead of keeping its own copy:
 `runtime_url_android_arm64` with `runtime_sha256_android_arm64` (staged into the APK by
 `ci/android-stage-runtime.sh`) and `whisper_android_source`, the whisper.cpp tag

@@ -699,6 +699,7 @@ impl Tools {
             vision: sees.is_some(),
             read_prompt: manifest.read_prompt(&model_name),
             reads_labels: manifest.reads_labels(&model_name),
+            shared_mail_prompt: manifest.shared_mail_prompt(&model_name),
             image_specialist: None,
             max_reply_chars: manifest.max_reply_chars,
             history_budget: 4000,

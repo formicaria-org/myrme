@@ -118,6 +118,7 @@ fn agent(fm_port: u16, model_port: u16) -> Agent<FmServe> {
         vision: false,
         read_prompt: None,
         reads_labels: false,
+        shared_mail_prompt: false,
         image_specialist: None,
         max_reply_chars: 600,
         history_budget: 4000,

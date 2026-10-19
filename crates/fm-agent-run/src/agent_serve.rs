@@ -265,6 +265,7 @@ fn run() -> Result<(), String> {
         vision: mmproj.is_some(),
         read_prompt: manifest.read_prompt(&model_name),
         reads_labels: manifest.reads_labels(&model_name),
+        shared_mail_prompt: manifest.shared_mail_prompt(&model_name),
         image_specialist: None,
         whisper_model: a.whisper_model.clone(),
         max_reply_chars: a.max_reply_chars.unwrap_or(manifest.max_reply_chars),

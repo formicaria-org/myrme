@@ -166,6 +166,11 @@ image_max_tokens = 1024
 # Facts at 1024 pixels: 48 figures right, none wrong, 8 left empty; `agents/bench/results.md`).
 # A model without this line is never handed a label: `lfm2.5-vl-450m` got 2 packets of 9 right.
 reads_labels = true
+# The mail pass's two questions share one system prompt, so the title call reuses the meetings call's
+# cached emails (516 tokens read instead of 4,041 on a ~4000-token exchange). Measured 2026-10-19:
+# 16/17 meetings and 12/12 titles, against 15/17 and 12/12 apart. Not for the small models, which
+# then name the mailbox's owner (speed study §2.7).
+shared_mail_prompt = true
 note = "LAPTOP pick (2026-07-24) — measured on our case: 40.1 t/s on the RTX 3050 (Vulkan, 2.78 GB VRAM), 3/3 verbatim grounding (best of the sweep), abstains on junk sources. Served text-only via /v1/chat/completions (mmproj-Qwen3VL-4B-Instruct-F16.gguf only needed if we later add image-notes). Caveat: less eager to *initiate* a search — fine while /research is deterministically routed. Apache-2.0."
 
 [[models]]

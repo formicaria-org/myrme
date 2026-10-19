@@ -75,6 +75,10 @@ pub struct Model {
     /// one is offered as a phone choice ([`Manifest::phone_choices`]); the words compare it with the
     /// other phone choices, so they are not meant for the desktop, where the 4B models outclass both.
     pub phone_label: Option<String>,
+    /// Whether the mail pass's two questions share one system prompt (`fm_agent::meetings::prompt`).
+    /// Measured per model (speed study §2.7, 2026-10-19): right for qwen3-vl-4b, wrong for the
+    /// small models, which then name the mailbox's owner as the correspondent. Unset ⇒ no.
+    pub shared_mail_prompt: bool,
 }
 
 /// The runtime defaults and the model list from `models.toml`.
@@ -195,6 +199,7 @@ impl Manifest {
                     reads_labels: false,
                     thinking: None,
                     phone_label: None,
+                    shared_mail_prompt: false,
                 });
                 continue;
             }
@@ -223,6 +228,7 @@ impl Manifest {
                     "reads_labels" => m.reads_labels = val == "true",
                     "thinking" => m.thinking = val.parse().ok(),
                     "phone_label" => m.phone_label = Some(val.to_string()),
+                    "shared_mail_prompt" => m.shared_mail_prompt = val == "true",
                     _ => {}
                 },
                 // Top-level (before any [[models]]).
@@ -449,6 +455,11 @@ impl Manifest {
         if self.model(name).and_then(|m| m.thinking) == Some(false) {
             cmd.arg("--chat-template-kwargs").arg(r#"{"enable_thinking":false}"#);
         }
+    }
+
+    /// Whether this model's mail pass shares one system prompt between its two questions.
+    pub fn shared_mail_prompt(&self, name: &str) -> bool {
+        self.model(name).is_some_and(|m| m.shared_mail_prompt)
     }
 
     /// The models a phone may choose between, in catalogue order: those with a
@@ -763,6 +774,12 @@ mod tests {
         }
         let qwen = m.model("qwen3.5-0.8b").unwrap();
         assert_eq!((qwen.thinking, qwen.image_max_tokens), (Some(false), Some(1024)));
+        // The mail pass shares its prompt only where measured right (speed study §2.7).
+        assert!(m.shared_mail_prompt("qwen3-vl-4b"));
+        assert!(
+            m.phone_choices().iter().all(|x| !x.shared_mail_prompt),
+            "the small models name the owner"
+        );
         // A phone still running the Q8_0 450M keeps a catalogued model, and is offered the default.
         assert!(m.model("lfm2.5-vl-450m").is_some_and(|x| x.phone_label.is_none()));
     }

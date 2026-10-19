@@ -27,6 +27,10 @@ const TAG: &str = "fm:meeting";
 /// The tag a called-off meeting carries — the same one the calendars give a cancelled event.
 const CANCELLED: &str = "cancelled";
 
+/// Who the mailbox belongs to when formicaria does not say. Both mail calls name the same one: with a
+/// shared mail prompt a different name would make the two system prompts differ.
+const OWNER: &str = "the mailbox's owner";
+
 /// A title already in the "Person — who they are" form: given by the assistant, or by the person.
 fn named(title: &str) -> bool {
     title.contains(" — ")
@@ -195,12 +199,17 @@ impl<V: VaultAccess> Agent<V> {
             // Held to the answer's schema: measured on 2026-10-18 (`methods/meetings/eval`), a free
             // answer often left out the quote and lost the meeting — 8/14 against 14/14 on
             // qwen3-4b-2507, 11/14 against 12/14 on qwen3-vl-4b, and faster.
+            // The layout is the model's (`shared_mail_prompt`): shared, the title call below reuses
+            // this call's cached emails.
+            let (system, user) = meetings::prompt(
+                self.shared_mail_prompt,
+                meetings::Question::Meetings,
+                title,
+                &emails,
+                me.unwrap_or(OWNER),
+            );
             let answer = llm
-                .complete_constrained(
-                    fm_agent::prompts::MEETINGS_INSTRUCTION,
-                    &meetings::user_prompt(title, &emails),
-                    &meetings::answer_schema(),
-                )
+                .complete_constrained(&system, &user, &meetings::answer_schema())
                 .map_err(|e| format!("the model did not answer for \u{201c}{title}\u{201d}: {e}"))?
                 .content;
             let found = meetings::parse(&answer);
@@ -364,8 +373,14 @@ impl<V: VaultAccess> Agent<V> {
             return None;
         }
         mem.titled.insert(id.to_string());
-        let ask = fm_agent::titles::instruction(me.unwrap_or("the mailbox's owner"));
-        let answer = llm.complete(&ask, &meetings::user_prompt(title, emails)).ok()?.content;
+        let (system, user) = meetings::prompt(
+            self.shared_mail_prompt,
+            meetings::Question::Title,
+            title,
+            emails,
+            me.unwrap_or(OWNER),
+        );
+        let answer = llm.complete(&system, &user).ok()?.content;
         let (name, about) = fm_agent::titles::parse(&answer)?;
         fm_agent::titles::check(&name, &about, emails, me)
     }
@@ -520,6 +535,7 @@ mod tests {
             vision: false,
             read_prompt: None,
             reads_labels: false,
+            shared_mail_prompt: false,
             image_specialist: None,
             max_reply_chars: 1000,
             history_budget: 1000,
@@ -637,6 +653,40 @@ mod tests {
             };
             Ok(LlmResponse { content: content.into(), finish_reason: None, usage: None })
         }
+    }
+
+    /// Records every (system, user) pair; answers the title question with a title, else `[]`.
+    struct Recording(RefCell<Vec<(String, String)>>);
+    impl LlmStep for Recording {
+        fn complete(&self, system: &str, user: &str) -> Result<LlmResponse, AgentError> {
+            self.0.borrow_mut().push((system.into(), user.into()));
+            let content = if user.ends_with("Question: title") {
+                r#"{"name": "Maria", "about": "Master student, robotics project"}"#
+            } else {
+                "[]"
+            };
+            Ok(LlmResponse { content: content.into(), finish_reason: None, usage: None })
+        }
+    }
+
+    #[test]
+    fn a_shared_mail_prompt_sends_both_questions_the_same_system_prompt() {
+        let mem = scratch();
+        let mut a = agent();
+        a.shared_mail_prompt = true;
+        let llm = Recording(RefCell::new(Vec::new()));
+        a.meeting_pass(&llm, &mem, date!(2026 - 10 - 06)).unwrap();
+        let calls = llm.0.borrow();
+        assert_eq!(calls.len(), 2, "the meetings, then the title");
+        assert_eq!(calls[0].0, calls[1].0, "one system prompt: the emails are a cached prefix");
+        assert!(
+            calls[0].1.ends_with("Question: meetings") && calls[1].1.ends_with("Question: title")
+        );
+        let proposed = a.fm.calls.borrow();
+        assert_eq!(
+            proposed[0].1["props"],
+            json!({ "title": "Maria — Master student, robotics project" })
+        );
     }
 
     #[test]

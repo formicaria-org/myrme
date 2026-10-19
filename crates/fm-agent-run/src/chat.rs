@@ -57,6 +57,7 @@ fn run() -> Result<(), String> {
         vision: false,
         read_prompt: None,
         reads_labels: false,
+        shared_mail_prompt: false,
         image_specialist: None,
         max_reply_chars: a.max_reply_chars,
         history_budget: a.history_budget,

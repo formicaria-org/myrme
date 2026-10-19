@@ -30,6 +30,7 @@ fn it_transcribes_through_the_real_fmserve_and_whisper() {
         vision: false,
         read_prompt: None,
         reads_labels: false,
+        shared_mail_prompt: false,
         image_specialist: None,
         max_reply_chars: 2000,
         history_budget: 4000,

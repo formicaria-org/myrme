@@ -403,10 +403,31 @@ Avoid adding massive text to explain, few words that a user can understand."*
     otherwise answers nothing.
 - **The phone's chooser is formicaria's next change.** Until it lands, a phone runs the default and
   the choice exists only in the catalogue.
-- **Not shipped: prompt layout B** for the mail pass. It helped qwen3-vl-4b (15 → 16/17) and the Q8_0
+- **Not shipped as a global change: prompt layout B** for the mail pass (see the evening entry: it
+  became a per-model setting). It helped qwen3-vl-4b (15 → 16/17) and the Q8_0
   450M, but cost the two phone models meetings cases (450M Q4_K_M 5 → 3, Qwen3.5-0.8B 13 → 8). The
   layouts are studied further on those two baselines (speed study §2.7).
 - **The meeting pass stays off on the phone** (2026-10-18).
+
+## 2026-10-19 (evening) — the mail pass's prompt layout is the model's `#method` `#model`
+
+**The owner:** *"Fixed a model we can try different layouts. Pick only the laptop model and the
+fastest phone one as baselines"*, then *"go with option 1"* (the layout as a per-model setting).
+
+**Decision.**
+- **A catalogue key, `shared_mail_prompt`.** Set, the mail pass's two questions (meetings, title)
+  share one system prompt holding both instructions by name, the emails follow, and the user message
+  ends `Question: meetings` or `Question: title` (`fm_agent::meetings::prompt`). The title call then
+  reuses the meetings call's cached emails: 516 tokens read instead of 4,041 on a ~4000-token
+  exchange. Unset, each question's instruction is its own system prompt, as before.
+- **Set for qwen3-vl-4b only.** Measured (speed study §2.7, 2 runs each, identical):
+  qwen3-vl-4b 16/17 meetings and 12/12 titles shared, against 15/17 and 12/12 apart;
+  lfm2.5-vl-450m Q4_K_M 3/17 and 5/12 shared, against 5/17 and 9/12 apart — shared, it names the
+  mailbox's owner or the instruction's example roles. Qwen3.5-0.8B fell from 13/17 to 8/17 meetings.
+- **The title has an eval** (`methods/meetings/eval/titles.json`, 12 cases, run at the runner's own
+  settings). The meetings and title evals take `FM_LAYOUT`, and default to the model's own layout, so
+  an eval measures what ships.
+- `Agent` gains `shared_mail_prompt`, filled from the catalogue by both launchers (an addition).
 
 ## Rulings inherited from formicaria (before 2026-10-18)
 

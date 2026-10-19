@@ -105,6 +105,9 @@ pub struct Agent<V: VaultAccess> {
     /// Whether the main model was measured fit to read a nutrition label (the catalogue's
     /// `reads_labels`). A model that can see is not thereby one that can read a table of figures.
     pub reads_labels: bool,
+    /// Whether the mail pass's two questions share one system prompt, so the title call reuses the
+    /// meetings call's cached emails (the catalogue's `shared_mail_prompt`; `fm_agent::meetings::prompt`).
+    pub shared_mail_prompt: bool,
     /// A **dedicated image reader** running beside the main model, when this device has one. It is
     /// tried first; see [`Agent::image_reader`]. `None` everywhere today — the slot the rule needs,
     /// filled when a specialist is adopted.
@@ -883,6 +886,7 @@ mod tests {
             vision: false,
             read_prompt: None,
             reads_labels: false,
+            shared_mail_prompt: false,
             image_specialist: None,
             max_reply_chars: 600,
             history_budget: 4000,
@@ -1125,6 +1129,7 @@ mod tests {
             vision: false,
             read_prompt: None,
             reads_labels: false,
+            shared_mail_prompt: false,
             image_specialist: None,
             max_reply_chars: 600,
             history_budget: 4000,
@@ -1230,6 +1235,7 @@ mod tests {
             vision: false,
             read_prompt: None,
             reads_labels: false,
+            shared_mail_prompt: false,
             image_specialist: None,
             max_reply_chars: 600,
             history_budget: 4000,
@@ -1332,6 +1338,7 @@ mod tests {
             vision: false,
             read_prompt: None,
             reads_labels: false,
+            shared_mail_prompt: false,
             image_specialist: None,
             max_reply_chars: 2000,
             history_budget: 4000,
@@ -1434,6 +1441,7 @@ mod tests {
                 vision: false,
                 read_prompt: None,
                 reads_labels: false,
+                shared_mail_prompt: false,
                 image_specialist: None,
                 max_reply_chars: 600,
                 history_budget: 4000,
@@ -1548,6 +1556,7 @@ mod tests {
             vision: false,
             read_prompt: None,
             reads_labels: false,
+            shared_mail_prompt: false,
             image_specialist: None,
             max_reply_chars: 600,
             history_budget: 4000,

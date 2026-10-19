@@ -176,6 +176,50 @@ pub fn user_prompt(title: &str, body: &str) -> String {
     format!("Conversation: {title}\n\n{}", &body[start..])
 }
 
+/// The two questions the mail pass asks of one conversation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Question {
+    Meetings,
+    Title,
+}
+
+/// `(system, user)` for one mail-pass question about one conversation.
+///
+/// - `shared == false`: the question's own instruction is the system prompt and the emails are the
+///   user message. The two calls differ from the first token, so the title call reads the whole
+///   exchange again.
+/// - `shared == true`: **one** system prompt for both calls, holding both instructions by name, then
+///   the emails, then `Question: <name>`. The title call reuses the meetings call's cached emails:
+///   on a ~4000-token exchange it reads 516 tokens instead of 4,041.
+///
+/// It is the model's choice (`shared_mail_prompt` in the catalogue), because it is measured per
+/// model (speed study §2.7, 2026-10-19): qwen3-vl-4b scored 16/17 meetings and 12/12 titles shared,
+/// 15/17 and 12/12 apart; lfm2.5-vl-450m at Q4_K_M fell from 5/17 and 9/12 to 3/17 and 5/12 shared,
+/// naming the mailbox's owner or the instruction's example roles. `me` is the owner's name; both
+/// calls must pass the same one, or their system prompts differ.
+pub fn prompt(shared: bool, q: Question, title: &str, body: &str, me: &str) -> (String, String) {
+    let emails = user_prompt(title, body);
+    if !shared {
+        let own = match q {
+            Question::Meetings => crate::prompts::MEETINGS_INSTRUCTION.to_string(),
+            Question::Title => crate::titles::instruction(me),
+        };
+        return (own, emails);
+    }
+    let system = format!(
+        "You read an email exchange and answer one of two questions about it. The question is \
+         named on the last line, after the emails.\n\nQuestion \"meetings\": {}\n\n\
+         Question \"title\": {}",
+        crate::prompts::MEETINGS_INSTRUCTION,
+        crate::titles::instruction(me),
+    );
+    let name = match q {
+        Question::Meetings => "meetings",
+        Question::Title => "title",
+    };
+    (system, format!("{emails}\n\nQuestion: {name}"))
+}
+
 /// The shape [`crate::prompts::MEETINGS_INSTRUCTION`] asks for, as a JSON Schema, for
 /// [`crate::LlmStep::complete_constrained`]. **Every key is required, and that is what it is for**:
 /// measured on 2026-10-18 (qwen3-4b-2507, `methods/meetings/eval`), the free answer was always valid
@@ -971,6 +1015,27 @@ pub fn plan(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_shared_mail_prompt_is_one_system_prompt_for_both_questions() {
+        let body = "### Lena Okafor — 2026-10-13 09:10\n\nCan we meet on Thursday at 3pm?\n";
+        let (ms, mu) = prompt(true, Question::Meetings, "Thesis", body, "Tom Reyes");
+        let (ts, tu) = prompt(true, Question::Title, "Thesis", body, "Tom Reyes");
+        assert_eq!(ms, ts, "the title call reuses the meetings call's cached prompt");
+        assert!(ms.contains(crate::prompts::MEETINGS_INSTRUCTION) && ms.contains("Tom Reyes"));
+        assert!(mu.ends_with("Question: meetings") && tu.ends_with("Question: title"));
+        let shared_prefix = mu.trim_end_matches("Question: meetings");
+        assert!(tu.starts_with(shared_prefix), "the emails are the same prefix");
+        // Apart: each question's own instruction is the system prompt, as before 2026-10-19.
+        let (ms, mu) = prompt(false, Question::Meetings, "Thesis", body, "Tom Reyes");
+        let (ts, tu) = prompt(false, Question::Title, "Thesis", body, "Tom Reyes");
+        assert_eq!(ms, crate::prompts::MEETINGS_INSTRUCTION);
+        assert_eq!(ts, crate::titles::instruction("Tom Reyes"));
+        assert_eq!(
+            (mu.as_str(), tu.as_str()),
+            (user_prompt("Thesis", body).as_str(), user_prompt("Thesis", body).as_str())
+        );
+    }
     use time::macros::{date, time};
 
     fn d(p: &str, anchor: Date) -> Option<Date> {
