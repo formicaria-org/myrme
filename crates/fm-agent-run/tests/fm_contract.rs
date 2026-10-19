@@ -38,12 +38,12 @@ use fm_agent_run::host::{
     BUNDLED_SERVER, BUNDLED_WHISPER, SERVER_BIN, WHISPER_BIN, WHISPER_PORT,
 };
 
-/// The contract this file checks is 1.4 (`CONTRACT_MAJOR`/`CONTRACT_MINOR`). Changing what it names
+/// The contract this file checks is 1.5 (`CONTRACT_MAJOR`/`CONTRACT_MINOR`). Changing what it names
 /// means changing the contract version too — a removal or rename is a new major, an addition a new
 /// minor — and the two are compared here so one cannot move without the other.
 #[test]
-fn this_list_is_contract_1_4() {
-    assert_eq!((fm_agent_run::CONTRACT_MAJOR, fm_agent_run::CONTRACT_MINOR), (1, 4));
+fn this_list_is_contract_1_5() {
+    assert_eq!((fm_agent_run::CONTRACT_MAJOR, fm_agent_run::CONTRACT_MINOR), (1, 5));
     assert!(
         fm_agent_run::VERSION.split('.').count() == 3,
         "a release version is MAJOR.MINOR.PATCH"
@@ -65,7 +65,28 @@ fn associated_items_formicaria_calls_exist() {
     }
     let _ = Manifest::read;
     let _ = Manifest::platform_key;
+    // Contract 1.5: the phone's model choice, and per-model settings both launchers apply.
+    let _ = Manifest::phone_choices;
+    let _ = Manifest::shared_mail_prompt;
+    let _ = Manifest::add_template_flags;
     let _ = <SystemMonitor as ResourceMonitor>::sample;
+}
+
+/// Contract 1.5: the fields formicaria's phone chooser reads from a catalogued model, and the one
+/// `Agent` field a host fills from the catalogue.
+#[test]
+fn model_fields_formicaria_reads_exist() {
+    use fm_agent_run::manifest::Model;
+    fn chooser(m: &Model) -> (&str, Option<&str>, Option<u64>, Option<u64>) {
+        (&m.name, m.phone_label.as_deref(), m.bytes, m.mmproj_bytes)
+    }
+    fn settings(m: &Model) -> (Option<bool>, bool) {
+        (m.thinking, m.shared_mail_prompt)
+    }
+    fn agent(a: &Agent<fm_agent_run::fmserve::FmServe>) -> bool {
+        a.shared_mail_prompt
+    }
+    let _ = (chooser, settings, agent);
 }
 
 /// The catalogue formicaria embeds on the phone and writes beside the desktop program parses.

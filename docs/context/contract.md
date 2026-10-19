@@ -13,7 +13,7 @@ _Taken from formicaria at tag v0.9.2 (commit e670190) on 2026-10-18; the Rust it
 Two numbers, kept apart:
 - **The release version** (`fm_agent_run::VERSION`, `Cargo.toml`, the `v…` tag) changes with
   every release.
-- **The contract version** (`fm_agent_run::CONTRACT_MAJOR`.`CONTRACT_MINOR`, now **1.4**) changes
+- **The contract version** (`fm_agent_run::CONTRACT_MAJOR`.`CONTRACT_MINOR`, now **1.5**) changes
   only when this document does.
   - **Major:** anything listed below is renamed, removed or changes meaning. formicaria checks the
     major at compile time, so an app written for another major refuses to build and says why. It
@@ -24,7 +24,7 @@ So formicaria can take any newer Myrme release of the same contract major by cha
 nothing else. That is how methods, prompts, evals, models and the runtime reach users without a
 formicaria code change. `docs/context/releases.md` lists every release with its contract version.
 
-The list in part 1 is compile-checked as contract 1.4 (`tests/fm_contract.rs`). Changing it means
+The list in part 1 is compile-checked as contract 1.5 (`tests/fm_contract.rs`). Changing it means
 changing the contract version in the same commit.
 
 ## 1. Rust items formicaria names
@@ -48,8 +48,16 @@ git grep -hoE "fm_agent(_run)?::[A-Za-z_]+(::[A-Za-z_]+)*(::\{[^}]*\})?" <tag> -
 | `fm_agent_run::installed::{Installed, resolve, sweep, sweep_whisper, whisper_on_disk}` | Settings: what is on disk, handing disk back |
 | `fm_agent_run::label::{read, ready_json}` | Settings: the model's label |
 | `fm_agent_run::manifest::{Manifest, Manifest::read, Manifest::platform_key, whisper_language}` | the catalogue |
+| `Manifest::phone_choices`, `Model::{phone_label, bytes, mmproj_bytes}` (1.5) | phone: the model chooser, "Faster" / "More accurate, slower" |
 | `fm_agent_run::nativelib::native_lib_dir` (Android only) | phone: where the bundled runtime lives |
 | `fm_agent_run::watch::{serve_loop, wait_ready}` | phone: the watch loop |
+
+**Contract 1.5 adds the phone's model choice and per-model settings** (Myrme 0.6.0):
+- `Manifest::phone_choices` and `Model::phone_label`: the models a phone may choose between, each with
+  the few words its chooser shows.
+- `Manifest::add_template_flags` (`thinking = false`) and `Manifest::shared_mail_prompt`, with the
+  field `Agent::shared_mail_prompt`: settings both launchers apply from the catalogue.
+- Catalogue keys `phone_label`, `thinking`, `shared_mail_prompt` (part 3).
 
 **Contract 1.3 adds the phone's host and the runtime refresh** (Myrme 0.4.0):
 - `Bundled`, with `availability`, `BUNDLED_SERVER` and `BUNDLED_WHISPER`: a runtime an APK
