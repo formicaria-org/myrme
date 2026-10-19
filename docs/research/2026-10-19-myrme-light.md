@@ -157,11 +157,11 @@ anything is adopted. Laptop first for accuracy, then the phone for time, with th
 | **L0 spikes** | in a scratch project outside the repo: `oar-ocr` with PP-OCRv6 small, `gline-rs` with GLiNER multi v2.1, multilingual-e5-small — each built and run on the laptop's CPU (`ort` downloads its own ONNX Runtime) | each runs and gives a first number |
 | **L1 OCR** | M3 typed and handwritten pages through PP-OCRv6 small, scored with Myrme's own `eval::wer`; then confidence routing to the VLM | typed **≤ 2.3% WER**; time per page on the laptop CPU recorded |
 | ~~L1b vocabularies for reading~~ | tried, not adopted: about 5 points on handwriting, no gap closed (results below) | — |
-| **L2 extraction** | titles, then meetings' status, through GLiNER | titles 12/12; meetings ≥ 13/17 |
-| **L3 recipes** | the ingredient tagger and section split | ≥ 245/257, ≤ 2 invented |
-| **L4 edits** | kind, anchor and copied text without an LLM; Qwen3.5-0.8B only for unquoted text | ≥ 3/7 |
+| **L2 extraction** | titles, then meetings' status, through GLiNER | titles 12/12; meetings ≥ 13/17 — *titles 11/12 adopted; meetings stay with the LLM (results below)* |
+| **L3 recipes** | the ingredient tagger and section split | ≥ 245/257, ≤ 2 invented — *GLiNER 206/257, 5 invented, 0.8 s: not met; recipes stay with the LLM* |
+| **L4 edits** | kind, anchor and copied text without an LLM; Qwen3.5-0.8B only for unquoted text | ≥ 3/7 — *not pursued: edits stay with the LLM (below)* |
 | **L5 the LLM's slots** | evals for chat, research summary, edit text; Qwen3.5-0.8B on them | its evals |
-| **L6 research retrieval** | BM25 + multilingual-e5-small | 8/8 grounded |
+| **L6 research retrieval** | BM25 + multilingual-e5-small | 8/8 grounded — *extractive 4/8: research stays with the LLM (below)* |
 | **P phone** | ONNX Runtime in the phone shell (`load-dynamic`, `libonnxruntime.so` in `jniLibs`), the tools that won on the laptop, timed on the Dimensity 7300 with the usual guards; APK size | the laptop bars hold on the phone, and each tool's phone time is recorded |
 | **L7 ship "Light"** | the tools into `fm-agent-run` (feature `tools`), a phone choice; formicaria stages ONNX Runtime | a Myrme release, a formicaria release |
 
@@ -264,6 +264,150 @@ run back to back on the laptop CPU on battery (absolute times noisy, ratios not;
 
 **Small stays the pick.** Medium is 3–3.5× slower for nothing on typed text, and its gain on
 handwriting still leaves it short of the VLM (43.4%), which reads the handwritten pages anyway.
+
+### L2 on the laptop — GLiNER for titles and meetings, 2026-10-19
+
+**Setup.** A second scratch project (`~/bench-scratch/gliner-spike`): `gline-rs 1.1.0` with
+`onnx-community/gliner_multi-v2.1` (commit `6ddaeb94`; upstream `urchade/gliner_multi-v2.1`,
+Apache-2.0), ONNX Runtime **1.20** opened at run time. Laptop CPU, 4 threads, on battery.
+
+**Runtime findings for integration:**
+- **`gline-rs` pins `ort =2.0.0-rc.9`; `oar-ocr` pins `=2.0.0-rc.12`.** One binary cannot hold both:
+  the two engines must be aligned (one patched, or GLiNER's pipeline written against rc.12) before
+  either joins `fm-agent-run`.
+- `gline-rs`'s tokenizer builds a C++ dependency (`esaxx-rs`): a C++ compiler at build time (the
+  Android NDK has one; this laptop needed conda's `gxx`).
+- **The int8 export is unusable**: names came back as job titles, 0/12 at the default threshold. The
+  full-precision export (1.16 GB on disk) is the one that works; its run-time cost is what matters
+  (0.04 s a conversation, 2.2 s to load). A working smaller export is a phone-phase question.
+
+**L2a — titles** (Rust picks the correspondent from the thread's headings; GLiNER reads their
+messages; Rust writes "job title, organisation"), scored as `eval_titles.rs` scores:
+
+| | titles | time |
+|---|---|---|
+| labels `job title`, `organization`, threshold 0.5 | 10/12 | 0.04 s |
+| + label `person` (names get a place to go; its spans unused), threshold 0.3 | **11/12** | **0.04 s** |
+| qwen3-vl-4b (LLM, for comparison) | 12/12 | seconds |
+| lfm2.5-vl-450m (the phone's LLM) | 9/12 | seconds |
+
+- The `person` label is what made the descriptions right ("Sales engineer, ATI Industrial
+  Automation", not the person's own name). Left: Pavel Novak, whose role is only implied ("I lead
+  the Soft Robotics Lab"); and one place read as an organisation ("equipment officer, front desk").
+- **Adopted for the light path:** titles without an LLM, GLiNER multi v2.1 full precision, labels
+  `person`, `job title`, `organization`, threshold 0.3.
+
+**L2b — meetings: GLiNER is not the tool.** Probed on every sentence of the 17 threads
+(`light-L2b-probe.log`): days, times and places are found reliably ("Thursday" 0.94, "3pm" 0.82,
+"room B12" 0.94, "mercoledì" 0.83), but what happened to a meeting is not — "I have to cancel our call
+on Thursday", "Thursday doesn't work for me" and "mercoledì non riesco" carry no cancellation span,
+and "deadline" was found once at 0.45. That judgement (moved, cancelled, declined, accepted, only a
+deadline) is what the pass needs, and Rust already reads the dates once a sentence is pointed at.
+**Decided (simple): meetings stay a pointing task for the small LLM under the grammar**, as today;
+no cue lists, no classifier block.
+
+### L3 on the laptop — recipes from a transcript with GLiNER, 2026-10-19
+
+The method's 30 transcripts (`methods/recipe/eval`), GLiNER multi v2.1 full precision with the one
+label `ingredient`, scored with `fm_agent::eval::recipe_outcome` (`light-L3-recipe-*.log`). No rule
+reads the transcripts' template phrases ("For this you need", "First"); steps are simply the other
+sentences of four words or more.
+
+| 30 recipes | exact | found / 257 | invented | time |
+|---|---|---|---|---|
+| A: every `ingredient` span, threshold 0.3 | 2/30 | 231 | 81 | 0.8 s (laptop CPU) |
+| **B: the spans of the densest sentence**, threshold 0.3 | **13/30** | **206** | **5** | **0.8 s** (laptop CPU) |
+| B, threshold 0.5 | 9/30 | 198 | 1 | 0.8 s |
+| Qwen3.5-0.8B (the plan's LLM), constrained | 15/30 | 245 | 2 | 30.9 s a recipe on the phone |
+| lfm2.5-vl-450m (the phone's LLM) | 8/30 | 102 | 18 | 14.0 s on the phone |
+
+- **Every span** picks up ingredients named in the steps ("a little water") — 81 invented.
+- **The densest sentence** — where a speaker lists them — is far better than the phone's LLM today
+  (206 against 102 found, 5 against 18 invented) and about 40× faster than the small LLM, but **misses
+  the bar** (≥ 245, ≤ 2). It also assumes people list ingredients together, which these generated
+  transcripts do and real recordings may not.
+- **Not adopted as the recipe method**: the small LLM stays, being right more often. Kept as a
+  finding: if phone time decides, GLiNER is the fast option at a measured cost in accuracy.
+
+### L4 — note edits stay with the small LLM (decided without a spike), 2026-10-19
+
+The 7 edit cases split in two: four are mechanical (the new text is quoted, or the line is named —
+"add 'book the room' to the list", "remove the line about milk", "add a final line: '…'") and three
+need understanding and rewriting (fix a spelling mistake, turn a paragraph into bullets, write a
+formula as LaTeX). A tool path for the first four would be a router plus rules on how requests are
+phrased — brittle against how people really ask, and seven cases cannot show it generalises. Under
+the plan's rule (a block joins only on a clear win), **edits stay as they are: the small LLM picks the
+kind, then writes the edits held to the schema; Rust applies them.**
+
+### L6 on the laptop — research without an LLM, 2026-10-19
+
+The research eval hands the method numbered sources, so it measures picking and quoting, not
+retrieval. multilingual-e5-small (`intfloat/multilingual-e5-small`, MIT, ONNX full precision, 470 MB)
+scored every source sentence against the question (`query:`/`passage:`); the sentences within 0.02 of
+the best, at most three, became claims quoting themselves, checked by `grounding::verify` and scored
+by `eval::research_outcome` as the LLM's are (`light-L6-research-*.log`).
+
+| | exact | time |
+|---|---|---|
+| e5-small extractive, abstain below 0.85 | 4/8 | 0.04 s a question |
+| e5-small extractive, abstain below 0.80 | 3/8 | 0.04 s |
+| Qwen3.5-0.8B | 4/8 (grounded 8/8) | seconds |
+| MiniCPM-V 4.7 1B (b11731, CPU, thinking off) | 7/8 (grounded 7/8) | seconds |
+
+- **What it cannot do is judgement.** An answer spread over two sentences or two sources loses its
+  second fact; and the off-topic case's best match (0.835) sits beside a real answer's (0.836), so no
+  threshold says "the sources do not answer".
+- **Decided: research stays with the small LLM**, its quotes checked by Rust as today. Embeddings may
+  still choose which fetched pages to read — not measured here.
+
+### The small LLM: MiniCPM-V 4.7 1B against Qwen3.5-0.8B, laptop — 2026-10-19
+
+The owner pointed to MiniCPM-V (OpenBMB). Its 4.7 release (2026-10-12) has a **1B** variant:
+Apache-2.0, built on the Qwen3.5 language backbone, with a vision encoder that compresses image
+tokens 16× by default. It needs **llama.cpp b11729-era or later** (support merged in PR #29416 on
+2026-10-10); Myrme pins b10076/b10081 (2026-07-21), so it was measured with the release **b11731**
+(prebuilt, `~/bench-scratch/minicpm`), and Qwen3.5-0.8B was measured again on the same build for a
+like-for-like comparison. Laptop CPU, 8 threads, on battery, thinking off for both (MiniCPM-V thinks
+by default too; `enable_thinking=false` works).
+
+| | MiniCPM-V 4.7 1B Q4_K_M | Qwen3.5-0.8B Q4_0 |
+|---|---|---|
+| meetings, constrained | 7/17 | **14/17** |
+| research exact / grounded | **7/8** / 7/8 | 5/8 / **8/8** |
+| edits (one run at temperature 0.2; noisy) | **4/7** | 1/7 (3/7 on b10076) |
+| recipe, free (as production) | 21/30 · 227/257 · 1 invented | 20/30 · **248/257** · 1 invented |
+| recipe, constrained | 15/30 · 249/257 · 2 | 17/30 · 225/257 · 1 |
+| handwriting, 30 pages (house instruction) | 45.4% WER, **733** prompt tokens a page on average, 16.1 s a page (laptop CPU) | 43.4% capped at 1024 (GPU, b10076), 1,135 prompt tokens |
+| download | 672 MB + **1,110 MB** vision projector | 507 MB + 205 MB |
+
+- **Neither is better across the board**: Qwen3.5-0.8B is far better at meetings and finds more
+  recipe ingredients; MiniCPM-V is better at research and edits. On handwriting they are within two
+  points. MiniCPM-V's photos are cheaper in tokens, its projector five times larger to load.
+- **Correcting the VLM's transcript against a word list did not help either** (45.4% → 45.9%): the
+  VLM + vocabulary question is answered.
+- **Not adopted on these numbers**; it would also need the runtime upgrade. Kept in the shortlist
+  (`2026-10-19-scouting-phone-models.md`).
+
+### The small LLM: the shortlist and the owner's real mail — 2026-10-19
+
+The full numbers are in `2026-10-19-scouting-phone-models.md` §4. The shortlisted models are
+MiniCPM5-1B and 2B, Qwen3.5-2B, K2-Horizon-3.7B and LFM2.5-2.6B, all on b11731. The headline:
+- **Real mail (the owner's five conversations, private):**
+
+  | Model | Exact /5 | 5 threads |
+  |---|---|---|
+  | Qwen3.5-0.8B | **3** | 17 s |
+  | Qwen3-VL-4B | 4 | 90 s |
+  | K2-Horizon | 4 (2 before the past fix) | 101 s |
+  | Qwen3.5-2B | 2 (1 before the fix) | 73 s |
+  | MiniCPM family | 1 | |
+  | the 450M | 0 | |
+
+- **The light LLM stays Qwen3.5-0.8B.** Nothing smaller than 2 GB beats it, and nothing at any
+  size beats it per second.
+- **A Rust gap found on the way, and fixed:** `resolve` judged "past" by day, so a meeting earlier
+  the same day passed as fixed. It now judges by the newest email's time, which is
+  model-independent.
 
 ## 6. Risks and open questions
 
