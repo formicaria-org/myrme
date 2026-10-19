@@ -65,6 +65,16 @@ pub struct Model {
     /// for it (`crate::label`). Unset ⇒ no: a model nobody has measured is not handed a label,
     /// because a small one answers with a table of invented figures that looks like a reading.
     pub reads_labels: bool,
+    /// `Some(false)` turns the model's built-in thinking off (`--chat-template-kwargs
+    /// {"enable_thinking":false}`). Measured 2026-10-19: Qwen3.5-0.8B thinks by default and spent
+    /// every answer's token budget on it, returning nothing (0/17 well-formed meetings); with this
+    /// off it scored 13/17. `--reasoning-budget 0` did not stop it on b10076. `None` = the template's
+    /// default.
+    pub thinking: Option<bool>,
+    /// The few words the phone's model chooser shows beside this model, e.g. "Faster". A model with
+    /// one is offered as a phone choice ([`Manifest::phone_choices`]); the words compare it with the
+    /// other phone choices, so they are not meant for the desktop, where the 4B models outclass both.
+    pub phone_label: Option<String>,
 }
 
 /// The runtime defaults and the model list from `models.toml`.
@@ -183,6 +193,8 @@ impl Manifest {
                     mmproj_bytes: None,
                     read_prompt: None,
                     reads_labels: false,
+                    thinking: None,
+                    phone_label: None,
                 });
                 continue;
             }
@@ -209,6 +221,8 @@ impl Manifest {
                     "mmproj_bytes" => m.mmproj_bytes = val.parse().ok(),
                     "read_prompt" => m.read_prompt = Some(val.to_string()),
                     "reads_labels" => m.reads_labels = val == "true",
+                    "thinking" => m.thinking = val.parse().ok(),
+                    "phone_label" => m.phone_label = Some(val.to_string()),
                     _ => {}
                 },
                 // Top-level (before any [[models]]).
@@ -425,6 +439,22 @@ impl Manifest {
             cmd.arg("--image-max-tokens").arg(n.to_string());
         }
         Some(proj)
+    }
+
+    /// Give a launch command this model's chat-template settings from the catalogue — today, only
+    /// thinking off ([`Model::thinking`]). The **one** place they reach a command line, for the
+    /// desktop supervisor and the phone alike, as [`add_projector`](Self::add_projector) is for the
+    /// projector.
+    pub fn add_template_flags(&self, cmd: &mut std::process::Command, name: &str) {
+        if self.model(name).and_then(|m| m.thinking) == Some(false) {
+            cmd.arg("--chat-template-kwargs").arg(r#"{"enable_thinking":false}"#);
+        }
+    }
+
+    /// The models a phone may choose between, in catalogue order: those with a
+    /// [`phone_label`](Model::phone_label). The phone's default is one of them.
+    pub fn phone_choices(&self) -> Vec<&Model> {
+        self.models.iter().filter(|m| m.phone_label.is_some()).collect()
     }
 
     /// The model's own image-reading instruction, when the catalogue gives one.
@@ -687,5 +717,53 @@ mod tests {
         assert!(m.reads_labels("sees"), "marked in the catalogue");
         assert!(!m.reads_labels("blind") && !m.reads_labels("nobody"), "unmarked means no");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn thinking_off_reaches_the_command_only_for_a_model_that_asks() {
+        let m = Manifest::parse(
+            "[[models]]\nname = \"quiet\"\nfile = \"q.gguf\"\nthinking = false\n\
+             [[models]]\nname = \"plain\"\nfile = \"p.gguf\"\n",
+        );
+        let args = |name: &str| {
+            let mut c = std::process::Command::new("x");
+            m.add_template_flags(&mut c, name);
+            c.get_args().map(|a| a.to_string_lossy().into_owned()).collect::<Vec<_>>()
+        };
+        assert_eq!(args("quiet"), ["--chat-template-kwargs", r#"{"enable_thinking":false}"#]);
+        assert!(args("plain").is_empty(), "the template's own default");
+        assert!(args("nobody").is_empty());
+    }
+
+    /// The shipped phone choices (speed study, 2026-10-19): the 4-bit 450M is the default and is
+    /// labelled the faster one; Qwen3.5-0.8B is the accurate one, thinking off and its photos capped
+    /// so a page fits the phone's window. Both pinned, sized and licensed, like every model here.
+    #[test]
+    fn the_phone_chooses_between_the_fast_default_and_the_accurate_model() {
+        let m = Manifest::parse(crate::CATALOGUE);
+        let choices: Vec<(&str, &str)> = m
+            .phone_choices()
+            .iter()
+            .map(|x| (x.name.as_str(), x.phone_label.as_deref().unwrap()))
+            .collect();
+        assert_eq!(
+            choices,
+            [("lfm2.5-vl-450m-q4", "Faster"), ("qwen3.5-0.8b", "More accurate, slower")]
+        );
+        assert_eq!(m.mobile_default(), "lfm2.5-vl-450m-q4");
+        for x in m.phone_choices() {
+            assert!(x.revision.is_some() && x.sha256.is_some(), "{} is pinned", x.name);
+            assert!(x.bytes.is_some() && x.mmproj_bytes.is_some(), "{} is sized", x.name);
+            assert!(
+                x.license.is_some() && x.mmproj.is_some(),
+                "{} says its terms and sees",
+                x.name
+            );
+            assert_eq!(m.model_ctx(&x.name), 4096, "{}: a capped page fits", x.name);
+        }
+        let qwen = m.model("qwen3.5-0.8b").unwrap();
+        assert_eq!((qwen.thinking, qwen.image_max_tokens), (Some(false), Some(1024)));
+        // A phone still running the Q8_0 450M keeps a catalogued model, and is offered the default.
+        assert!(m.model("lfm2.5-vl-450m").is_some_and(|x| x.phone_label.is_none()));
     }
 }

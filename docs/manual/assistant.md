@@ -324,8 +324,12 @@ These are the three the picker offers, with the download sizes it will show you:
 | **A lighter machine, or a slow connection** | `lfm2.5-1.2b` | 0.73 GB | Best instruction-following and tool-use in its size; the phone's pick until v0.6.4. Text only. |
 | **If the default disappoints** | `qwen3-4b-2507` | 2.5 GB | The validated fallback, text-only — the laptop pick until 2026-07-24. |
 
-On a phone the app chooses for you: `lfm2.5-vl-450m` (0.57 GB with its image reader), a small
-model that can also read a picture.
+On a phone there are two, both able to read a picture:
+
+| Phone model | In short | Download |
+|---|---|---|
+| `lfm2.5-vl-450m-q4` (the default) | Faster | 0.42 GB |
+| `qwen3.5-0.8b` | More accurate, slower | 0.71 GB |
 
 ### When an update brings a newer model
 

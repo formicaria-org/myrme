@@ -161,6 +161,7 @@ fn run() -> Result<(), String> {
         &ngl.to_string(),
         "--no-warmup",
     ]);
+    manifest.add_template_flags(&mut cmd, &model_name);
     // The multimodal projector, when this model has one and it has actually been fetched. Present ⇒
     // the same server also answers image turns; absent ⇒ it serves text-only, exactly as it always
     // has, and the agent says so rather than asking a blind model to read a picture.

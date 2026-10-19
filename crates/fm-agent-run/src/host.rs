@@ -747,6 +747,7 @@ fn phone_server(
         &manifest.mobile_threads().to_string(),
         "--no-warmup",
     ]);
+    manifest.add_template_flags(&mut cmd, model_name);
     cmd
 }
 
@@ -929,6 +930,23 @@ mod tests {
         let ctx = args.iter().position(|a| a == "-c").map(|i| args[i + 1].clone());
         assert_eq!(ctx, Some(m.model_ctx(&model).to_string()), "{args:?}");
         assert_ne!(m.model_ctx(&model), m.ctx, "the phone default sets its own window");
+    }
+
+    /// The accurate phone choice thinks by default; its command turns that off, or every answer
+    /// comes back empty (measured 2026-10-19).
+    #[test]
+    fn the_phone_server_turns_qwens_thinking_off() {
+        let m = Manifest::parse(crate::CATALOGUE);
+        let cmd = phone_server(
+            Path::new("libllama-server.so"),
+            Path::new("."),
+            Path::new("m.gguf"),
+            &m,
+            "qwen3.5-0.8b",
+        );
+        let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        let at = args.iter().position(|a| a == "--chat-template-kwargs").expect("{args:?}");
+        assert_eq!(args[at + 1], r#"{"enable_thinking":false}"#);
     }
 
     #[test]

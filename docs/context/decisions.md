@@ -381,6 +381,33 @@ duplication"*.
   compatibility row and links to the documentation at that tag. CI publishes no page without notes,
   and brings an existing page up to date when its notes change.
 
+## 2026-10-19 — the phone gets a faster default and an accurate choice `#model` `#contract`
+
+**The owner:** *"lets ship the speed plan for now and give as an option to the user this tradeoff.
+Avoid adding massive text to explain, few words that a user can understand."*
+
+**Decision.**
+- **The phone's default is `lfm2.5-vl-450m-q4`**: the same 450M at Q4_K_M. On the Dimensity 7300 it
+  writes 59 tok/s against Q8_0's 36, with the same scores on the four text evals
+  (`docs/research/2026-10-19-speed.md` §2.2–2.3). It is a new catalogue entry, not a new file under
+  the old name: a phone recognises its model by the file on disk, so a phone running
+  `lfm2.5-vl-450m` keeps it and is *offered* the new default (the 2026-10-10 rule, `installed.rs`).
+- **A phone may choose `qwen3.5-0.8b` instead** (Q4_0, Apache-2.0): meetings 13/17 against 5/17,
+  edits 3/7 against 0/7, recipes 245 of 257 ingredients against 102. Slower on text (a recipe
+  30.9 s against 14.0); photos capped at 1024 tokens read a handwritten page in a median 28 s.
+- **Two catalogue keys (contract: additions).**
+  - `phone_label`: the few words the phone's chooser shows — "Faster", "More accurate, slower".
+    `Manifest::phone_choices` lists the models that carry one.
+  - `thinking = false`: `Manifest::add_template_flags` passes `--chat-template-kwargs
+    {"enable_thinking":false}` on the phone and the desktop alike. Qwen3.5 thinks by default and
+    otherwise answers nothing.
+- **The phone's chooser is formicaria's next change.** Until it lands, a phone runs the default and
+  the choice exists only in the catalogue.
+- **Not shipped: prompt layout B** for the mail pass. It helped qwen3-vl-4b (15 → 16/17) and the Q8_0
+  450M, but cost the two phone models meetings cases (450M Q4_K_M 5 → 3, Qwen3.5-0.8B 13 → 8). The
+  layouts are studied further on those two baselines (speed study §2.7).
+- **The meeting pass stays off on the phone** (2026-10-18).
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading

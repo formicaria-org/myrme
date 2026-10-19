@@ -265,7 +265,8 @@ On branch `myrme-cutover` (worktree `~/fm-myrme`, local only):
   formicaria's NDK; it was not run with a model, because the emulator is x86_64 and the runtime is
   arm64.
 - **Contract 2.0 (next breaking release):** remove the 1.0 items nothing uses (`contract.md`).
-- **Speed study** (2026-10-19, second session done; nothing adopted): `docs/research/2026-10-19-speed.md`,
+- **Speed study** (2026-10-19; the phone's faster default and accurate choice adopted, layouts still
+  under study): `docs/research/2026-10-19-speed.md`,
   measured on the owner's Dimensity 7300 phone and the laptop. Its §4 lists the owner's decisions
   (phone quant Q4_K_M, KleidiAI, prompt layout, Qwen3.5-0.8B for text); §5 is the resume plan.
 - **No copy in formicaria** (Myrme 0.5.0, contract 1.4, 2026-10-19): the manual's assistant chapter

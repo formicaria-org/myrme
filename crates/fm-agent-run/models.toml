@@ -18,8 +18,14 @@
 
 # The default model — the LAPTOP research pick. `default_mobile` overrides it on the phone (a smaller
 # model that fits a phone's RAM and stays responsive).
+#
+# PHONE (2026-10-19, speed study `docs/research/2026-10-19-speed.md`): the same 450M at 4-bit
+# (`lfm2.5-vl-450m-q4`) writes ~65% faster than its Q8_0 with equal accuracy on the text evals, so it
+# is the default. A phone may instead choose `qwen3.5-0.8b`: right far more often, slower on text.
+# The two carry a `phone_label`, the few words the phone's chooser shows. A phone already running
+# `lfm2.5-vl-450m` keeps it and is offered the new default (`installed.rs`, the owner's 2026-10-10 rule).
 default = "qwen3-vl-4b"
-default_mobile = "lfm2.5-vl-450m"
+default_mobile = "lfm2.5-vl-450m-q4"
 
 # Prebuilt llama.cpp server, pinned for reproducibility. `runtime_url_<platform>` is the portable
 # CPU build; the `_gpu` variant is the Vulkan build that offloads to a discrete GPU (measured: the RTX 3050 runs the
@@ -173,6 +179,40 @@ sha256 = "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597"
 note = "LAPTOP fallback (was the pick to 2026-07-24) — IFEval 83.4 / BFCL-v3 61.9; ~2.4 GB, 39.8 t/s GPU. Validated + fine; superseded by qwen3-vl-4b which grounds better at the same speed. Non-thinking Instruct."
 
 [[models]]
+name = "lfm2.5-vl-450m-q4"
+phone_label = "Faster"
+license = "LFM Open License v1.0"
+bytes = 229313568
+mmproj_bytes = 189126080
+repo = "LiquidAI/LFM2.5-VL-450M-GGUF"
+file = "LFM2.5-VL-450M-Q4_K_M.gguf"
+revision = "1abed04b6fe71314d8c446a1371c03d7c332266d"
+sha256 = "1093f1331319199bbcacdbd7ecc9aa6e5678db6b55073948d0f508be90c8ab68"
+mmproj = "mmproj-LFM2.5-VL-450m-F16.gguf"
+ctx = 4096
+read_prompt = "Transcribe the text in this image exactly."
+note = "PHONE default since 2026-10-19 — lfm2.5-vl-450m at Q4_K_M. Measured on the Dimensity 7300: writes 59 tok/s against Q8_0's 36, reads 356 against 393 (2048-token prompt); the same scores as Q8_0 on the meetings, research, edits and recipe evals. Q4_0 was as fast but found 59 recipe ingredients of 257 against 89. The projector is the Q8_0 entry's (F16: the Q8_0 projector was 18% slower)."
+
+[[models]]
+name = "qwen3.5-0.8b"
+phone_label = "More accurate, slower"
+license = "Apache-2.0"
+bytes = 507154688
+mmproj_bytes = 204987232
+repo = "unsloth/Qwen3.5-0.8B-GGUF"
+file = "Qwen3.5-0.8B-Q4_0.gguf"
+revision = "6ab461498e2023f6e3c1baea90a8f0fe38ab64d0"
+sha256 = "444406ddd926550c724ec18d5120a9d40ded44908a063b0e66e9a7e5464c652c"
+mmproj = "mmproj-F16.gguf"
+ctx = 4096
+# Uncapped, a full-size page became ~4,200 tokens: over this window, and 71-200 s on the phone. At
+# 1024 it reads a handwritten page in a median 28 s there, and more accurately (laptop: typed pages
+# 2.3% WER, handwriting 43.4%; uncapped 7.0% and 49.3%).
+image_max_tokens = 1024
+thinking = false
+note = "PHONE choice since 2026-10-19 — right far more often than the 450M: meetings 13/17 against 5/17, edits 3/7 against 0/7, recipes 245 of 257 ingredients against 102 (2 invented against 18). Slower on text on the Dimensity 7300: recipe 30.9 s a request against 14.0, edits 2.8 s against 0.9; meetings 3.7 s against 4.3. Q8_0 rejected: it answered [] to every meeting. Thinks by default, hence thinking = false."
+
+[[models]]
 name = "lfm2.5-vl-450m"
 license = "LFM Open License v1.0"
 bytes = 379219104
@@ -187,7 +227,7 @@ mmproj_bytes = 189126080
 ctx = 4096
 # Its own reading instruction: the house one took it from 1.00 to 0.63 on plain typed notes.
 read_prompt = "Transcribe the text in this image exactly."
-note = "PHONE pick since 2026-10-10 (owner's choice: one general model that can also see). Measured on the Dimensity 7300: an image read in 3-5 s (about 10 s for a full-size photo), 1.2 GB peak, text at ~25 tok/s. Correct on typed notes and tables; misread one formula and flattened one code block's nesting. NOT yet measured as a chat model against lfm2.5-1.2b, which it replaces and which is more than twice its size."
+note = "PHONE pick 2026-10-10 to 2026-10-19, kept so phones running it keep working; lfm2.5-vl-450m-q4 is the same model at 4-bit and the default now. (Owner's choice: one general model that can also see.) Measured on the Dimensity 7300: an image read in 3-5 s (about 10 s for a full-size photo), 1.2 GB peak, text at ~25 tok/s. Correct on typed notes and tables; misread one formula and flattened one code block's nesting. NOT yet measured as a chat model against lfm2.5-1.2b, which it replaces and which is more than twice its size."
 
 [[models]]
 name = "lfm2.5-1.2b"
