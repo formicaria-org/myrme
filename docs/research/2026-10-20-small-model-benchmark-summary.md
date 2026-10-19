@@ -160,8 +160,10 @@ Reading aids that did not help:
 **Phone and Myrme light:**
 - Qwen3.5-0.8B for the language tasks.
 - The OCR for typed pages (it routes the rest to the vision model).
-- GLiNER for titles.
 - Rust for dates and checks.
+- **Not GLiNER for titles.** A 1.16 GB model loaded for one short field is not worth it while the
+  LLM is already loaded for the same emails (owner, 2026-10-20). Titles stay with the LLM;
+  Qwen3.5-0.8B's title score is not yet measured.
 
 No tested model under 2 GB beats Qwen3.5-0.8B, and none of any size matches it per second.
 

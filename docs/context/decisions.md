@@ -448,6 +448,31 @@ fastest phone one as baselines"*, then *"go with option 1"* (the layout as a per
   - Test: `a_meeting_already_begun_when_the_newest_email_was_sent_is_past`.
 - **No contract change**: same functions, same signatures.
 
+## 2026-10-20 — the phone runs Qwen3.5-0.8B; the 450M is no longer offered `#model`
+
+**The owner:** *"ok, drop the 450M and make qwen the phone model"*, then *"lets go on with qwen 0.8
+as default for the light version and devices like smartphones"*.
+
+**Decision.**
+- **What changed.** `default_mobile = "qwen3.5-0.8b"`. It is the phone's only `phone_label`, so
+  formicaria shows no chooser: it shows one only for two or more choices.
+- **The 450M entries stay catalogued, without a label.** A phone running either 450M keeps it and is
+  offered Qwen3.5-0.8B with its size (`installed.rs`, the 2026-10-10 rule).
+- **Why** (`../research/2026-10-20-small-model-benchmark-summary.md`): the 450M was faster only.
+
+  | | The 450M | Qwen3.5-0.8B |
+  |---|---|---|
+  | Owner's real mail: meetings found | 0 of 4 | 2 of 4 |
+  | Invented meetings: meetings found | 1 of 11 | 8 of 11 |
+  | Recipes: ingredients found / invented | 89–102 / 16–18 | 245–248 / 1–2 |
+  | Handwriting / typed pages (WER) | 96% / 49% | 43% / 2.3% (photos capped at 1024 image tokens) |
+  | Phone time: meetings, research | 4.3 s, 6.0 s | 3.7 s, 6.9 s |
+
+  - Its card does not recommend it for fine-grained OCR. Its language model is 350M parameters.
+- **Not yet measured:** LFM2.5-VL-1.6B, Liquid's vision model in Qwen's speed class. If it beats
+  Qwen3.5-0.8B on the same evals and on phone time, this entry is revisited.
+- **No contract change**: the catalogue's format and every function stay as they are.
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading

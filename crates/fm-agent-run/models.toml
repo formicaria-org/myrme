@@ -19,13 +19,13 @@
 # The default model — the LAPTOP research pick. `default_mobile` overrides it on the phone (a smaller
 # model that fits a phone's RAM and stays responsive).
 #
-# PHONE (2026-10-19, speed study `docs/research/2026-10-19-speed.md`): the same 450M at 4-bit
-# (`lfm2.5-vl-450m-q4`) writes ~65% faster than its Q8_0 with equal accuracy on the text evals, so it
-# is the default. A phone may instead choose `qwen3.5-0.8b`: right far more often, slower on text.
-# The two carry a `phone_label`, the few words the phone's chooser shows. A phone already running
-# `lfm2.5-vl-450m` keeps it and is offered the new default (`installed.rs`, the owner's 2026-10-10 rule).
+# PHONE (2026-10-20, `docs/research/2026-10-20-small-model-benchmark-summary.md`): **qwen3.5-0.8b**,
+# the phone's only model. The 450M was faster only: on the owner's real mail it found none of four
+# meetings, and it read handwriting at 96% WER and typed pages at 49%. One `phone_label` means no
+# chooser (formicaria shows one only for two or more). A phone already running a 450M keeps it and is
+# offered this default (`installed.rs`, the owner's 2026-10-10 rule).
 default = "qwen3-vl-4b"
-default_mobile = "lfm2.5-vl-450m-q4"
+default_mobile = "qwen3.5-0.8b"
 
 # Prebuilt llama.cpp server, pinned for reproducibility. `runtime_url_<platform>` is the portable
 # CPU build; the `_gpu` variant is the Vulkan build that offloads to a discrete GPU (measured: the RTX 3050 runs the
@@ -185,7 +185,6 @@ note = "LAPTOP fallback (was the pick to 2026-07-24) — IFEval 83.4 / BFCL-v3 6
 
 [[models]]
 name = "lfm2.5-vl-450m-q4"
-phone_label = "Faster"
 license = "LFM Open License v1.0"
 bytes = 229313568
 mmproj_bytes = 189126080
@@ -196,11 +195,11 @@ sha256 = "1093f1331319199bbcacdbd7ecc9aa6e5678db6b55073948d0f508be90c8ab68"
 mmproj = "mmproj-LFM2.5-VL-450m-F16.gguf"
 ctx = 4096
 read_prompt = "Transcribe the text in this image exactly."
-note = "PHONE default since 2026-10-19 — lfm2.5-vl-450m at Q4_K_M. Measured on the Dimensity 7300: writes 59 tok/s against Q8_0's 36, reads 356 against 393 (2048-token prompt); the same scores as Q8_0 on the meetings, research, edits and recipe evals. Q4_0 was as fast but found 59 recipe ingredients of 257 against 89. The projector is the Q8_0 entry's (F16: the Q8_0 projector was 18% slower)."
+note = "PHONE default 2026-10-19 to 2026-10-20, kept so phones running it keep working; qwen3.5-0.8b is the phone's model now. lfm2.5-vl-450m at Q4_K_M. Measured on the Dimensity 7300: writes 59 tok/s against Q8_0's 36, reads 356 against 393 (2048-token prompt); the same scores as Q8_0 on the meetings, research, edits and recipe evals. Q4_0 was as fast but found 59 recipe ingredients of 257 against 89. The projector is the Q8_0 entry's (F16: the Q8_0 projector was 18% slower)."
 
 [[models]]
 name = "qwen3.5-0.8b"
-phone_label = "More accurate, slower"
+phone_label = "Qwen3.5 0.8B"
 license = "Apache-2.0"
 bytes = 507154688
 mmproj_bytes = 204987232
@@ -215,7 +214,7 @@ ctx = 4096
 # 2.3% WER, handwriting 43.4%; uncapped 7.0% and 49.3%).
 image_max_tokens = 1024
 thinking = false
-note = "PHONE choice since 2026-10-19 — right far more often than the 450M: meetings 13/17 against 5/17, edits 3/7 against 0/7, recipes 245 of 257 ingredients against 102 (2 invented against 18). Slower on text on the Dimensity 7300: recipe 30.9 s a request against 14.0, edits 2.8 s against 0.9; meetings 3.7 s against 4.3. Q8_0 rejected: it answered [] to every meeting. Thinks by default, hence thinking = false."
+note = "PHONE model since 2026-10-20 (a choice from 2026-10-19) — right far more often than the 450M: meetings 13/17 against 5/17, edits 3/7 against 0/7, recipes 245 of 257 ingredients against 102 (2 invented against 18). Slower on text on the Dimensity 7300: recipe 30.9 s a request against 14.0, edits 2.8 s against 0.9; meetings 3.7 s against 4.3. Q8_0 rejected: it answered [] to every meeting. Thinks by default, hence thinking = false."
 
 [[models]]
 name = "lfm2.5-vl-450m"

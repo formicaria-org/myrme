@@ -193,6 +193,9 @@ tested outside the repository. The four steps below are all in it.
 **Myrme light (proposed 2026-10-19):** the dedicated methods as a whole — tools that point on ONNX
 Runtime, a very small LLM only for free text — planned in phases L0–L7, each gated on the evals:
 `docs/research/2026-10-19-myrme-light.md`. One pick per tool; the laptop first (L0–L6), the phone after (P).
+**Status 2026-10-20:** the laptop phases are done. The light version is **Qwen3.5-0.8B (now the
+phone's model) and Rust, plus at most the OCR for typed pages**, pending its phone time (phase P).
+GLiNER and e5 were measured and dropped: one tool per subtask is not the aim.
 
 **Next, by what the evals show matters most:**
 1. **Handwriting on the phone.** The phone's vision model cannot read handwriting (82.7% median WER).

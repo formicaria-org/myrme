@@ -746,22 +746,19 @@ mod tests {
         assert!(args("nobody").is_empty());
     }
 
-    /// The shipped phone choices (speed study, 2026-10-19): the 4-bit 450M is the default and is
-    /// labelled the faster one; Qwen3.5-0.8B is the accurate one, thinking off and its photos capped
-    /// so a page fits the phone's window. Both pinned, sized and licensed, like every model here.
+    /// The phone's one model (2026-10-20): Qwen3.5-0.8B, thinking off and its photos capped so a
+    /// page fits the phone's window; pinned, sized and licensed, like every model here. The 450M is
+    /// no longer offered, but stays catalogued for phones still running it.
     #[test]
-    fn the_phone_chooses_between_the_fast_default_and_the_accurate_model() {
+    fn the_phone_runs_qwen_and_no_longer_offers_the_450m() {
         let m = Manifest::parse(crate::CATALOGUE);
         let choices: Vec<(&str, &str)> = m
             .phone_choices()
             .iter()
             .map(|x| (x.name.as_str(), x.phone_label.as_deref().unwrap()))
             .collect();
-        assert_eq!(
-            choices,
-            [("lfm2.5-vl-450m-q4", "Faster"), ("qwen3.5-0.8b", "More accurate, slower")]
-        );
-        assert_eq!(m.mobile_default(), "lfm2.5-vl-450m-q4");
+        assert_eq!(choices, [("qwen3.5-0.8b", "Qwen3.5 0.8B")]);
+        assert_eq!(m.mobile_default(), "qwen3.5-0.8b");
         for x in m.phone_choices() {
             assert!(x.revision.is_some() && x.sha256.is_some(), "{} is pinned", x.name);
             assert!(x.bytes.is_some() && x.mmproj_bytes.is_some(), "{} is sized", x.name);
@@ -780,7 +777,9 @@ mod tests {
             m.phone_choices().iter().all(|x| !x.shared_mail_prompt),
             "the small models name the owner"
         );
-        // A phone still running the Q8_0 450M keeps a catalogued model, and is offered the default.
-        assert!(m.model("lfm2.5-vl-450m").is_some_and(|x| x.phone_label.is_none()));
+        // A phone still running either 450M keeps a catalogued model, and is offered the default.
+        for old in ["lfm2.5-vl-450m", "lfm2.5-vl-450m-q4"] {
+            assert!(m.model(old).is_some_and(|x| x.phone_label.is_none()), "{old}");
+        }
     }
 }

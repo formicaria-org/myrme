@@ -65,8 +65,8 @@ proposal (the only output, as today)
 | Role | The pick | Why this one |
 |---|---|---|
 | Read text (`ReadText`) | **PP-OCRv6 small**, through the `oar-ocr` crate | the newest PaddleOCR generation (Apache-2.0); ~30 MB (detector 9.4 MiB, recogniser 20.2 MiB) with one 18,708-character dictionary for Chinese and Latin scripts; a Rust engine on ONNX Runtime that loads models from memory |
-| Extract spans and labels (`Extract`) | **GLiNER multi v2.1** (`urchade/gliner_multi-v2.1`), through `gline-rs` | multilingual, Apache-2.0, the mature Rust engine. GLiNER2 is a later upgrade, taken only if it beats this on our evals |
-| Embed (`Embed`) | **multilingual-e5-small** (118M, MIT) | small enough for a phone, covers Italian and Chinese |
+| ~~Extract spans and labels (`Extract`)~~ *dropped 2026-10-20* | **GLiNER multi v2.1** (`urchade/gliner_multi-v2.1`), through `gline-rs` | multilingual, Apache-2.0, the mature Rust engine. GLiNER2 is a later upgrade, taken only if it beats this on our evals |
+| ~~Embed (`Embed`)~~ *dropped 2026-10-20* | **multilingual-e5-small** (118M, MIT) | small enough for a phone, covers Italian and Chinese |
 | The very small LLM | **Qwen3.5-0.8B Q4_0**, thinking off | the best small model we measured (§1 of the speed study), already a phone choice |
 
 Nothing else is tried unless a pick fails its bar; then the plan says why, and picks again.
@@ -106,6 +106,20 @@ The methods take the traits, so a test fills them with fakes, as `LlmStep` is fa
   files with one hash each — a format addition (contract minor), to design in phase L0.
 
 ### Kept simple
+
+**Status, 2026-10-20: Myrme light is Qwen3.5-0.8B and Rust, plus at most one tool, the OCR for
+typed pages.**
+- The owner: *"a minimal set of absolutely necessary tools instead of one per subtask (getting the
+  title is well within LLM territory)"*.
+- **Qwen3.5-0.8B is the phone's model as of 2026-10-20** (`decisions.md`). With it, every method
+  runs on the phone with no tool at all.
+- **A tool earns its place only by doing what the LLM cannot do acceptably on the phone.**
+  - GLiNER (titles) and e5 (research) were measured and left out.
+  - **The OCR is the one candidate.** Typed pages: 0.8% WER against Qwen's 2.3%, about 1 s a page
+    on the laptop CPU. It is kept only if the phone confirms the time gain: Qwen reads a
+    handwritten page in a median 28 s there, and typed pages have not been timed on the phone.
+  - The OCR also brings ONNX Runtime into the app, so its size counts as well.
+- **The next step is the phone phase for the OCR alone** (phase P below), not new tools.
 
 The owner, 2026-10-19: *"lets keep the architecture simple instead of adding blocks that are not sure
 to improve."* So the architecture is the three tools, Rust and the one small LLM — **a block joins
@@ -157,7 +171,7 @@ anything is adopted. Laptop first for accuracy, then the phone for time, with th
 | **L0 spikes** | in a scratch project outside the repo: `oar-ocr` with PP-OCRv6 small, `gline-rs` with GLiNER multi v2.1, multilingual-e5-small — each built and run on the laptop's CPU (`ort` downloads its own ONNX Runtime) | each runs and gives a first number |
 | **L1 OCR** | M3 typed and handwritten pages through PP-OCRv6 small, scored with Myrme's own `eval::wer`; then confidence routing to the VLM | typed **≤ 2.3% WER**; time per page on the laptop CPU recorded |
 | ~~L1b vocabularies for reading~~ | tried, not adopted: about 5 points on handwriting, no gap closed (results below) | — |
-| **L2 extraction** | titles, then meetings' status, through GLiNER | titles 12/12; meetings ≥ 13/17 — *titles 11/12 adopted; meetings stay with the LLM (results below)* |
+| **L2 extraction** | titles, then meetings' status, through GLiNER | titles 12/12; meetings ≥ 13/17 — *titles 11/12, then **not adopted** (a 1.16 GB model for one field, 2026-10-20); meetings stay with the LLM (results below)* |
 | **L3 recipes** | the ingredient tagger and section split | ≥ 245/257, ≤ 2 invented — *GLiNER 206/257, 5 invented, 0.8 s: not met; recipes stay with the LLM* |
 | **L4 edits** | kind, anchor and copied text without an LLM; Qwen3.5-0.8B only for unquoted text | ≥ 3/7 — *not pursued: edits stay with the LLM (below)* |
 | **L5 the LLM's slots** | evals for chat, research summary, edit text; Qwen3.5-0.8B on them | its evals |
@@ -294,8 +308,12 @@ messages; Rust writes "job title, organisation"), scored as `eval_titles.rs` sco
 - The `person` label is what made the descriptions right ("Sales engineer, ATI Industrial
   Automation", not the person's own name). Left: Pavel Novak, whose role is only implied ("I lead
   the Soft Robotics Lab"); and one place read as an organisation ("equipment officer, front desk").
-- **Adopted for the light path:** titles without an LLM, GLiNER multi v2.1 full precision, labels
-  `person`, `job title`, `organization`, threshold 0.3.
+- ~~Adopted for the light path~~ **Not adopted (2026-10-20).** The owner: *"we cannot load entire
+  models just to write titles, that's absurd"*. The working export is 1.16 GB, and it would be
+  loaded for one short field, while the small LLM is already loaded for the meetings question on
+  the same emails. Titles stay with the LLM: one more short call, no second model. This also
+  removes the `ort` version conflict, the C++ build dependency and an unknown phone memory cost.
+  Qwen3.5-0.8B's own title score is not yet measured.
 
 **L2b — meetings: GLiNER is not the tool.** Probed on every sentence of the 17 threads
 (`light-L2b-probe.log`): days, times and places are found reliably ("Thursday" 0.94, "3pm" 0.82,
