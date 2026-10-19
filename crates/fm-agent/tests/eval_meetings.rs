@@ -16,6 +16,8 @@
 //!
 //! `FM_EVAL_RECORD=1` writes each answer back into the case file under `recorded["<model>/<mode>"]`.
 
+mod layout;
+
 use fm_agent::eval::{meeting_lines, meetings_match, well_formed_array, Tally};
 use fm_agent::meetings;
 use fm_agent::openai::OpenAiStep;
@@ -102,12 +104,19 @@ fn a_live_model_against_the_cases() {
             let body = case["body"].as_str().unwrap().to_string();
             let today = day(case["today"].as_str().unwrap());
             let expect = strings(&case["expect"]);
-            let prompt = meetings::user_prompt(case["title"].as_str().unwrap(), &body);
+            // The prompt layout under study (`FM_LAYOUT`, `tests/layout`); `old` is production's.
+            let (system, prompt) = layout::prompt(
+                &layout::chosen(),
+                layout::Question::Meetings,
+                case["title"].as_str().unwrap(),
+                &body,
+                "the mailbox's owner",
+            );
             let t0 = std::time::Instant::now();
             let reply = if *mode == "constrained" {
-                llm.complete_constrained(fm_agent::prompts::MEETINGS_INSTRUCTION, &prompt, &schema)
+                llm.complete_constrained(&system, &prompt, &schema)
             } else {
-                llm.complete(fm_agent::prompts::MEETINGS_INSTRUCTION, &prompt)
+                llm.complete(&system, &prompt)
             };
             seconds += t0.elapsed().as_secs_f64();
             let answer = match reply {
@@ -127,7 +136,8 @@ fn a_live_model_against_the_cases() {
                 case["recorded"][format!("{model}/{mode}")] = Value::String(answer);
             }
         }
-        println!("== {model} / {mode}: {tally} · {seconds:.1}s total\n");
+        let layout = layout::chosen();
+        println!("== {model} / {mode} / layout {layout}: {tally} · {seconds:.1}s total\n");
     }
     if record {
         std::fs::write(CASES, serde_json::to_string_pretty(&file).unwrap() + "\n").unwrap();

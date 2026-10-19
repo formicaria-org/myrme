@@ -1,0 +1,101 @@
+{
+  "about": "The conversation-title question of the mail pass (fm_agent::titles), 2026-10-19. Each case names the mailbox's owner (`me`), the person the title must name (`name`, matched loosely), and words of which the description must contain at least one (`about_any`, lower case). Synthetic threads; every role is stated in the emails.",
+  "cases": [
+    {
+      "id": "student-signature",
+      "title": "Re: Thesis chapter",
+      "me": "Tom Reyes",
+      "body": "### Lena Okafor — 2026-10-13 09:10\n\nHi Tom,\n\nCan we meet on Thursday to go through chapter 2 of my thesis?\n\nLena Okafor\nMaster student, gaze estimation project\n\n### Tom Reyes — 2026-10-13 10:02\n\nThursday works, Lena.\n",
+      "name": "Lena Okafor",
+      "about_any": ["student", "master"]
+    },
+    {
+      "id": "owner-writes-first",
+      "title": "Collaboration on soft grippers",
+      "me": "Anna Ferri",
+      "body": "### Anna Ferri — 2026-10-02 11:20\n\nDear Dr. Novak,\n\nI enjoyed your talk on soft grippers. Would you like to collaborate on the Moonshot project?\n\nAnna\n\n### Pavel Novak — 2026-10-03 08:45\n\nDear Anna,\n\nGladly. I lead the Soft Robotics Lab at TU Delft; let us talk next week.\n\nPavel Novak\n",
+      "name": "Pavel Novak",
+      "about_any": ["lab", "collaborat", "robotics", "head", "lead", "director"]
+    },
+    {
+      "id": "third-person-mentioned",
+      "title": "Re: Lab access",
+      "me": "Tom Reyes",
+      "body": "### Grace Liu — 2026-10-07 14:05\n\nHi Tom,\n\nI am the lab manager for the Robotics Lab. Prof. Martin Weber asked me to set up your badge for the lab.\n\nGrace Liu\n\n### Tom Reyes — 2026-10-07 15:30\n\nThank you, Grace.\n",
+      "name": "Grace Liu",
+      "about_any": ["manager", "lab"]
+    },
+    {
+      "id": "name-in-capitals",
+      "title": "Re: ME5400A project",
+      "me": "Anna Ferri",
+      "body": "### MARCO BIANCHI — 2026-10-09 18:12\n\nDear Prof. Ferri,\n\nI am a Master student in your ME5400A project and I will not make it to Friday's meeting.\n\nMarco\n\n### Anna Ferri — 2026-10-09 19:00\n\nNo problem, Marco.\n",
+      "name": "Marco Bianchi",
+      "about_any": ["student", "master"]
+    },
+    {
+      "id": "italian-thread",
+      "title": "Re: Tesi",
+      "me": "Anna Ferri",
+      "body": "### Giulia Rossi — 2026-10-05 09:00\n\nGentile Prof.ssa Ferri,\n\nsono una dottoranda del suo gruppo e vorrei discutere il secondo capitolo della tesi.\n\nGiulia Rossi\n\n### Anna Ferri — 2026-10-05 10:15\n\nCara Giulia, va bene giovedì.\n",
+      "name": "Giulia Rossi",
+      "about_any": ["phd", "doctoral", "student", "dottorand"]
+    },
+    {
+      "id": "chinese-thread",
+      "title": "回复: 项目报告",
+      "me": "Anna Ferri",
+      "body": "### Chen Tingyu — 2026-10-11 20:30\n\nDear Prof. Ferri,\n\nI am an undergraduate student in your NA project. Attached is our progress report.\n\nChen Tingyu\n\n### Anna Ferri — 2026-10-12 08:00\n\nThank you, Tingyu.\n",
+      "name": "Chen Tingyu",
+      "about_any": ["student", "undergraduate"]
+    },
+    {
+      "id": "vendor",
+      "title": "Quote for force sensors",
+      "me": "Tom Reyes",
+      "body": "### Tom Reyes — 2026-10-01 10:00\n\nHello,\n\nCould you send a quote for six force sensors?\n\nTom\n\n### Sara Lindqvist — 2026-10-01 16:40\n\nDear Tom,\n\nplease find our quote attached.\n\nSara Lindqvist\nSales engineer, ATI Industrial Automation\n",
+      "name": "Sara Lindqvist",
+      "about_any": ["sales", "vendor", "supplier", "ati", "engineer"]
+    },
+    {
+      "id": "editor",
+      "title": "Re: Manuscript RA-L 26-0412",
+      "me": "Anna Ferri",
+      "body": "### Kenji Watanabe — 2026-10-06 07:15\n\nDear Dr. Ferri,\n\nAs the associate editor handling your manuscript RA-L 26-0412, I write to share the reviews.\n\nKenji Watanabe\n\n### Anna Ferri — 2026-10-06 09:40\n\nDear Dr. Watanabe, thank you for handling it.\n",
+      "name": "Kenji Watanabe",
+      "about_any": ["editor"]
+    },
+    {
+      "id": "long-thread-many-replies",
+      "title": "Re: Re: Re: Course project groups",
+      "me": "Tom Reyes",
+      "body": "### Priya Nair — 2026-09-28 09:00\n\nHi Tom, I am the teaching assistant for ME2101. Can I send you the project groups?\n\nPriya\n\n### Tom Reyes — 2026-09-28 10:00\n\nYes please.\n\n### Priya Nair — 2026-09-29 11:00\n\nAttached. Group 4 has only two members.\n\n### Tom Reyes — 2026-09-29 12:00\n\nThanks, I will move someone.\n\n### Priya Nair — 2026-09-30 08:30\n\nGreat, thank you.\n",
+      "name": "Priya Nair",
+      "about_any": ["teaching", "assistant", "ta"]
+    },
+    {
+      "id": "role-only-in-greeting",
+      "title": "Seminar next week",
+      "me": "Anna Ferri",
+      "body": "### Omar Haddad — 2026-10-14 13:00\n\nDear Anna,\n\nas the organiser of the Robotics Seminar series I would like to invite you to give a talk next week.\n\nBest,\nOmar Haddad\n\n### Anna Ferri — 2026-10-14 14:00\n\nDear Omar, I would be delighted.\n",
+      "name": "Omar Haddad",
+      "about_any": ["organis", "organiz", "seminar"]
+    },
+    {
+      "id": "owner-in-capitals",
+      "title": "Re: Equipment loan",
+      "me": "Tom Reyes",
+      "body": "### TOM REYES — 2026-10-10 09:00\n\nHi Ines, can I borrow the motion-capture suit on Monday?\n\n### Ines Duarte — 2026-10-10 09:45\n\nSure Tom. As the equipment officer I will leave it at the front desk.\n\nInes Duarte\n",
+      "name": "Ines Duarte",
+      "about_any": ["equipment", "officer"]
+    },
+    {
+      "id": "postdoc-colleague",
+      "title": "Paper draft",
+      "me": "Tom Reyes",
+      "body": "### Lukas Brandt — 2026-10-08 17:20\n\nHi Tom,\n\nhere is my draft of the related-work section for our joint paper.\n\nLukas Brandt\nPostdoctoral researcher, Robotics Lab\n\n### Tom Reyes — 2026-10-08 18:00\n\nThanks Lukas, I will read it tonight.\n",
+      "name": "Lukas Brandt",
+      "about_any": ["postdoc", "researcher", "co-author", "colleague"]
+    }
+  ]
+}
