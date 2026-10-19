@@ -429,6 +429,25 @@ fastest phone one as baselines"*, then *"go with option 1"* (the layout as a per
   an eval measures what ships.
 - `Agent` gains `shared_mail_prompt`, filled from the catalogue by both launchers (an addition).
 
+## 2026-10-20 — a meeting already begun when the newest email was sent is past `#method`
+
+**The owner:** *"yes, do the past fix and re-score"*, after the shortlist was run on their own mail
+(`../research/2026-10-19-scouting-phone-models.md` §4).
+
+**Decision.**
+- **What changed.** `meetings::resolve` drops a meeting as `Dropped::Past` when it starts before
+  the newest email in the conversation was sent, compared by the email headings' stamps. Before,
+  only a day before today counted.
+- **Why.** On real mail, a follow-up at 17:31 named the 17:00 call it followed, and larger models
+  (K2-Horizon, Qwen3.5-2B) reported that call beside the next meeting. Under the day rule it passed
+  as fixed, and would have been proposed.
+- **Call-offs keep the day rule**: they still record what happened to a meeting.
+- **Measured.**
+  - Real mail: K2-Horizon 2/5 → 4/5, Qwen3.5-2B 1/5 → 2/5, every other model unchanged.
+  - Every answer recorded in `methods/meetings/eval/cases.json` scores the same.
+  - Test: `a_meeting_already_begun_when_the_newest_email_was_sent_is_past`.
+- **No contract change**: same functions, same signatures.
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading

@@ -28,7 +28,10 @@ use time::Date;
 const CASES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../methods/meetings/eval/cases.json");
 
 fn load() -> Value {
-    serde_json::from_str(&std::fs::read_to_string(CASES).expect("the case file")).expect("JSON")
+    // `FM_EVAL_CASES` reads another case file (e.g. a private one from real mail), never written
+    // back to.
+    let path = std::env::var("FM_EVAL_CASES").unwrap_or_else(|_| CASES.to_string());
+    serde_json::from_str(&std::fs::read_to_string(path).expect("the case file")).expect("JSON")
 }
 
 fn day(s: &str) -> Date {
@@ -89,7 +92,7 @@ fn a_live_model_against_the_cases() {
         Ok("constrained") => vec!["constrained"],
         _ => vec!["free", "constrained"],
     };
-    let record = std::env::var("FM_EVAL_RECORD").is_ok();
+    let record = std::env::var("FM_EVAL_RECORD").is_ok() && std::env::var("FM_EVAL_CASES").is_err();
     let llm = OpenAiStep::local(port, &model)
         .with_temperature(0.0)
         .with_max_tokens(meetings::ANSWER_TOKENS);

@@ -469,6 +469,17 @@ pub fn resolve(f: &Found, body: &str, today: Date) -> Result<Meeting, Dropped> {
     let end = start
         .and(model_words(&f.end, &nquote).and_then(|n| read_time(&n)))
         .filter(|e| Some(*e) > start);
+    // A meeting that had begun before the newest email was sent is history too, though its day is
+    // today: a follow-up at 17:31 does not fix again the 17:00 call it follows (the owner's mail,
+    // 2026-10-19). A call-off is left to the day rule: it still says what happened to the meeting.
+    let newest = all.iter().filter_map(|b| b.at.as_deref()).max();
+    if dated
+        && !cancelled
+        && start.is_some()
+        && newest.is_some_and(|n| stamp(day, start).as_str() < n)
+    {
+        return Err(Dropped::Past);
+    }
     // The place may be in any email of the exchange — a link sent once, a confirmation that says "via
     // the link you shared" — but only as copied, character for character.
     let place = (!cancelled)
@@ -1195,6 +1206,22 @@ mod tests {
         assert_eq!(resolve(&f, BODY, date!(2026 - 10 - 06)), Err(Dropped::NotInEmail));
         let f = found("ci vediamo giovedì alle 15 nel mio ufficio.", "giovedì", "alle 15");
         assert_eq!(resolve(&f, BODY, date!(2026 - 10 - 20)), Err(Dropped::Past));
+    }
+
+    /// **The owner's mail (2026-10-19):** a reply after the day's call names that call's time again;
+    /// larger models reported it beside the next meeting, and the day rule let it through.
+    #[test]
+    fn a_meeting_already_begun_when_the_newest_email_was_sent_is_past() {
+        let body = "### Ana Ruiz — 2026-10-16 09:00\n\nSee you today at 5pm. Next we meet on Friday \
+                    23 October at 4pm.\n\n### Owner Name — 2026-10-16 17:31\n\nThanks for the call.\n";
+        let today = date!(2026 - 10 - 16);
+        let held = found("See you today at 5pm.", "today", "5pm");
+        assert_eq!(resolve(&held, body, today), Err(Dropped::Past));
+        let next = found("Next we meet on Friday 23 October at 4pm.", "Friday 23 October", "4pm");
+        assert_eq!(resolve(&next, body, today).unwrap().start_stamp(), "2026-10-23T16:00");
+        // Before the reply, the same call was still ahead.
+        let before = body.split("### Owner").next().unwrap();
+        assert_eq!(resolve(&held, before, today).unwrap().start_stamp(), "2026-10-16T17:00");
     }
 
     /// **The case that failed on the owner's real mail (2026-10-09).** The date is in the sentence
