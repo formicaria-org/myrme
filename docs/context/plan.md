@@ -190,6 +190,10 @@ tested outside the repository. The four steps below are all in it.
 
 ### Phase C — the dedicated methods (in Myrme; reaches users only through Phase D)
 
+**Myrme light (proposed 2026-10-19):** the dedicated methods as a whole — tools that point on ONNX
+Runtime, a very small LLM only for free text — planned in phases L0–L7, each gated on the evals:
+`docs/research/2026-10-19-myrme-light.md`. One pick per tool; the laptop first (L0–L6), the phone after (P).
+
 **Next, by what the evals show matters most:**
 1. **Handwriting on the phone.** The phone's vision model cannot read handwriting (82.7% median WER).
    Try a dedicated reader (PaddleOCR-VL, or printed-text OCR first). This adds a runtime, so it needs

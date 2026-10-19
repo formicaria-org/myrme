@@ -12,6 +12,7 @@ This is the short map of Myrme's repo. When it disagrees with the code, the code
 | Why something is the way it is | `decisions.md`. Rulings before 2026-10-18 are in formicaria's `docs/context/decisions.md` under `#agent`; the index of them is at the bottom of `decisions.md` here |
 | Choosing a pattern, a framework, a runtime or a protocol | `../research/2026-10-18-small-model-agent-patterns.md` · `../research/2026-10-18-open-standards-frameworks-runtimes.md` |
 | Choosing a model or a non-LLM method for one task | `../research/2026-10-18-dedicated-methods-per-task.md` |
+| **Myrme light** — dedicated tools (OCR, extraction, embeddings on ONNX Runtime) and a very small LLM | `../research/2026-10-19-myrme-light.md` (proposed plan, phases L0–L7) |
 | Running the assistant by hand, benchmarks | `../../agents/README.md` · `../../agents/bench/` |
 
 ## What is here
