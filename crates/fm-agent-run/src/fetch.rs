@@ -66,6 +66,69 @@ pub fn ensure_mmproj(
     }
 }
 
+/// **The OCR's files** (Myrme light, contract 1.6) into `<tools dir>/ocr/`: its three model files,
+/// each checksum-verified, and — when `platform` is given (a computer) and the catalogue pins one for
+/// it — ONNX Runtime's library from its archive. A phone passes `None`: its ONNX Runtime is bundled.
+///
+/// `Ok(false)` when the catalogue pins no OCR (nothing fetched, nothing wrong); files already present
+/// cost no network. Progress is reported per file.
+#[cfg(feature = "download")]
+pub fn ensure_ocr(
+    tools_dir: &Path,
+    manifest: &Manifest,
+    platform: Option<&str>,
+    on_progress: &dyn Fn(u64, Option<u64>),
+    cancel: &dyn Fn() -> bool,
+) -> Result<bool, String> {
+    let files = manifest.ocr_files();
+    if files.is_empty() {
+        return Ok(false);
+    }
+    let dir = tools_dir.join(crate::ocr::DIR);
+    fs::create_dir_all(&dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
+    if let Some(key) = platform {
+        if let (Some(lib), Some(rt)) =
+            (manifest.onnxruntime_lib(key), manifest.runtime(&format!("onnxruntime_{key}")))
+        {
+            ensure_runtime(&dir, rt, lib, on_progress, cancel)?;
+        }
+    }
+    for f in &files {
+        let dest = dir.join(&f.name);
+        if dest.exists() {
+            continue;
+        }
+        let dl = Download { url: &f.url, dest: &dest, sha256: Some(&f.sha256) };
+        let mut stalls: u32 = 0;
+        loop {
+            match fetch(&dl, on_progress, cancel) {
+                Ok(()) => break,
+                Err(FetchError::Fatal(e)) => return Err(e),
+                Err(FetchError::Transient(e)) => {
+                    stalls += 1;
+                    if stalls >= 6 {
+                        return Err(format!("could not fetch {}: {e}", f.name));
+                    }
+                    std::thread::sleep(Duration::from_secs(2u64.pow(stalls.min(3))));
+                    if cancel() {
+                        return Err("cancelled".into());
+                    }
+                }
+            }
+        }
+    }
+    Ok(true)
+}
+
+/// Whether every OCR piece this device should fetch is in `<tools dir>/ocr/` (always `true` when the
+/// catalogue pins none). `platform` as for [`ensure_ocr`].
+pub fn ocr_staged(tools_dir: &Path, manifest: &Manifest, platform: Option<&str>) -> bool {
+    let dir = tools_dir.join(crate::ocr::DIR);
+    let lib_here =
+        platform.and_then(|k| manifest.onnxruntime_lib(k)).is_none_or(|lib| dir.join(lib).exists());
+    lib_here && manifest.ocr_files().iter().all(|f| dir.join(&f.name).exists())
+}
+
 /// Ensure a prebuilt runtime is unpacked under `runtime_dir`, fetching and extracting its archive
 /// on first enable. Returns the path of `want` (e.g. `llama-server`) inside that directory.
 ///
@@ -577,7 +640,22 @@ mod tests {
             }
             let _ = fs::remove_file(&dest);
         }
-        eprintln!("verified {checked} of {} pinned runtime archive(s)", keys.len());
+        // The OCR's files are pinned the same way, and checked with them.
+        for f in manifest.ocr_files() {
+            let dest = dir.join(&f.name);
+            let dl = Download { url: &f.url, dest: &dest, sha256: Some(&f.sha256) };
+            match fetch(&dl, &|_, _| {}, &never) {
+                Ok(()) => checked += 1,
+                Err(FetchError::Transient(e)) => {
+                    eprintln!("skipping {}: network unreachable ({e})", f.name)
+                }
+                Err(FetchError::Fatal(e)) => {
+                    panic!("{} no longer matches its pinned sha256: {e}", f.name)
+                }
+            }
+            let _ = fs::remove_file(&dest);
+        }
+        eprintln!("verified {checked} pinned archive(s) and file(s) ({} runtime keys)", keys.len());
         let _ = fs::remove_dir_all(&dir);
     }
 

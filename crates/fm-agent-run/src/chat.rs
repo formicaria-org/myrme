@@ -59,6 +59,7 @@ fn run() -> Result<(), String> {
         reads_labels: false,
         shared_mail_prompt: false,
         image_specialist: None,
+        ocr: None,
         max_reply_chars: a.max_reply_chars,
         history_budget: a.history_budget,
         device: "laptop".into(),

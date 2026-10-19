@@ -473,6 +473,32 @@ as default for the light version and devices like smartphones"*.
   Qwen3.5-0.8B on the same evals and on phone time, this entry is revisited.
 - **No contract change**: the catalogue's format and every function stay as they are.
 
+## 2026-10-20 — printed pages are read by an OCR first (Myrme light) `#method` `#contract`
+
+**The owner:**
+- *"lets go on with the best options of the light version that make sense (minimal set of
+  absolutely necessary tools instead of one per subtask)"*;
+- *"ship also the OCR tool already for the light version"*;
+- then, of the release, *"One release, 0.7.0 with OCR"*.
+
+**Decision.**
+- **The one tool of Myrme light is the OCR**: PP-OCRv6 small through `oar-ocr` on ONNX Runtime 1.23
+  (`ocr.rs`). Every other method stays with the small LLM; GLiNER and e5 were measured and dropped
+  (`../research/2026-10-19-myrme-light.md`).
+- **Routing.** It reads every page first; its text stands at a mean confidence of 0.97 or above, or
+  when no vision model is loaded; otherwise the vision model reads the page. Measured through the
+  install path: printed pages 0.8% WER, 30 of 30 confident; handwriting 0 of 30 confident.
+- **Where it runs.**
+  - Linux and macOS fetch ONNX Runtime and the OCR's files with the model runtime.
+  - The phone carries ONNX Runtime in the APK (formicaria's packaging, contract 1.6) and fetches
+    the files with the weights.
+  - **Windows has none for now**: Microsoft's archive is 78 MB for a 14 MB DLL.
+- **Accepted cost:** the OCR gives plain lines, so a printed table or code block loses its layout
+  when the OCR is confident. Written in the manual.
+- **Not measured before release:** the OCR's time on the phone. The release does not wait for a
+  phone test (formicaria's rule, 2026-10-15); the phone timing run is ready
+  (`examples/ocr_page.rs`).
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading

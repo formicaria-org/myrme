@@ -29,7 +29,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// models — and an app moves to them by changing a tag and nothing else.
 pub const CONTRACT_MAJOR: u32 = 1;
 /// See [`CONTRACT_MAJOR`].
-pub const CONTRACT_MINOR: u32 = 5;
+pub const CONTRACT_MINOR: u32 = 6;
 
 /// **The model catalogue** — models, their pins and licences, and the runtime archives per platform
 /// (`models.toml`, beside this crate). Embedded so that whoever links Myrme has it without knowing
@@ -60,6 +60,8 @@ pub mod manifest;
 pub mod meetings;
 /// Locate the Android native-library dir (where the bundled model runtime lives) in pure Rust.
 pub mod nativelib;
+/// The OCR tool of Myrme light: PP-OCRv6 small on ONNX Runtime, for typed pages.
+pub mod ocr;
 pub mod replies;
 pub mod watch;
 /// In-process HTTPS web search for the phone (no local SearXNG proxy). Needs the TLS client the
@@ -112,6 +114,11 @@ pub struct Agent<V: VaultAccess> {
     /// tried first; see [`Agent::image_reader`]. `None` everywhere today — the slot the rule needs,
     /// filled when a specialist is adopted.
     pub image_specialist: Option<ImageReader>,
+    /// **The OCR** (Myrme light, 2026-10-20), when this device has it: it reads each page first, and
+    /// its text stands when it is confident (typed pages); otherwise the image reader above reads the
+    /// page. With no image reader, the OCR's text stands either way. `None` ⇒ pages go to the image
+    /// reader, as before.
+    pub ocr: Option<std::sync::Arc<dyn ocr::ReadPage>>,
     pub max_reply_chars: usize,
     /// History budget (chars). When the discussion overflows it, `history` pins both ends — the first
     /// turn (the original ask) and the latest — and fills the middle with the most recent turns that
@@ -123,6 +130,15 @@ pub struct Agent<V: VaultAccess> {
     /// device; this word is what keeps two devices from both answering one synced message, and what
     /// its replies and proposals are signed with.
     pub device: String,
+}
+
+/// Text already read (by the OCR), handed to the same splice the vision model's reading goes through.
+struct Read(String);
+
+impl fm_agent::imagetext::ReadImage for Read {
+    fn read_image(&self, _: &[u8], _: &str) -> Result<String, AgentError> {
+        Ok(self.0.clone())
+    }
 }
 
 /// A model server that can turn an image into text: where it listens, what it is called (for the
@@ -491,9 +507,11 @@ impl<V: VaultAccess> Agent<V> {
             None => AudioWork::None,
         };
         let reader = self.image_reader();
-        let images = match &reader {
-            Some(_) => self.resolve_blobs(asked, &existing, "image/", "fm:image-text")?,
-            None => AudioWork::None,
+        let reads = reader.is_some() || self.ocr.is_some();
+        let images = if reads {
+            self.resolve_blobs(asked, &existing, "image/", "fm:image-text")?
+        } else {
+            AudioWork::None
         };
         let clips = match &audio {
             AudioWork::Clips(c) => c.clone(),
@@ -512,13 +530,13 @@ impl<V: VaultAccess> Agent<V> {
             // With NOTHING available, the missing capability is the whole answer. With one of the
             // two working, it is a footnote: "nothing here to transcribe" is what actually happened,
             // and leading with an unrelated missing projector would answer a question nobody asked.
-            if self.whisper_port.is_none() && reader.is_none() {
+            if self.whisper_port.is_none() && !reads {
                 return say(replies::NOTHING_CAN_TRANSCRIBE.into());
             }
             return say(replies::nothing_to_transcribe(
                 !asked.is_empty(),
                 self.whisper_port.is_none(),
-                reader.is_none(),
+                !reads,
             ));
         }
 
@@ -543,18 +561,48 @@ impl<V: VaultAccess> Agent<V> {
             }
         }
 
-        if let (Some(reader), false) = (&reader, pages.is_empty()) {
+        if !pages.is_empty() {
             on_stage("reading the writing");
-            let vision = OpenAiStep::local(reader.port, &reader.model)
-                .with_image_instruction(reader.prompt.clone());
+            let vision = reader.as_ref().map(|r| {
+                (OpenAiStep::local(r.port, &r.model).with_image_instruction(r.prompt.clone()), r)
+            });
             for (reference, bytes, mime) in &pages {
-                let prov = fm_agent::adjunct::Provenance {
-                    specialist: "vision".into(),
-                    model: reader.model.clone(),
-                    blob_hash: fm_agent::adjunct::hash_of(reference),
-                };
-                new_body = fm_agent::imagetext::read_into(&vision, &new_body, bytes, mime, &prov)
-                    .map_err(|e| e.to_string())?;
+                let blob_hash = fm_agent::adjunct::hash_of(reference);
+                // The OCR first; its text stands when confident, or when nothing else can see.
+                let ocr_read = self.ocr.as_ref().and_then(|o| match o.read_page(bytes) {
+                    Ok(page) if page.confident() || vision.is_none() => Some((page, o.model())),
+                    Ok(_) => None,
+                    Err(e) => {
+                        eprintln!("ocr: {e} — the vision model reads {reference}");
+                        None
+                    }
+                });
+                new_body = match (ocr_read, &vision) {
+                    (Some((page, model)), _) => {
+                        let prov = fm_agent::adjunct::Provenance {
+                            specialist: "ocr".into(),
+                            model: model.to_string(),
+                            blob_hash,
+                        };
+                        fm_agent::imagetext::read_into(
+                            &Read(page.text),
+                            &new_body,
+                            bytes,
+                            mime,
+                            &prov,
+                        )
+                    }
+                    (None, Some((step, r))) => {
+                        let prov = fm_agent::adjunct::Provenance {
+                            specialist: "vision".into(),
+                            model: r.model.clone(),
+                            blob_hash,
+                        };
+                        fm_agent::imagetext::read_into(step, &new_body, bytes, mime, &prov)
+                    }
+                    (None, None) => return Err(format!("could not read {reference}")),
+                }
+                .map_err(|e| e.to_string())?;
                 sources.push(reference.to_string());
             }
         }
@@ -888,6 +936,7 @@ mod tests {
             reads_labels: false,
             shared_mail_prompt: false,
             image_specialist: None,
+            ocr: None,
             max_reply_chars: 600,
             history_budget: 4000,
             device: "laptop".into(),
@@ -1131,6 +1180,7 @@ mod tests {
             reads_labels: false,
             shared_mail_prompt: false,
             image_specialist: None,
+            ocr: None,
             max_reply_chars: 600,
             history_budget: 4000,
             device: "laptop".into(),
@@ -1150,6 +1200,128 @@ mod tests {
         assert!(body.contains("the recorded lecture words"), "transcript inserted: {body}");
         assert!(body.contains("asset:sha256-abc123"), "source referenced, not replaced: {body}");
         assert!(body.contains("whisper.cpp"), "provenance present: {body}");
+    }
+
+    /// **Myrme light's OCR in the reading turn** (2026-10-20): a confident reading stands, with the
+    /// OCR named as its reader; an unsure one goes to the vision model; with no vision model, the
+    /// OCR's reading stands either way.
+    #[test]
+    fn a_confident_ocr_reading_stands_and_an_unsure_one_goes_to_the_vision_model() {
+        use std::cell::RefCell;
+        use std::io::{Read as _, Write as _};
+        use std::net::TcpListener;
+
+        struct FakeOcr(f32);
+        impl ocr::ReadPage for FakeOcr {
+            fn read_page(&self, _: &[u8]) -> Result<ocr::Page, String> {
+                Ok(ocr::Page { text: "words the ocr read".into(), confidence: self.0 })
+            }
+            fn model(&self) -> &str {
+                "fake ocr"
+            }
+        }
+        /// A vision model that answers one request with fixed words.
+        fn vision_server() -> u16 {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let port = listener.local_addr().unwrap().port();
+            std::thread::spawn(move || {
+                let (mut sock, _) = listener.accept().unwrap();
+                let mut buf = vec![0u8; 65536];
+                let _ = sock.read(&mut buf);
+                let json = r#"{"choices":[{"finish_reason":"stop","message":{"content":"words the vision model read"}}]}"#;
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    json.len(),
+                    json
+                );
+                let _ = sock.write_all(resp.as_bytes());
+            });
+            port
+        }
+        struct PageVault {
+            proposed: RefCell<Option<String>>,
+        }
+        impl VaultAccess for PageVault {
+            fn get(&self, _: &str) -> Result<Value, String> {
+                Ok(json!({ "body": "a note\n\n![page](asset:sha256-0a1b2c3d)\n" }))
+            }
+            fn blob_bytes(&self, _: &str) -> Result<(Vec<u8>, String), String> {
+                Ok((b"not really a png".to_vec(), "image/png".into()))
+            }
+            fn create_proposal(
+                &self,
+                _: &str,
+                body: &str,
+                _: &str,
+                _: &str,
+                _: &Origin,
+            ) -> Result<Value, String> {
+                *self.proposed.borrow_mut() = Some(body.to_string());
+                Ok(json!({ "id": "prop1" }))
+            }
+            fn reply_as(&self, _: &str, _: &str, _: &str, _: &str) -> Result<Value, String> {
+                Ok(json!({ "id": "r1" }))
+            }
+            fn thread(&self, _: &str) -> Result<Value, String> {
+                Ok(Value::Null)
+            }
+            fn discussions(&self) -> Result<Value, String> {
+                Ok(json!([]))
+            }
+            fn alive(&self) -> bool {
+                true
+            }
+            fn reply(&self, _: &str, _: &str) -> Result<Value, String> {
+                Ok(Value::Null)
+            }
+            fn activity(&self, _: &str, _: &str, _: &str) {}
+            fn activity_done(&self, _: &str) {}
+            fn present(&self, _: &str, _: Option<&crate::ImageReader>) {}
+        }
+        let read = |confidence: f32, vision_port: Option<u16>| -> String {
+            let a = Agent {
+                fm: PageVault { proposed: RefCell::new(None) },
+                model_port: vision_port.unwrap_or(0),
+                model: "test".into(),
+                searxng_port: None,
+                web_direct: false,
+                whisper_port: None,
+                whisper_model: String::new(),
+                vision: vision_port.is_some(),
+                read_prompt: None,
+                reads_labels: false,
+                shared_mail_prompt: false,
+                image_specialist: None,
+                ocr: Some(std::sync::Arc::new(FakeOcr(confidence))),
+                max_reply_chars: 600,
+                history_budget: 4000,
+                device: "phone".into(),
+            };
+            let intent = convo::Intent {
+                ask: String::new(),
+                search: false,
+                propose: false,
+                research: false,
+                transcribe: Some(String::new()),
+                recipe: false,
+            };
+            let (reply, _) = a.handle("note", &intent, &|_| {}).unwrap();
+            assert!(reply.contains("image"), "the person is told: {reply}");
+            let body = a.fm.proposed.borrow().clone().expect("a proposal was created");
+            assert!(body.contains("asset:sha256-0a1b2c3d"), "the page is referenced: {body}");
+            body
+        };
+
+        let typed = read(0.99, Some(vision_server()));
+        assert!(typed.contains("words the ocr read") && typed.contains("fake ocr"), "{typed}");
+        assert!(!typed.contains("vision model read"), "the vision model was not asked: {typed}");
+
+        let written = read(0.80, Some(vision_server()));
+        assert!(written.contains("words the vision model read"), "{written}");
+        assert!(!written.contains("words the ocr read"), "{written}");
+
+        let blind = read(0.80, None);
+        assert!(blind.contains("words the ocr read"), "nothing else can see: {blind}");
     }
 
     #[test]
@@ -1237,6 +1409,7 @@ mod tests {
             reads_labels: false,
             shared_mail_prompt: false,
             image_specialist: None,
+            ocr: None,
             max_reply_chars: 600,
             history_budget: 4000,
             device: "laptop".into(),
@@ -1340,6 +1513,7 @@ mod tests {
             reads_labels: false,
             shared_mail_prompt: false,
             image_specialist: None,
+            ocr: None,
             max_reply_chars: 2000,
             history_budget: 4000,
             device: "laptop".into(),
@@ -1443,6 +1617,7 @@ mod tests {
                 reads_labels: false,
                 shared_mail_prompt: false,
                 image_specialist: None,
+                ocr: None,
                 max_reply_chars: 600,
                 history_budget: 4000,
                 device: "laptop".into(),
@@ -1558,6 +1733,7 @@ mod tests {
             reads_labels: false,
             shared_mail_prompt: false,
             image_specialist: None,
+            ocr: None,
             max_reply_chars: 600,
             history_budget: 4000,
             device: "laptop".into(),

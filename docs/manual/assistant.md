@@ -283,6 +283,13 @@ For writing it aims at a *usable* transcript, not a description: mathematics com
 code and pseudocode inside a code block with their indentation, and tables as Markdown tables. For a
 chart it transcribes the title, the axis labels, the tick values and the legend.
 
+**Printed pages are read by a text reader first** (since Myrme 0.7.0, on Linux, macOS and phones). A
+small dedicated reader (an OCR, PP-OCRv6) reads the page in about a second. When it is sure of what
+it read, which in testing was every printed page, its text is what you get, and the note says the OCR
+read it. Handwriting is never that certain, so it goes to the vision model as before. The OCR gives
+plain lines: **a printed table or code block comes back as lines of text**, not as a Markdown table or
+an indented block.
+
 Three things worth knowing:
 
 - **The picture stays.** The text lands *beside* the image, never instead of it, and says which model

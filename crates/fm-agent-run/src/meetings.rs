@@ -537,6 +537,7 @@ mod tests {
             reads_labels: false,
             shared_mail_prompt: false,
             image_specialist: None,
+            ocr: None,
             max_reply_chars: 1000,
             history_budget: 1000,
             device: "laptop".into(),

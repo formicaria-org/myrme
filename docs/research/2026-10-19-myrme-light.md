@@ -119,7 +119,9 @@ typed pages.**
     on the laptop CPU. It is kept only if the phone confirms the time gain: Qwen reads a
     handwritten page in a median 28 s there, and typed pages have not been timed on the phone.
   - The OCR also brings ONNX Runtime into the app, so its size counts as well.
-- **The next step is the phone phase for the OCR alone** (phase P below), not new tools.
+- **Shipped in Myrme 0.7.0** (owner, 2026-10-20: *"ship also the OCR tool already"*), before
+  its phone timing, on Linux, macOS and the phone. `decisions.md`, 2026-10-20, has the routing and
+  the costs: plain lines for tables and code, and no Windows yet.
 
 The owner, 2026-10-19: *"lets keep the architecture simple instead of adding blocks that are not sure
 to improve."* So the architecture is the three tools, Rust and the one small LLM — **a block joins

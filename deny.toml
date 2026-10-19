@@ -72,6 +72,19 @@ unused-allowed-license = "allow"
 # declare, this gate will not catch it either. Add it there.
 # ---------------------------------------------------------------------------------------
 
+# Two crate-scoped licence exceptions for the OCR (Myrme 0.7.0), both OSI-approved permissive
+# licences, scoped to the crate rather than widening `allow`:
+# - `clipper2-rust` (BSL-1.0, the Boost licence): polygon offsetting in oar-ocr's text detector.
+# - `libfuzzer-sys` (MIT OR Apache-2.0, AND NCSA for the LLVM fuzzer sources it vendors): pulled in by
+#   `image`'s AVIF encoder via rav1e; the OCR only decodes.
+[[licenses.exceptions]]
+crate = "clipper2-rust"
+allow = ["BSL-1.0"]
+
+[[licenses.exceptions]]
+crate = "libfuzzer-sys"
+allow = ["NCSA"]
+
 [advisories]
 version = 2
 # No advisory waivers: the Tauri/gtk3 tree that required them was removed with the
@@ -82,7 +95,16 @@ version = 2
 # carry over: Myrme links no YAML parser, and its lockfile resolved `zip` 2.6.1, which none of the
 # three advisories match (2026-10-18). A waiver added here names its advisory, its reason and the
 # change that will remove it.
-ignore = []
+#
+# Two, since the OCR (Myrme 0.7.0): both are *unmaintained* notices, not vulnerabilities, on crates
+# the OCR's image stack pulls in.
+ignore = [
+    # `paste`: a build-time proc-macro, via image → exr → pulp. Goes when `exr`/`pulp` drop it.
+    { id = "RUSTSEC-2024-0436", reason = "unmaintained build-time macro under the OCR's image decoder; no vulnerability" },
+    # `ttf-parser`: a font parser via oar-ocr → imageproc → ab_glyph, for drawing text on images,
+    # which the OCR never does. Goes when `imageproc` moves to `skrifa`.
+    { id = "RUSTSEC-2026-0192", reason = "unmaintained font parser under oar-ocr's drawing helpers, never called by the OCR; no vulnerability" },
+]
 
 [bans]
 multiple-versions = "warn"

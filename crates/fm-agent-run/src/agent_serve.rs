@@ -267,6 +267,10 @@ fn run() -> Result<(), String> {
         reads_labels: manifest.reads_labels(&model_name),
         shared_mail_prompt: manifest.shared_mail_prompt(&model_name),
         image_specialist: None,
+        // The OCR reads typed pages first (Myrme light); missing pieces only mean it is not used.
+        ocr: crate::ocr::open(&a.agents_dir, &manifest, None)
+            .map_err(|e| eprintln!("agent-serve: no OCR — {e}"))
+            .ok(),
         whisper_model: a.whisper_model.clone(),
         max_reply_chars: a.max_reply_chars.unwrap_or(manifest.max_reply_chars),
         history_budget: a.history_budget,

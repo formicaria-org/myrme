@@ -115,6 +115,43 @@ runtime_url_android_arm64 = "https://github.com/formicaria-org/myrme/releases/do
 runtime_sha256_android_arm64 = "40763a08247ace6866dd478099d2d0aa53f6cd27d2c2fa75371b0aa13bb35200"
 whisper_android_source = "v1.9.1"
 
+# --- The OCR of Myrme light (contract 1.6, 2026-10-20) ------------------------------------------------
+# PP-OCRv6 small reads typed pages: 0.8% word error over the image eval's 30 typed pages, ~1 s a page on
+# the laptop CPU, against Qwen3.5-0.8B's 2.3% (`docs/research/2026-10-19-myrme-light.md`, L1). It runs
+# first on every page; its text stands when its mean confidence is 0.97 or above, and the vision model
+# reads the page otherwise (`ocr.rs`, `Agent::ocr`). Its files go to `<tools dir>/ocr/`: with the model
+# runtime on a computer (`Tools::provision`, `refresh_runtime`), with the weights on a phone.
+#
+# The model files are the ONNX exports `oar-ocr` publishes (PaddleOCR's PP-OCRv6, Apache-2.0), pinned by
+# release asset and SHA-256 — the same bytes the L1 measurement read.
+ocr_file_det = "pp-ocrv6_small_det.onnx"
+ocr_url_det = "https://github.com/GreatV/oar-ocr/releases/download/v0.7.0/pp-ocrv6_small_det.onnx"
+ocr_sha256_det = "d73e0058b7a8086bbd57f3d10b8bcd4ff95363f67e06e2762b5e814fe9c9410e"
+ocr_bytes_det = 9880512
+ocr_file_rec = "pp-ocrv6_small_rec.onnx"
+ocr_url_rec = "https://github.com/GreatV/oar-ocr/releases/download/v0.7.0/pp-ocrv6_small_rec.onnx"
+ocr_sha256_rec = "5435fd747c9e0efe15a96d0b378d5bd157e9492ed8fd80edf08f30d02fa24634"
+ocr_bytes_rec = 21159378
+ocr_file_dict = "ppocrv6_dict.txt"
+ocr_url_dict = "https://github.com/GreatV/oar-ocr/releases/download/v0.7.0/ppocrv6_dict.txt"
+ocr_sha256_dict = "b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d"
+ocr_bytes_dict = 74947
+#
+# ONNX Runtime 1.23.2 (MIT), which `ort` 2.0.0-rc.12 opens at run time. Microsoft's own archives, pinned
+# like the model runtime; `onnxruntime_lib_<platform>` names the library inside. **Windows has no entry**:
+# Microsoft's Windows archive is 78 MB (debug symbols) for a 14 MB DLL, so Windows reads every page with
+# the vision model until a trimmed archive is published. The phone's is the AAR on Maven Central: read
+# by formicaria's packaging (`ci/android-stage-onnxruntime.sh`), which puts `jni/arm64-v8a/libonnxruntime.so`
+# into the APK's `jniLibs` (`host::BUNDLED_ONNXRUNTIME`).
+runtime_url_onnxruntime_linux_x64 = "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-linux-x64-1.23.2.tgz"
+runtime_sha256_onnxruntime_linux_x64 = "1fa4dcaef22f6f7d5cd81b28c2800414350c10116f5fdd46a2160082551c5f9b"
+onnxruntime_lib_linux_x64 = "libonnxruntime.so.1.23.2"
+runtime_url_onnxruntime_macos_arm64 = "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-osx-arm64-1.23.2.tgz"
+runtime_sha256_onnxruntime_macos_arm64 = "b4d513ab2b26f088c66891dbbc1408166708773d7cc4163de7bdca0e9bbb7856"
+onnxruntime_lib_macos_arm64 = "libonnxruntime.1.23.2.dylib"
+runtime_url_onnxruntime_android_arm64 = "https://repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/1.23.2/onnxruntime-android-1.23.2.aar"
+runtime_sha256_onnxruntime_android_arm64 = "82048d1f462218adae4ba76477089ab0ba76093d84f733540066db1a8ba6b827"
+
 # Each model: `name` (the key you pass to fetch), its Hugging Face `repo` and `file`, and a note.
 # Keep `name`, then `repo`, then `file` in that order — fetch.sh reads them positionally.
 #

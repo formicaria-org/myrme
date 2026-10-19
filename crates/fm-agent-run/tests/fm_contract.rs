@@ -38,12 +38,17 @@ use fm_agent_run::host::{
     BUNDLED_SERVER, BUNDLED_WHISPER, SERVER_BIN, WHISPER_BIN, WHISPER_PORT,
 };
 
-/// The contract this file checks is 1.5 (`CONTRACT_MAJOR`/`CONTRACT_MINOR`). Changing what it names
+/// **Contract 1.6:** ONNX Runtime's name in the APK, for the OCR (formicaria's packaging stages it
+/// under this name).
+#[cfg(feature = "download")]
+use fm_agent_run::host::BUNDLED_ONNXRUNTIME;
+
+/// The contract this file checks is 1.6 (`CONTRACT_MAJOR`/`CONTRACT_MINOR`). Changing what it names
 /// means changing the contract version too — a removal or rename is a new major, an addition a new
 /// minor — and the two are compared here so one cannot move without the other.
 #[test]
-fn this_list_is_contract_1_5() {
-    assert_eq!((fm_agent_run::CONTRACT_MAJOR, fm_agent_run::CONTRACT_MINOR), (1, 5));
+fn this_list_is_contract_1_6() {
+    assert_eq!((fm_agent_run::CONTRACT_MAJOR, fm_agent_run::CONTRACT_MINOR), (1, 6));
     assert!(
         fm_agent_run::VERSION.split('.').count() == 3,
         "a release version is MAJOR.MINOR.PATCH"
@@ -87,6 +92,22 @@ fn model_fields_formicaria_reads_exist() {
         a.shared_mail_prompt
     }
     let _ = (chooser, settings, agent);
+}
+
+/// Contract 1.6: the OCR. The name its library has in the APK, the catalogue keys formicaria's
+/// packaging reads to stage it, and the `Agent` field the launchers fill.
+#[test]
+fn the_ocr_formicaria_packages_is_named_and_pinned() {
+    #[cfg(feature = "download")]
+    assert_eq!(BUNDLED_ONNXRUNTIME, "libonnxruntime.so");
+    let m = Manifest::parse(fm_agent_run::CATALOGUE);
+    let aar = m.runtime("onnxruntime_android_arm64").expect("the phone's ONNX Runtime is pinned");
+    assert!(aar.url.ends_with(".aar") && aar.sha256.len() == 64, "{aar:?}");
+    assert_eq!(m.ocr_files().len(), 3, "detector, recogniser, dictionary");
+    fn agent(a: &Agent<fm_agent_run::fmserve::FmServe>) -> bool {
+        a.ocr.is_some()
+    }
+    let _ = agent;
 }
 
 /// The catalogue formicaria embeds on the phone and writes beside the desktop program parses.

@@ -168,7 +168,7 @@ impl Tools {
 
     /// The disk the model and the runtime use, in bytes — so a removal can say what it frees.
     pub fn bytes(&self) -> u64 {
-        ["models", "runtime"]
+        ["models", "runtime", crate::ocr::DIR]
             .iter()
             .filter_map(|sub| std::fs::read_dir(self.dir.join(sub)).ok())
             .flatten()
@@ -190,7 +190,7 @@ impl Tools {
             );
         }
         let freed = self.bytes();
-        for sub in ["models", "runtime"] {
+        for sub in ["models", "runtime", crate::ocr::DIR] {
             let p = self.dir.join(sub);
             if p.exists() {
                 std::fs::remove_dir_all(&p)
@@ -269,7 +269,36 @@ impl Tools {
                 cancelled,
             )?;
         }
-        Ok(())
+        self.provision_ocr(manifest, p)
+    }
+
+    /// **The OCR's files** (contract 1.6), and on a computer ONNX Runtime beside them, into
+    /// `ocr/`. Reported as part of the runtime. Optional: a failed fetch is logged and the assistant
+    /// reads pages with the vision model; [`Tools::runtime_outdated`] then asks again on a later start.
+    /// A cancel is still a cancel.
+    fn provision_ocr(&self, manifest: &Manifest, p: &Progress) -> Result<(), String> {
+        if crate::fetch::ocr_staged(&self.dir, manifest, Manifest::platform_key()) {
+            return Ok(());
+        }
+        if !(p.step)(Stage::Runtime) {
+            return Err(CANCELLED.into());
+        }
+        match crate::fetch::ensure_ocr(
+            &self.dir,
+            manifest,
+            Manifest::platform_key(),
+            &|d, t| (p.bytes)(Stage::Runtime, d, t),
+            p.cancelled,
+        ) {
+            Ok(_) => Ok(()),
+            Err(_) if (p.cancelled)() => Err(CANCELLED.into()),
+            Err(e) => {
+                eprintln!(
+                    "myrme: the OCR was not fetched ({e}); pages are read by the vision model"
+                );
+                Ok(())
+            }
+        }
     }
 
     /// Where the record of which archive the model runtime came from is kept.
@@ -296,8 +325,14 @@ impl Tools {
         let Some(rt) = Manifest::platform_key().and_then(|k| manifest.runtime(k)) else {
             return false;
         };
+        self.llama_outdated(&rt.sha256)
+            || !crate::fetch::ocr_staged(&self.dir, manifest, Manifest::platform_key())
+    }
+
+    /// Whether the model runtime on disk came from another archive than `sha256`.
+    fn llama_outdated(&self, sha256: &str) -> bool {
         std::fs::read_to_string(self.runtime_stamp()).map(|s| s.trim().to_string()).ok().as_deref()
-            != Some(rt.sha256.as_str())
+            != Some(sha256)
     }
 
     /// **Bring the model runtime up to the catalogue's pin**, without ever leaving none: the archive
@@ -311,6 +346,10 @@ impl Tools {
         let rt = manifest
             .runtime(key)
             .ok_or_else(|| format!("no verified model runtime is pinned for {key} yet"))?;
+        // Only the OCR missing (Myrme 0.7.0 on an older install): the model runtime stays.
+        if !self.llama_outdated(&rt.sha256) {
+            return self.provision_ocr(manifest, p);
+        }
         if !(p.step)(Stage::Runtime) {
             return Err(CANCELLED.into());
         }
@@ -339,7 +378,7 @@ impl Tools {
         }
         let _ = std::fs::remove_dir_all(&next);
         self.stamp_runtime(&rt.sha256);
-        Ok(())
+        self.provision_ocr(manifest, p)
     }
 
     /// Fetch the speech runtime and the chosen speech `weights`, then remove speech weights nobody
@@ -457,6 +496,8 @@ pub struct Bundled {
 pub const BUNDLED_SERVER: &str = "libllama-server.so";
 /// The speech server, as an APK carries it.
 pub const BUNDLED_WHISPER: &str = "libwhisper-server.so";
+/// ONNX Runtime, for the OCR, as an APK carries it (contract 1.6).
+pub use crate::ocr::BUNDLED_ONNXRUNTIME;
 
 impl Bundled {
     /// The native-library directory, found from where `own_lib` (the app's own library) is mapped.
@@ -701,6 +742,16 @@ impl Tools {
             reads_labels: manifest.reads_labels(&model_name),
             shared_mail_prompt: manifest.shared_mail_prompt(&model_name),
             image_specialist: None,
+            ocr: match crate::ocr::open(&self.dir, manifest, Some(bundle.dir())) {
+                Ok(o) => {
+                    (h.log)("study agent: typed pages read by the OCR");
+                    Some(o)
+                }
+                Err(e) => {
+                    (h.log)(&format!("study agent: no OCR — {e}"));
+                    None
+                }
+            },
             max_reply_chars: manifest.max_reply_chars,
             history_budget: 4000,
             device: job.device,
@@ -851,8 +902,9 @@ mod tests {
         }
     }
 
-    /// A runtime with no record of its archive is outdated once; a recorded pin is current; a
-    /// checkout is never refreshed; and no runtime at all is provisioning's business, not this.
+    /// A runtime with no record of its archive is outdated once; a recorded pin is current once the
+    /// OCR is beside it; a checkout is never refreshed; and no runtime at all is provisioning's
+    /// business, not this.
     #[test]
     fn a_runtime_without_a_record_or_with_another_pin_is_outdated() {
         let d = temp("rt");
@@ -865,6 +917,16 @@ mod tests {
         std::fs::write(d.join("runtime").join(SERVER_BIN), b"x").unwrap();
         assert!(tools.runtime_outdated(&m), "an install from before records were kept");
         tools.stamp_runtime(&rt.sha256);
+        // Since 0.7.0 the OCR is part of what an app update brings: missing, the runtime is behind.
+        if !m.ocr_files().is_empty() {
+            assert!(tools.runtime_outdated(&m), "the pinned archive, but no OCR yet");
+            let ocr = d.join(crate::ocr::DIR);
+            std::fs::create_dir_all(&ocr).unwrap();
+            let lib = Manifest::platform_key().and_then(|k| m.onnxruntime_lib(k));
+            for name in m.ocr_files().iter().map(|f| f.name.as_str()).chain(lib) {
+                std::fs::write(ocr.join(name), b"x").unwrap();
+            }
+        }
         assert!(!tools.runtime_outdated(&m), "the pinned archive");
         tools.stamp_runtime("an-older-archive");
         assert!(tools.runtime_outdated(&m), "another archive");

@@ -32,6 +32,7 @@ fn it_transcribes_through_the_real_fmserve_and_whisper() {
         reads_labels: false,
         shared_mail_prompt: false,
         image_specialist: None,
+        ocr: None,
         max_reply_chars: 2000,
         history_budget: 4000,
         device: "laptop".into(),

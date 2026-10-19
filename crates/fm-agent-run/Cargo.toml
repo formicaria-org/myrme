@@ -34,7 +34,15 @@ path = "src/serve.rs"
 # plain deflate, and the optional codecs (zstd, bzip2, aes) would each add a C dependency for a
 # format we never receive.
 [features]
+default = ["ocr"]
 download = ["dep:fm-fetch", "dep:ureq", "dep:sha2", "dep:flate2", "dep:tar", "dep:zip"]
+# **The OCR tool of Myrme light** (2026-10-20): PP-OCRv6 small through `oar-ocr`, on ONNX Runtime
+# opened at run time (`load-dynamic`), so nothing is linked at build time and the same code builds for
+# Android. The library comes from the catalogue on a computer and from the APK's `jniLibs` on a phone
+# (`ocr.rs`). On by default; with it off the assistant reads every page with the vision model, as before.
+# `oar-ocr` pins `ort =2.0.0-rc.12`, which needs ONNX Runtime 1.23 (`api-22`); its default features
+# would download a static ONNX Runtime at build time, hence `default-features = false`.
+ocr = ["dep:oar-ocr", "dep:ort", "dep:image"]
 
 [dependencies]
 fm-agent = { path = "../fm-agent" }
@@ -51,3 +59,6 @@ sha2 = { version = "0.11", optional = true }
 flate2 = { version = "1", optional = true }
 tar = { version = "0.4", optional = true }
 zip = { version = "2", optional = true, default-features = false, features = ["deflate"] }
+oar-ocr = { version = "=0.8.1", optional = true, default-features = false, features = ["simd"] }
+ort = { version = "=2.0.0-rc.12", optional = true, default-features = false, features = ["load-dynamic", "std", "api-22"] }
+image = { version = "0.25", optional = true, default-features = false, features = ["jpeg", "png", "webp"] }

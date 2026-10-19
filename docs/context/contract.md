@@ -13,7 +13,7 @@ _Taken from formicaria at tag v0.9.2 (commit e670190) on 2026-10-18; the Rust it
 Two numbers, kept apart:
 - **The release version** (`fm_agent_run::VERSION`, `Cargo.toml`, the `v…` tag) changes with
   every release.
-- **The contract version** (`fm_agent_run::CONTRACT_MAJOR`.`CONTRACT_MINOR`, now **1.5**) changes
+- **The contract version** (`fm_agent_run::CONTRACT_MAJOR`.`CONTRACT_MINOR`, now **1.6**) changes
   only when this document does.
   - **Major:** anything listed below is renamed, removed or changes meaning. formicaria checks the
     major at compile time, so an app written for another major refuses to build and says why. It
@@ -24,7 +24,7 @@ So formicaria can take any newer Myrme release of the same contract major by cha
 nothing else. That is how methods, prompts, evals, models and the runtime reach users without a
 formicaria code change. `docs/context/releases.md` lists every release with its contract version.
 
-The list in part 1 is compile-checked as contract 1.5 (`tests/fm_contract.rs`). Changing it means
+The list in part 1 is compile-checked as contract 1.6 (`tests/fm_contract.rs`). Changing it means
 changing the contract version in the same commit.
 
 ## 1. Rust items formicaria names
@@ -51,6 +51,11 @@ git grep -hoE "fm_agent(_run)?::[A-Za-z_]+(::[A-Za-z_]+)*(::\{[^}]*\})?" <tag> -
 | `Manifest::phone_choices`, `Model::{phone_label, bytes, mmproj_bytes}` (1.5) | phone: the model chooser (shown only with two or more choices; one since 2026-10-20) |
 | `fm_agent_run::nativelib::native_lib_dir` (Android only) | phone: where the bundled runtime lives |
 | `fm_agent_run::watch::{serve_loop, wait_ready}` | phone: the watch loop |
+
+**Contract 1.6 adds the OCR of Myrme light** (Myrme 0.7.0):
+- `host::BUNDLED_ONNXRUNTIME`: ONNX Runtime's name in the APK, which formicaria's packaging stages
+  from the catalogue's `runtime_url_onnxruntime_android_arm64` (part 3).
+- `Agent::ocr`: the OCR, which both launchers fill; formicaria builds no `Agent` itself.
 
 **Contract 1.5 adds the phone's model choice and per-model settings** (Myrme 0.6.0):
 - `Manifest::phone_choices` and `Model::phone_label`: the models a phone may choose between, each with
@@ -121,7 +126,12 @@ extraction: `image_max_tokens` (per model, 2026-10-18); `phone_label`, `thinking
 phone's runtimes, which formicaria's packaging reads from here instead of keeping its own copy:
 `runtime_url_android_arm64` with `runtime_sha256_android_arm64` (staged into the APK by
 `ci/android-stage-runtime.sh`) and `whisper_android_source`, the whisper.cpp tag
-`ci/android-stage-whisper.sh` compiles.
+`ci/android-stage-whisper.sh` compiles. **Contract 1.6** (Myrme 0.7.0) adds the OCR's ONNX Runtime
+for the phone: `runtime_url_onnxruntime_android_arm64` with `runtime_sha256_onnxruntime_android_arm64`,
+Microsoft's AAR, whose `jni/arm64-v8a/libonnxruntime.so` formicaria's packaging stages into the APK
+under `host::BUNDLED_ONNXRUNTIME` (`ci/android-stage-onnxruntime.sh`). The other OCR keys
+(`ocr_*_<part>`, the desktop's `runtime_url_onnxruntime_<platform>`, `onnxruntime_lib_<platform>`) are
+read by Myrme only.
 
 ## 3a. The user manual's assistant chapter (contract 1.4)
 

@@ -124,6 +124,22 @@ pub struct Manifest {
     ///
     /// Read through [`runtime`](Self::runtime), which picks the suffix for the running platform.
     runtimes: std::collections::BTreeMap<String, Runtime>,
+    /// ONNX Runtime's library file inside its archive, by platform suffix (`onnxruntime_lib_<key>`):
+    /// what the OCR opens. The archive itself is `runtime_url_onnxruntime_<key>`.
+    onnxruntime_libs: std::collections::BTreeMap<String, String>,
+    /// The OCR's files, by part (`det`, `rec`, `dict`), from `ocr_<field>_<part>`. Read through
+    /// [`ocr_files`](Self::ocr_files), which gives all three or none.
+    ocr: std::collections::BTreeMap<String, OcrFile>,
+}
+
+/// One file of the OCR tool (Myrme light, 2026-10-20): its local name, where it comes from, and what
+/// it must hash to. Like a runtime archive, an entry without its checksum is not an entry.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct OcrFile {
+    pub name: String,
+    pub url: String,
+    pub sha256: String,
+    pub bytes: Option<u64>,
 }
 
 /// One prebuilt runtime archive: where to get it, and what it must hash to.
@@ -162,6 +178,8 @@ impl Manifest {
         // not kept — see [`Runtime`].
         let mut rt_url: std::collections::BTreeMap<String, String> = Default::default();
         let mut rt_sha: std::collections::BTreeMap<String, String> = Default::default();
+        let mut onnxruntime_libs: std::collections::BTreeMap<String, String> = Default::default();
+        let mut ocr: std::collections::BTreeMap<String, OcrFile> = Default::default();
         // The block currently being parsed. `Some` ⇒ we are inside a `[[models]]` block (so top-level
         // keys no longer apply); a block is committed on the next `[[models]]` or at EOF, when it has
         // at least a name + file. Keys within a block are order-free.
@@ -249,6 +267,23 @@ impl Manifest {
                     k if k.starts_with("runtime_sha256_") => {
                         rt_sha.insert(k["runtime_sha256_".len()..].to_string(), val.to_string());
                     }
+                    k if k.starts_with("onnxruntime_lib_") => {
+                        onnxruntime_libs
+                            .insert(k["onnxruntime_lib_".len()..].to_string(), val.to_string());
+                    }
+                    k if k.starts_with("ocr_") => {
+                        let Some((field, part)) = k["ocr_".len()..].split_once('_') else {
+                            continue;
+                        };
+                        let f = ocr.entry(part.to_string()).or_default();
+                        match field {
+                            "file" => f.name = val.to_string(),
+                            "url" => f.url = val.to_string(),
+                            "sha256" => f.sha256 = val.to_string(),
+                            "bytes" => f.bytes = val.parse().ok(),
+                            _ => {}
+                        }
+                    }
                     _ => {}
                 },
             }
@@ -277,7 +312,32 @@ impl Manifest {
             whisper_better,
             models,
             runtimes,
+            onnxruntime_libs,
+            ocr,
         }
+    }
+
+    /// **The OCR's three files** — detector, recogniser, dictionary, in that order — or none, when the
+    /// catalogue does not pin all three completely (a name, a URL and a checksum each).
+    pub fn ocr_files(&self) -> Vec<OcrFile> {
+        let parts: Vec<OcrFile> = ["det", "rec", "dict"]
+            .iter()
+            .filter_map(|p| self.ocr.get(*p))
+            .filter(|f| !f.name.is_empty() && !f.url.is_empty() && !f.sha256.is_empty())
+            .cloned()
+            .collect();
+        if parts.len() == 3 {
+            parts
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// ONNX Runtime's library file for a platform suffix (e.g. `linux_x64`), inside the archive
+    /// `runtime(&format!("onnxruntime_{key}"))` names. `None` when either is missing.
+    pub fn onnxruntime_lib(&self, key: &str) -> Option<&str> {
+        self.runtime(&format!("onnxruntime_{key}"))?;
+        self.onnxruntime_libs.get(key).map(String::as_str)
     }
 
     /// Every catalogued model's name, in file order — the order the catalogue's author chose,
