@@ -499,6 +499,28 @@ as default for the light version and devices like smartphones"*.
   phone test (formicaria's rule, 2026-10-15); the phone timing run is ready
   (`examples/ocr_page.rs`).
 
+## 2026-10-20 — the mail verdict in words, and a meeting that clashes says so `#method`
+
+**The owner:**
+- *"some wrong words there"*: "the meeting stays at 2026-10-16 16:30" for a meeting already held,
+  raw timestamps, and "left out: not found in the emails as written";
+- *"it put two meetings at the same time in the same day and I had to catch the conflict by
+  myself"*.
+
+**Decision.**
+- **Dates in words** (`when`): "Fri 23 Oct at 16:00".
+- **A meeting that began before the newest email "has taken place"**, by the rule of 0.7.0; one
+  ahead "is still on …".
+- **A dropped answer is said plainly:** "one more possible meeting was not proposed: its words are
+  not in the emails".
+- **A clash** (`clash`) is another meeting starting less than an hour away, among:
+  - each conversation's own meeting, and those linked to it, named by the conversation;
+  - any other meeting note.
+
+  It is added to the verdict, and to the note proposed, as a **Two meetings at once** line, so it
+  is seen before the meeting is accepted. formicaria gives starts, not ends, so the measure is an
+  hour, the same as formicaria's calendar.
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading

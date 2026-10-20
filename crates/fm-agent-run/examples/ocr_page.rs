@@ -27,6 +27,8 @@ fn main() -> Result<(), String> {
     )?;
     println!("opened in {:.2}s", t0.elapsed().as_secs_f64());
     let mut total = 0.0;
+    // `OCR_DUMP=<file>` also writes every page's text there, as JSON keyed by file name.
+    let mut dump = serde_json::Map::new();
     for p in pages {
         let bytes = std::fs::read(p).map_err(|e| format!("{p}: {e}"))?;
         let t = std::time::Instant::now();
@@ -34,6 +36,7 @@ fn main() -> Result<(), String> {
         let secs = t.elapsed().as_secs_f64();
         total += secs;
         let name = Path::new(p).file_name().and_then(|n| n.to_str()).unwrap_or(p);
+        dump.insert(name.to_string(), serde_json::Value::String(page.text.clone()));
         println!(
             "{name:16} {secs:6.2}s  conf {:.2}  {}  {} chars",
             page.confidence,
@@ -42,6 +45,10 @@ fn main() -> Result<(), String> {
         );
     }
     println!("== {} pages, {:.2}s a page", pages.len(), total / pages.len().max(1) as f64);
+    if let Ok(path) = std::env::var("OCR_DUMP") {
+        std::fs::write(&path, serde_json::Value::Object(dump).to_string())
+            .map_err(|e| e.to_string())?;
+    }
     Ok(())
 }
 

@@ -143,6 +143,97 @@ fn day(m: &Meeting) -> String {
     format!("{:04}-{:02}-{:02}", m.day.year(), u8::from(m.day.month()), m.day.day())
 }
 
+/// A note's `start` in words: `2026-10-23T16:00` → `Fri 23 Oct at 16:00`, a day alone → `Fri 23 Oct`.
+/// What the person reads in Collaboration; the stamp itself was the owner's "wrong words"
+/// (2026-10-20).
+pub fn when(stamp: &str) -> String {
+    let (d, t) = stamp.split_once('T').unwrap_or((stamp, ""));
+    let mut it = d.splitn(3, '-').map(|x| x.parse::<i32>().ok());
+    let date = match (it.next().flatten(), it.next().flatten(), it.next().flatten()) {
+        (Some(y), Some(m), Some(dd)) => time::Month::try_from(m as u8)
+            .ok()
+            .and_then(|m| time::Date::from_calendar_date(y, m, dd as u8).ok()),
+        _ => None,
+    };
+    let Some(date) = date else { return stamp.replace('T', " ") };
+    let day = format!(
+        "{} {} {}",
+        &date.weekday().to_string()[..3],
+        date.day(),
+        &date.month().to_string()[..3]
+    );
+    match t.get(..5) {
+        Some(hm) => format!("{day} at {hm}"),
+        None => day,
+    }
+}
+
+/// Minutes since the epoch of a `start` with a time, for telling two meetings apart.
+fn minutes(stamp: &str) -> Option<i64> {
+    let (d, t) = stamp.split_once('T')?;
+    let mut it = d.splitn(3, '-').map(|x| x.parse::<i32>().ok());
+    let (y, m, dd) = (it.next()??, it.next()??, it.next()??);
+    let date =
+        time::Date::from_calendar_date(y, time::Month::try_from(m as u8).ok()?, dd as u8).ok()?;
+    let (h, mi) = t.get(..5)?.split_once(':')?;
+    Some(
+        i64::from(date.to_julian_day()) * 1440
+            + h.parse::<i64>().ok()? * 60
+            + mi.parse::<i64>().ok()?,
+    )
+}
+
+/// **Two meetings at once** (the owner, 2026-10-20: two conversations both kept a meeting on Friday
+/// at 16:00, and *"I had to catch the conflict by myself"*). Another meeting the vault knows that
+/// starts less than an hour from `start` — a conversation's own meeting or one linked to it, named by
+/// the conversation, or any other meeting note — said as words to add to the verdict and the note.
+/// The vault gives starts, not ends, so an hour is the measure. `own` is the conversation being read.
+pub fn clash(start: &str, own: &str, list: &Value) -> Option<String> {
+    let at = minutes(start)?;
+    let near = |s: &str| minutes(s).is_some_and(|m| (m - at).abs() < 60);
+    for conv in list["conversations"].as_array().into_iter().flatten() {
+        let id = conv["id"].as_str().unwrap_or_default();
+        if id == own {
+            continue;
+        }
+        let title =
+            conv["title"].as_str().filter(|t| !t.is_empty()).unwrap_or("another conversation");
+        let theirs = conv["start"]
+            .as_str()
+            .into_iter()
+            .chain(list["linked"][id].as_array().into_iter().flatten().filter_map(Value::as_str));
+        for s in theirs {
+            if near(s) {
+                return Some(format!(
+                    "it clashes with the meeting of \u{201c}{title}\u{201d}, {}",
+                    when(s)
+                ));
+            }
+        }
+    }
+    let other =
+        list["taken"].as_array().into_iter().flatten().filter_map(Value::as_str).find(|s| near(s));
+    other.map(|s| format!("it clashes with another meeting in your calendar, {}", when(s)))
+}
+
+/// The verdict, with the clash after it when there is one.
+fn with_clash(said: String, clashes: &Option<String>) -> String {
+    match clashes {
+        Some(c) => format!("{said} \u{2014} but {c}"),
+        None => said,
+    }
+}
+
+/// A meeting box with the clash written under it, so the proposal shows it before it is accepted.
+fn warned(block: String, clashes: &Option<String>) -> String {
+    let Some(c) = clashes else { return block };
+    // Inside the box, before its closing mark: the box is replaced whole on the next reading.
+    match block.trim_end().rsplit_once('\n') {
+        Some((head, end)) => format!("{head}\n> **Two meetings at once:** {c}.\n{end}\n"),
+        None => block,
+    }
+}
+
 /// Put the block at the top, or replace the one already there.
 fn with_block(body: &str, block: &str, model: &str) -> String {
     if body.contains(&fm_agent::adjunct::open_mark(TAG, model)) {
@@ -247,7 +338,9 @@ impl<V: VaultAccess> Agent<V> {
             // What it made of the conversation, in words, for Collaboration (`mail_heard`).
             let mut verdict: Vec<String> = Vec::new();
             if let Some(m) = &plan.conversation {
-                let new_body = with_block(&body, &block(m, &self.model), &self.model);
+                let clashes = clash(&m.start_stamp(), id, &list);
+                let new_body =
+                    with_block(&body, &warned(block(m, &self.model), &clashes), &self.model);
                 // A new time also lifts an earlier call-off: the meeting is on again.
                 let mut props = json!({
                     "start": m.start_stamp(),
@@ -264,8 +357,10 @@ impl<V: VaultAccess> Agent<V> {
                 self.fm.propose_with(id, &new_body, &props, &who, &email, &origin)?;
                 now_proposed.insert(m.start_stamp());
                 made += 1;
-                verdict
-                    .push(format!("proposes the meeting at {}", m.start_stamp().replace('T', " ")));
+                verdict.push(with_clash(
+                    format!("proposes the meeting on {}", when(&m.start_stamp())),
+                    &clashes,
+                ));
             }
             if let Some(m) = &plan.cancel {
                 // Marked, never deleted — the calendars' rule: the person may have written in the note,
@@ -294,9 +389,17 @@ impl<V: VaultAccess> Agent<V> {
             }
             for m in &plan.new {
                 let quote = fm_agent::adjunct::defang(&m.quote, TAG).replace('\n', " ");
+                let clashes = clash(&m.start_stamp(), id, &list);
+                let warning = clashes
+                    .as_deref()
+                    .map(|c| format!("\n> [!warning] Two meetings at once: {c}.\n"))
+                    .unwrap_or_default();
                 let body = format!(
-                    "> [!note] Meeting found by the assistant\n> «{quote}»\n\nFrom the conversation [{title}](note:{id}).\n"
+                    "> [!note] Meeting found by the assistant\n> «{quote}»\n{warning}\nFrom the conversation [{title}](note:{id}).\n"
                 );
+                if let Some(c) = &clashes {
+                    verdict.push(format!("the meeting on {} — {c}", when(&m.start_stamp())));
+                }
                 let mut note = json!({
                     "title": m.title,
                     "body": body,
@@ -313,21 +416,28 @@ impl<V: VaultAccess> Agent<V> {
             }
             mem.seen.insert(id.to_string(), (last.to_string(), now_proposed));
             mem.save(memory);
+            // In words a person reads (the owner, 2026-10-20: *"some wrong words there"* — a meeting
+            // that "stays at" a time already gone, and timestamps).
             let mut said = if verdict.is_empty() {
                 match conv["start"].as_str() {
-                    Some(s) => format!(
-                        "nothing to change \u{2014} the meeting stays at {}",
-                        s.replace('T', " ")
+                    // Begun before the newest email: it took place, and that email changed nothing.
+                    Some(s) if s.get(..16).unwrap_or(s) < last.get(..16).unwrap_or(last) => {
+                        format!("no change \u{2014} the meeting on {} has taken place", when(s))
+                    }
+                    Some(s) => with_clash(
+                        format!("no change \u{2014} the meeting is still on {}", when(s)),
+                        &clash(s, id, &list),
                     ),
-                    None => "no meeting in it".to_string(),
+                    None => "no meeting mentioned".to_string(),
                 }
             } else {
                 verdict.join("; ")
             };
             if dropped > 0 {
-                said.push_str(&format!(
-                    " ({dropped} left out: not found in the emails as written)"
-                ));
+                said.push_str(&match dropped {
+                    1 => " (one more possible meeting was not proposed: its words are not in the emails)".to_string(),
+                    n => format!(" ({n} more possible meetings were not proposed: their words are not in the emails)"),
+                });
             }
             self.fm.mail_heard(id, new_title.as_deref().unwrap_or(title), last, &said);
             return Ok(Some(format!(
@@ -439,6 +549,8 @@ mod tests {
         heard: RefCell<Vec<(String, String)>>,
         /// The conversation's meeting already on the agenda, if any.
         start: Option<&'static str>,
+        /// Other conversations in the mailbox, with their meetings.
+        others: Option<Value>,
     }
     const BODY: &str = "### Maria — 2026-10-06 09:12\n\nCi vediamo giovedì alle 15 in aula 3.\n\n\
                         ### Luca — 2026-10-07 11:00\n\nE il 28 alle 10 facciamo il punto.\n";
@@ -478,10 +590,13 @@ mod tests {
         fn activity_done(&self, _: &str) {}
         fn present(&self, _: &str, _: Option<&crate::ImageReader>) {}
         fn mail_conversations(&self) -> Result<Value, String> {
-            Ok(json!({
-                "conversations": [{ "id": "C1", "title": "Revisione", "last": "2026-10-07T11:00", "start": self.start }],
-                "taken": [], "linked": {}
-            }))
+            let mut conversations = vec![
+                json!({ "id": "C1", "title": "Revisione", "last": "2026-10-07T11:00", "start": self.start }),
+            ];
+            if let Some(Value::Array(o)) = &self.others {
+                conversations.extend(o.iter().cloned());
+            }
+            Ok(json!({ "conversations": conversations, "taken": [], "linked": {} }))
         }
         fn mail_heard(&self, note: &str, _title: &str, _latest: &str, said: &str) {
             self.heard.borrow_mut().push((note.to_string(), said.to_string()));
@@ -556,13 +671,16 @@ mod tests {
         let a = agent();
         let llm = Canned(ANSWER.into(), RefCell::new(0));
         let said = a.meeting_pass(&llm, &mem, date!(2026 - 10 - 06)).unwrap().unwrap();
-        assert!(said.contains("2 proposal(s)") && said.contains("1 left out"), "{said}");
+        assert!(
+            said.contains("2 proposal(s)") && said.contains("one more possible meeting"),
+            "{said}"
+        );
         let heard = a.fm.heard.borrow();
         assert_eq!(heard.len(), 1);
         assert_eq!(heard[0].0, "C1");
         assert!(
             heard[0].1.starts_with(
-                "proposes the meeting at 2026-10-08 15:00; proposes one more meeting (1 left out"
+                "proposes the meeting on Thu 8 Oct at 15:00; proposes one more meeting (one more possible meeting"
             ),
             "the person is told what was proposed, in words: {}",
             heard[0].1
@@ -587,6 +705,68 @@ mod tests {
     /// 16:00 next Friday" (2026-10-16) was read within a minute and rightly proposed nothing, and the
     /// owner, seeing nothing in Collaboration, took it for the mail never having been read.
     #[test]
+    fn a_start_is_said_in_words() {
+        assert_eq!(when("2026-10-23T16:00"), "Fri 23 Oct at 16:00");
+        assert_eq!(when("2026-10-23"), "Fri 23 Oct");
+        assert_eq!(when("not a date"), "not a date");
+    }
+
+    #[test]
+    fn a_meeting_within_the_hour_of_another_is_a_clash() {
+        let list = json!({
+            "conversations": [
+                {"id": "A", "title": "Li Shuhan", "start": "2026-10-23T16:00"},
+                {"id": "B", "title": "Siyu Hou", "start": "2026-10-23T16:00"},
+                {"id": "C", "title": "Chen Tingyu", "start": "2026-10-30T17:00"}
+            ],
+            "linked": {"C": ["2026-10-24T10:00"]},
+            "taken": ["2026-10-27T09:30"]
+        });
+        // The owner's case: two conversations, one Friday at 16:00.
+        let c = clash("2026-10-23T16:00", "B", &list).unwrap();
+        assert!(c.contains("Li Shuhan") && c.contains("Fri 23 Oct at 16:00"), "{c}");
+        assert!(clash("2026-10-23T16:45", "B", &list).is_some(), "under an hour apart");
+        assert!(clash("2026-10-23T17:00", "B", &list).is_none(), "an hour apart is not a clash");
+        assert!(clash("2026-10-23T16:00", "Z", &list).is_some());
+        assert!(clash("2026-10-30T17:00", "C", &list).is_none(), "its own meeting is not a clash");
+        assert!(clash("2026-10-24T10:30", "A", &list).unwrap().contains("Chen Tingyu"), "linked");
+        assert!(clash("2026-10-27T09:00", "A", &list).unwrap().contains("calendar"), "any meeting");
+        assert!(clash("2026-10-23", "A", &list).is_none(), "a day with no time");
+    }
+
+    #[test]
+    fn a_meeting_kept_that_clashes_says_so_and_one_already_held_is_said_as_held() {
+        let mem = scratch();
+        let llm = Canned("[]".into(), RefCell::new(0));
+        let a = Agent {
+            fm: MailVault {
+                start: Some("2026-10-23T16:00"),
+                others: Some(
+                    json!([{"id": "C2", "title": "Siyu Hou", "start": "2026-10-23T16:00"}]),
+                ),
+                ..Default::default()
+            },
+            ..agent()
+        };
+        a.meeting_pass(&llm, &mem, date!(2026 - 10 - 16)).unwrap();
+        let said = a.fm.heard.borrow()[0].1.clone();
+        assert!(
+            said.contains("is still on Fri 23 Oct at 16:00 \u{2014} but it clashes with"),
+            "{said}"
+        );
+        assert!(said.contains("Siyu Hou"), "{said}");
+
+        let mem = scratch();
+        let a = Agent {
+            fm: MailVault { start: Some("2026-10-01T09:00"), ..Default::default() },
+            ..agent()
+        };
+        a.meeting_pass(&llm, &mem, date!(2026 - 10 - 16)).unwrap();
+        let said = a.fm.heard.borrow()[0].1.clone();
+        assert_eq!(said, "no change \u{2014} the meeting on Thu 1 Oct at 09:00 has taken place");
+    }
+
+    #[test]
     fn a_reply_that_changes_nothing_is_still_reported() {
         let mem = scratch();
         let a = Agent {
@@ -600,7 +780,7 @@ mod tests {
             *a.fm.heard.borrow(),
             vec![(
                 "C1".to_string(),
-                "nothing to change \u{2014} the meeting stays at 2026-10-23 16:00".to_string()
+                "no change \u{2014} the meeting is still on Fri 23 Oct at 16:00".to_string()
             )]
         );
     }
