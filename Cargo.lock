@@ -739,7 +739,7 @@ dependencies = [
 
 [[package]]
 name = "fm-agent"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "libc",
  "serde_json",
@@ -749,7 +749,7 @@ dependencies = [
 
 [[package]]
 name = "fm-agent-run"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "clap",
  "flate2",

@@ -102,6 +102,21 @@ On the 66 items the LLM was asked about (0.21 s an item, laptop CPU):
 - **The never-seen 6% needs another reader** (a rotation, or the vision model where there is one).
   No vocabulary reaches it.
 
+### 3b. The rotation retry, timed (2026-10-20)
+
+On the laptop CPU, a page a time:
+
+| Pages | Upright only | With the retry |
+|---|---|---|
+| Handwritten (30) | 0.46 s | 1.77 s |
+| Packet photos (60) | 0.46 s | 1.32 s |
+| Typed (30) | 0.68 s | 0.67 s |
+
+**Every handwritten page reads "weak", so it was read four times** before going to the vision model
+anyway. It was left out of Myrme 0.7.1 and kept as a patch
+(`~/bench-scratch/labels-tools/ocr-rotation.patch`). For 0.8.0, it should run only for a label, or
+use an orientation model.
+
 ## 4. The vocabulary: sources and licences (checked 2026-10-20)
 
 | Source | What | Languages | Licence, when compiled into the app |

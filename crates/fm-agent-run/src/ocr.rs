@@ -36,47 +36,11 @@ pub struct Page {
     pub confidence: f32,
 }
 
-/// A reading this short is worth trying the other way up even when it is confident: a page upside
-/// down came back as 67 characters of junk at 0.98 (a can's ingredients, 2026-10-20).
-pub const SHORT: usize = 40;
-
 impl Page {
     /// Whether this reading stands on its own (see [`CONFIDENT`]).
     pub fn confident(&self) -> bool {
         !self.text.trim().is_empty() && self.confidence >= CONFIDENT
     }
-
-    /// How much was read, and how surely: its characters (spaces aside) times its confidence. What
-    /// the orientations of one picture are compared by.
-    pub fn score(&self) -> f32 {
-        self.text.chars().filter(|c| !c.is_whitespace()).count() as f32 * self.confidence
-    }
-
-    /// Whether to try the picture turned: an unsure or a short reading.
-    fn weak(&self) -> bool {
-        !self.confident() || self.text.chars().filter(|c| !c.is_whitespace()).count() < SHORT
-    }
-}
-
-/// **Which way up.** A photo taken sideways reads as little or nothing (a can photographed on its
-/// side: 25 characters at 0.59). So a weak upright reading is tried turned a quarter, a half and
-/// three quarters, and a turn is kept only when it reads clearly more ([`Page::score`], by half
-/// again): a handwritten page, weak every way, stays upright.
-pub fn best_turn(
-    upright: Page,
-    mut turned: impl FnMut(u16) -> Result<Page, String>,
-) -> Result<Page, String> {
-    if !upright.weak() {
-        return Ok(upright);
-    }
-    let mut best = upright.clone();
-    for quarter in [90, 180, 270] {
-        let page = turned(quarter)?;
-        if page.score() > best.score() {
-            best = page;
-        }
-    }
-    Ok(if best.score() > upright.score() * 1.5 { best } else { upright })
 }
 
 /// Something that reads a page image into text with a confidence — the OCR, or a test's fake.
@@ -225,36 +189,23 @@ impl ReadPage for PpOcr {
             .map_err(|e| format!("cannot decode the image: {e}"))?
             .to_rgb8();
         let engine = self.engine.lock().map_err(|_| "the OCR failed earlier".to_string())?;
-        let upright = read_rgb(&engine, page.clone())?;
-        best_turn(upright, |quarter| {
-            let turned = match quarter {
-                90 => image::imageops::rotate90(&page),
-                180 => image::imageops::rotate180(&page),
-                _ => image::imageops::rotate270(&page),
-            };
-            read_rgb(&engine, turned)
-        })
+        let result = engine.predict(vec![page]).map_err(|e| format!("the OCR failed: {e}"))?;
+        let mut pieces = Vec::new();
+        for r in result.first().map(|r| r.text_regions.as_slice()).unwrap_or_default() {
+            if let Some((text, conf)) = r.text_with_confidence() {
+                let ys = r.bounding_box.points.iter().map(|p| p.y);
+                let top = ys.clone().fold(f32::MAX, f32::min);
+                let bottom = ys.fold(f32::MIN, f32::max);
+                let left = r.bounding_box.points.iter().map(|p| p.x).fold(f32::MAX, f32::min);
+                pieces.push(Piece { top, bottom, left, text: text.to_string(), conf });
+            }
+        }
+        Ok(reading_order(pieces))
     }
 
     fn model(&self) -> &str {
         "PP-OCRv6 small"
     }
-}
-
-#[cfg(feature = "ocr")]
-fn read_rgb(engine: &oar_ocr::oarocr::OAROCR, page: image::RgbImage) -> Result<Page, String> {
-    let result = engine.predict(vec![page]).map_err(|e| format!("the OCR failed: {e}"))?;
-    let mut pieces = Vec::new();
-    for r in result.first().map(|r| r.text_regions.as_slice()).unwrap_or_default() {
-        if let Some((text, conf)) = r.text_with_confidence() {
-            let ys = r.bounding_box.points.iter().map(|p| p.y);
-            let top = ys.clone().fold(f32::MAX, f32::min);
-            let bottom = ys.fold(f32::MIN, f32::max);
-            let left = r.bounding_box.points.iter().map(|p| p.x).fold(f32::MAX, f32::min);
-            pieces.push(Piece { top, bottom, left, text: text.to_string(), conf });
-        }
-    }
-    Ok(reading_order(pieces))
 }
 
 #[cfg(test)]
@@ -275,39 +226,6 @@ mod tests {
         ]);
         assert_eq!(page.text, "A page\nhello world");
         assert!((page.confidence - 0.985).abs() < 1e-4);
-    }
-
-    fn page(text: &str, confidence: f32) -> Page {
-        Page { text: text.into(), confidence }
-    }
-
-    #[test]
-    fn a_weak_reading_is_tried_turned_and_a_clearly_better_turn_is_kept() {
-        let long = "Ingredients: Carbonated Water, Sugar, Colour (Caramel E150d), Acid";
-        // Sideways: little read upright; a quarter turn reads the list, a half turn reads junk surely.
-        let got = best_turn(page("spar drt r Dvlith", 0.59), |q| {
-            Ok(match q {
-                270 => page(long, 0.92),
-                180 => page("0078 ee Best beto", 0.98),
-                _ => page("", 0.0),
-            })
-        })
-        .unwrap();
-        assert_eq!(got.text, long);
-        // A confident, full reading is not turned at all.
-        let typed = "A full typed page of text, read surely, with more than forty characters.";
-        let mut tried = false;
-        best_turn(page(typed, 0.99), |_| {
-            tried = true;
-            Ok(page("", 0.0))
-        })
-        .unwrap();
-        assert!(!tried);
-        // Handwriting, weak every way, stays upright unless a turn reads half as much again.
-        let hand = page("the quick brwn fox jumpd over the lazy dog", 0.8);
-        let got =
-            best_turn(hand.clone(), |_| Ok(page("the quick brown fox jumped over", 0.85))).unwrap();
-        assert_eq!(got, hand);
     }
 
     #[test]
