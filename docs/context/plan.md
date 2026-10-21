@@ -1,7 +1,8 @@
 # Myrme — the plan (2026-10-18)
 
 > **A plan, not a ruling.** The rulings it asks for go in `decisions.md` when the owner makes them.
-> Evidence is in `../research/` (three reports, 2026-10-18). Status lines are updated as work lands.
+> Evidence is in `../research/`: dated reports from 2026-10-18 on, each listed in `overview.md`'s
+> router by what it covers. Status lines are updated as work lands.
 
 ## The owner's direction
 
@@ -63,7 +64,7 @@ The order is the rough priority. "Today" means already shipped inside formicaria
 |---|---|---|---|
 | M1 | **Meetings from mail** | ✅ the model points, Rust reads dates | **ICS first.** A `text/calendar` part settles invites, moves and call-offs with no model. Then Rust dates, then the LLM pointing under a span grammar. Later, a GLiNER2-class encoder for intent and entities |
 | M2 | **Research** | ✅ `/search`, `/research` | **local-deep-researcher's fixed loop**, plus main-content extraction, BM25 plus a small embedder, and **a Rust check that every cited span exists in its source** |
-| M3 | **Image → text** | ✅ LFM2.5-VL-450M on the phone | **Route by content.** Printed text: PP-OCRv5 (ONNX, ~20 MB), escalating to the VLM only on low confidence. Math crops: PP-FormulaNet-S or Texo. Handwriting: VLM. Needs a 50-image eval from the owner's notes first |
+| M3 | **Image → text** | ✅ printed pages by an OCR (PP-OCRv6 small) first, not on Windows yet; the rest by the vision model, Qwen3.5-0.8B on the phone (Myrme 0.7.0) | **Route by content.** Printed text: PP-OCRv5 (ONNX, ~20 MB), escalating to the VLM only on low confidence. Math crops: PP-FormulaNet-S or Texo. Handwriting: VLM. Needs a 50-image eval from the owner's notes first |
 | M4 | **Audio → text, dictation** | ✅ whisper, any language | Add **VAD** (Silero) in front. Try **Moonshine** for live English dictation; whisper stays for multilingual |
 | M5 | **Note edits** | ✅ `/propose` | Output constrained to `{edits:[{op, anchor, old, new, reason}]}`, never a whole-note rewrite |
 | M6 | **Food from a sentence** | ❌ (the tracker exists in fm, no assistant path) | An encoder for `food, quantity, unit` spans, rules for numbers, then a lookup through formicaria's own food tool via `dispatch`. **The portion-defaults table matters more than the model** |
@@ -90,6 +91,9 @@ specialist joins `models.toml` with its size and licence.
 |---|---|
 | Phone (≤1.2B) | LFM2.5-1.2B, Granite-4.0-1B, xLAM-2-1b |
 | Laptop (3–8B) | Qwen3-4B-Instruct-2507 (87.9 single-call), xLAM-2-3b/8b (best multi-turn) |
+
+**Chosen, by measurement (`models.toml`):** the laptop runs `qwen3-vl-4b` (Q4_K_M); the phone runs
+`qwen3.5-0.8b` (Q4_0) and nothing else, since 2026-10-20 (`decisions.md`).
 
 **Licences to avoid:** CC-BY-NC weights (GLiNER v0/v1, jina rerankers), NuExtract-4B, and
 Moonshine's legacy non-English weights.
@@ -199,9 +203,11 @@ phone; not Windows yet). GLiNER and e5 were measured and dropped: one tool per s
 aim. Still open: the OCR's time on the phone (`examples/ocr_page.rs` is the run).
 
 **Next, by what the evals show matters most:**
-1. **Handwriting on the phone.** The phone's vision model cannot read handwriting (82.7% median WER).
-   Try a dedicated reader (PaddleOCR-VL, or printed-text OCR first). This adds a runtime, so it needs
-   a `decisions.md` entry.
+1. **Handwriting on the phone.** Since 2026-10-20 the phone's Qwen3.5-0.8B reads it at about 44%
+   word error (the 450M before it, 96%), at a median 28 s a page on the phone; the OCR does not read
+   it (61.3%, never confident). A better handwriting reader is still to find
+   (`../research/2026-10-20-small-model-benchmark-summary.md` §5). ONNX Runtime ships since 0.7.0,
+   so a reader on it adds no runtime.
 2. **Italian speech** with `ggml-base` (36.1% WER). Decide whether *better listening* is suggested by
    language, and measure the owner's own recordings.
 3. The items below.
@@ -211,7 +217,8 @@ In order, each gated on its eval beating today's behaviour:
 
 1. M1 ICS-first
 2. M2 research loop with checked citations
-3. M3 OCR routing (adds ONNX Runtime; a `decisions.md` entry, since it widens what ships)
+3. M3 OCR routing — ✅ for printed pages (Myrme 0.7.0, ONNX Runtime, `decisions.md` 2026-10-20);
+   math crops not started
 4. M6 food from a sentence
 5. M4 VAD and dictation
 
@@ -273,10 +280,23 @@ On branch `myrme-cutover` (worktree `~/fm-myrme`, local only):
   formicaria's NDK; it was not run with a model, because the emulator is x86_64 and the runtime is
   arm64.
 - **Contract 2.0 (next breaking release):** remove the 1.0 items nothing uses (`contract.md`).
-- **Speed study** (2026-10-19; the phone's faster default and accurate choice adopted, layouts still
-  the mail layout per model): `docs/research/2026-10-19-speed.md`,
-  measured on the owner's Dimensity 7300 phone and the laptop. Its §4 lists the owner's decisions
-  (phone quant Q4_K_M, KleidiAI, prompt layout, Qwen3.5-0.8B for text); §5 is the resume plan.
+- **Speed study** (2026-10-19): `docs/research/2026-10-19-speed.md`, measured on the owner's
+  Dimensity 7300 phone and the laptop. Its §4 lists the measures; §5 is the resume plan.
+  **Status 2026-10-20:** the shared mail prompt is adopted for `qwen3-vl-4b` only
+  (`shared_mail_prompt`); the phone's 450M at Q4_K_M was the default for a day, then the phone moved
+  to Qwen3.5-0.8B at Q4_0 alone (`decisions.md`, 2026-10-19 and 2026-10-20). KleidiAI's accuracy is
+  still unmeasured.
+- **Below Q4_0** (`docs/research/2026-10-21-low-bit.md`). **Status 2026-10-22: answered, Q4_0
+  stays.** No Qwen3.5-0.8B quant below Q4_0 is faster on the laptop CPU: Q3_K_M ties it at writing
+  and reads slower, every lower quant reads and writes slower, and the 2-bit recipes collapse on the
+  long-answer eval. The laptop GPU numbers were unusable (the laptop was on battery). Nothing adopted.
+- **Faster engines.** **Status 2026-10-22:** the owner rejected the alternative engines on long-term
+  maintainability: ik_llama.cpp; T-MAC (last commit 2025-06, pins a personal llama.cpp fork and
+  TVM); bitnet.cpp (a personal fork, ternary-trained models only). DeepSeek's DeepInfer is
+  datacenter-only (SM100 or Ascend, one model). The path kept is **upstream llama.cpp**:
+  settings first (saving the prompt state with `--slot-save-path`, speculative decoding), then small
+  patches upstream could take (a trimmed output vocabulary, scoring only the tokens the grammar
+  allows). Nothing measured yet; nothing adopted.
 - **No copy in formicaria** (Myrme 0.5.0, contract 1.4, 2026-10-19): the manual's assistant chapter
   and the phone's runtime pins are read from Myrme. formicaria 0.9.3, the first release on the
   cutover, links 0.4.1 and is published for every platform.
@@ -292,7 +312,8 @@ From then on:
 
 ## Hand-off: what is the owner's (2026-10-18)
 
-1. **Merge `myrme-cutover` into formicaria `main`** for the next release.
+1. **Merge `myrme-cutover` into formicaria `main`** for the next release. ✅ Merged 2026-10-18
+   (above); formicaria has linked a Myrme release by tag since 0.9.3.
    - It is in the worktree `~/fm-myrme`, local and not pushed, at `v0.1.2`.
    - It is five commits, **rebased onto `main` at `f7f08ab`** (the only conflict was both sides
      appending to `decisions.md`, resolved by keeping both).

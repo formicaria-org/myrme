@@ -13,8 +13,8 @@ same pieces staged by hand in a checkout, which the app then prefers.
 ## Get a model
 
 ```
-pixi run fetch-model              # the default (lightest) model from models.toml
-pixi run fetch-model lfm2.5-1.2b  # a named model
+pixi run fetch-model              # the catalogue's `default`, the laptop's model (qwen3-vl-4b)
+pixi run fetch-model qwen3.5-0.8b # a named model: here the phone's, the lightest default
 ```
 
 This downloads a pinned prebuilt `llama-server` into `runtime/` and the chosen GGUF into `models/`
@@ -34,11 +34,14 @@ pixi run agent-serve -- --searxng-port 8888   # the agent: model (warm) + @name 
 Then **in any discussion in the app**, mention the agent:
 
 ```
-@lfm2.5-1.2b does mRNA change DNA? /search
+@Myrme does mRNA change DNA? /search
 ```
 
-It replies in the thread. Commands: `/search` (web), `/propose` (in a note's discussion, draft an
-edit — it lands as a reviewable proposal branch, never `main`). Everything goes through fm-serve's
+`@Myrme` asks the copy on the device the message was written on; `@Myrme·phone` asks one by name,
+and the model's own name still works. It replies in the thread. Commands: `/search` (web),
+`/research` (grounded research), `/propose` (in a note's discussion, draft an edit — it lands as a
+reviewable proposal branch, never `main`), `/transcribe` (images and recordings in the note),
+`/recipe` (`/ricetta`). Everything goes through fm-serve's
 API, so there is **no second store**; the agent's messages + proposals appear in the app instantly.
 
 For a terminal chat against a specific note instead:
@@ -60,6 +63,7 @@ pixi run agent-chat -- --note <ULID> --searxng-port 8888
 
 ## The philosophy
 
-**The smallest model that does the job.** `models.toml` names one default per kind of device, each
-chosen by measurement on that device (`agents/bench/results.md`). Changing a default is a
+**The smallest model that does the job.** The catalogue (`crates/fm-agent-run/models.toml`) names one
+default per kind of device, each chosen by measurement on that device (`agents/bench/results.md`,
+the method evals and `docs/research/2026-10-20-small-model-benchmark-summary.md`). Changing a default is a
 decision: after an update the app offers the new model and never downloads it unasked.

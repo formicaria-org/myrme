@@ -7,7 +7,7 @@ and kept so that decision is a re-run, not a re-argument.
 
 **Where the results live (all measured, all in-repo):**
 - **`results.md`** — the raw per-case blocks, one per run (throughput, RSS, VRAM, MemAvailable, per-case quality). Newest first.
-- **`../../docs/context/device-resources.md`** — the per-model resource-cost matrix + device specs.
+- **formicaria's `docs/context/device-resources.md`** (`../../../formicaria/docs/context/` in the side-by-side checkout) — the per-model resource-cost matrix + device specs; it stayed in formicaria at the split.
 - **`resource-report.html`** — a self-contained, offline-openable visual report of the full sweep (open in a browser; no external assets). Regenerate it from the two files above when new runs are added.
 
 ## What it measures
@@ -18,7 +18,7 @@ deterministically — not just counts). Around the run it samples the model proc
 **VRAM** (GPU), and **MemAvailable** (so a phone block proves the admission gate had room).
 
 The quality checks by case type (`check` field), grounded in agentic-eval methodology (BFCL for
-tool-calls, FACTS/RAGAS-style faithfulness — see `docs/context/model-selection-research-2026-07-24-grounded.md`):
+tool-calls, FACTS/RAGAS-style faithfulness — see formicaria's `docs/context/model-selection-research-2026-07-24-grounded.md`):
 - **`research`** — VERIFIES grounding: each `> quote` must be a **verbatim substring of the source its
   claim cited** (the case carries structured `sources` to match against). Reports `N claims /
   **V/Q verbatim** / MIS-CITED / HALLUCINATED-quote`. A model that emits quote-*shaped* lines it did
@@ -83,5 +83,6 @@ are not universal**, and assuming one config fits all is how a fair model gets a
 - `enable_thinking:false` is **harmlessly ignored** by templates that don't use it (lfm2.5, Llama-3.2).
   Do not assume the reverse — a new model may need its own knob. When a result looks broken, suspect the
   template/config before the model.
-- **To actually ship a thinking model**, the app's `OpenAiStep` (`crates/fm-agent/src/openai.rs`) needs
-  the same handling, or it hits the identical empty-answer bug.
+- **To ship a thinking model**, give its catalogue entry `thinking = false`: the runner then starts
+  `llama-server` with `--chat-template-kwargs {"enable_thinking":false}` (`manifest.rs`). The phone's
+  `qwen3.5-0.8b` ships that way; without it, it thinks by default and hits the empty-answer bug.

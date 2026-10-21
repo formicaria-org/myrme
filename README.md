@@ -48,4 +48,4 @@ formicaria's own app starts and supervises Myrme itself when the assistant is tu
 ## Licence
 
 MIT. The model weights Myrme downloads carry their own licences, which are stated before anything
-is fetched (`agents/models.toml`).
+is fetched (`crates/fm-agent-run/models.toml`).

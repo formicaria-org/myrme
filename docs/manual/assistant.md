@@ -113,8 +113,8 @@ assistant is developed in its own repository,
 In a Myrme checkout:
 
 ```sh
-pixi run fetch-model              # the lightest default from the catalogue
-pixi run fetch-model lfm2.5-1.2b  # a specific, better one (recommended for research)
+pixi run fetch-model              # the catalogue's default, the laptop's model (qwen3-vl-4b)
+pixi run fetch-model lfm2.5-1.2b  # a specific one: here the lighter, text-only choice
 ```
 
 Then link or copy its `agents/runtime` and `agents/models` into this checkout's `agents/`, and run
@@ -165,8 +165,8 @@ keyless local proxy instead, which does reach the general web:
 
 ### On Android
 
-The assistant runs **on the phone itself** — the model is bundled in the app and downloads its
-weights on first enable.
+The assistant runs **on the phone itself** — the runtime is bundled in the app, and the model is
+downloaded on first enable.
 
 1. **Build and install the app** (from the project directory, with the Android toolchain set up via
    `pixi run android-init`):
@@ -180,7 +180,7 @@ weights on first enable.
    (`adb install -r mobile/formicaria-dev-android-arm64.apk`, or copy it across and open it). A **notes-only build** that contains none of the assistant is the default when built
    `--no-default-features` — so people who only want the notebook can ship a lighter app.
 
-2. **First launch** downloads the model (~150 MB–700 MB depending on the model) over your connection,
+2. **First launch** downloads the model (`qwen3.5-0.8b`, about 0.71 GB with its picture reader) over your connection,
    shown by a persistent "study assistant" notification. It resumes if interrupted, and only happens
    once. After that the assistant is ready and runs offline.
 

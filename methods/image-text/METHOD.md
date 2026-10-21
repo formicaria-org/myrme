@@ -12,8 +12,13 @@ the main model if it can see, else nobody (`Agent::image_reader`, formicaria `de
 
 ## Pipeline
 
-1. The image bytes go to the reader with `prompts::IMAGE_INSTRUCTION`, or the model's own
-   `read_prompt` from `agents/models.toml`.
+0. **The OCR reads first** (since Myrme 0.7.0: PP-OCRv6 small on ONNX Runtime, `fm-agent-run`'s
+   `ocr.rs`, on Linux, macOS and the phone; not on Windows yet). Its text stands when its confidence
+   is at least `ocr::CONFIDENT` (0.97), or when there is no vision model; the note then names the OCR.
+   Otherwise step 1 reads the page. The OCR gives plain lines, so a printed table or code block comes
+   back as lines of text.
+1. The image bytes go to the vision reader with `prompts::IMAGE_INSTRUCTION`, or the model's own
+   `read_prompt` from the catalogue (`crates/fm-agent-run/models.toml`).
 2. The transcript is inserted after the image as a provenance-marked block (`adjunct`). The block is
    insertion-only and idempotent per (image, reader, model).
 
@@ -27,7 +32,7 @@ the main model if it can see, else nobody (`Agent::image_reader`, formicaria `de
 |---|---|---|---|---|
 | qwen3-vl-4b, projector on the CPU, uncapped | — | 0/30 | — | every page over the 120 s limit |
 | **qwen3-vl-4b, `image_max_tokens = 1024`** (the catalogue now) | **17.9%** | **24/30** | 29.0% | ≈35 s a page |
-| lfm2.5-vl-450m (the phone), house instruction | 82.7% | 8/30 | 95.6% | ≈5 s |
+| lfm2.5-vl-450m (the phone until 2026-10-20), house instruction | 82.7% | 8/30 | 95.6% | ≈5 s |
 | lfm2.5-vl-450m, its catalogue instruction | 96.4% | 9/30 | 155.5% (9 pages loop) | ≈3 s |
 
 **Decided on these numbers:**
@@ -38,10 +43,18 @@ the main model if it can see, else nobody (`Agent::image_reader`, formicaria `de
   dedicated-reader work in Phase C (PaddleOCR-VL or a printed-text OCR first,
   `docs/research/2026-10-18-dedicated-methods-per-task.md`), not something to prompt away.
 
+**Since then (2026-10-20):**
+- **The OCR, through the install path** (`crates/fm-agent-run/tests/live_ocr.rs`, laptop CPU):
+  30 typed pages at 0.8% word error, all 30 confident, ≈1 s a page; these 30 handwritten pages at
+  61.3%, none confident, so every handwritten page goes to the vision model.
+- **The phone reads with Qwen3.5-0.8B**, image tokens capped at 1024: about 43% word error on these
+  handwritten pages and 2.3% on typed ones; on the phone, a median 28 s a page
+  (`docs/research/2026-10-20-small-model-benchmark-summary.md` §5).
+
 `agents/bench/vision/` holds the earlier typed-note fixtures and their results.
 
 ## Planned (Phase C)
 
-- Route by content. Printed text goes to PP-OCRv5 first, escalating to the vision model only when
-  confidence is low; math crops go to a formula model.
-- This adds ONNX Runtime, which widens what ships and needs its own `decisions.md` entry.
+- Printed text by the OCR first is done (Myrme 0.7.0, `docs/context/decisions.md` 2026-10-20, which
+  also added ONNX Runtime). Still planned: math crops to a formula model, and a better reader for
+  handwriting on the phone.

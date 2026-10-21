@@ -16,15 +16,23 @@ it).
 2. **One model call, held to `meetings::answer_schema()`**:
    - the instruction is `prompts::MEETINGS_INSTRUCTION`;
    - the conversation, cut from the front to fit the window, is `meetings::user_prompt`;
+   - the layout is the model's (`meetings::prompt`): a model with `shared_mail_prompt` in the
+     catalogue (today `qwen3-vl-4b`) gets one system prompt shared with the title call, so that
+     call reuses the cached emails; the others get the instruction alone;
    - the answer is a list of `{status, quote, title, date, time, end, place}`.
 3. **Rust checks and dates each item** (`meetings::resolve`):
    - the quote must be in the emails;
    - the date is read in that sentence, or earlier in the same email, counted from the day that
      email was sent;
    - the time is read only in that sentence;
-   - a meeting that is already past is dropped.
+   - a meeting that is already past is dropped, and so is one that began before the newest email
+     was sent (since Myrme 0.7.0).
 4. **The plan** (`meetings::plan`) decides what to propose. The person accepts or rejects each
    proposal.
+5. **The verdict in words** (`fm-agent-run`'s `meetings.rs`, since Myrme 0.7.1): the mail panel's
+   sentence names the day and time ("the meeting is still on Fri 23 Oct at 16:00", "has taken
+   place"). A meeting kept or proposed that starts less than an hour from another meeting in the
+   calendar says it clashes, in the verdict and in the note proposed (`meetings::clash`).
 
 The prompt lives in `crates/fm-agent/src/prompts.rs`. This file describes the method; the Rust is
 the authority on what runs.
@@ -48,7 +56,8 @@ explains the scoring.
 |---|---|---|
 | qwen3-4b-2507 | 10/17 | **17/17** |
 | qwen3-vl-4b, the laptop default | 15/17 | **15/17**, about 4× faster |
-| lfm2.5-vl-450m, the phone default | 6/17 | 5/17: it labels nearly every meeting "cancelled" |
+| lfm2.5-vl-450m, the phone default until 2026-10-20 | 6/17 | 5/17: it labels nearly every meeting "cancelled" |
+| qwen3.5-0.8b Q4_0, the phone's model since 2026-10-20 (measured 2026-10-19) | 13/17 | 13/17 |
 | qwen3-4b-2507 on the CPU, stock grammar engine | | 17/17 in 115 s |
 | qwen3-4b-2507 on the CPU, llguidance build | | 16/17 in 92 s |
 
@@ -61,7 +70,8 @@ explains the scoring.
 - **No llguidance:** about 20% faster on the CPU, no more accurate on this schema, and a custom
   llama.cpp build on every platform.
 - **Not on the phone.** The 450M model cannot do this task. The pass is desktop-only today (mail is
-  read on the computer), and stays so until a phone-sized model passes this eval.
+  read on the computer), and stays so until a phone-sized model passes this eval. Qwen3.5-0.8B,
+  the phone's model since, scores 13/17.
 
 ## Open
 

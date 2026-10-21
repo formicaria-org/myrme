@@ -14,24 +14,31 @@ This is the short map of Myrme's repo. When it disagrees with the code, the code
 | Choosing a model or a non-LLM method for one task | `../research/2026-10-18-dedicated-methods-per-task.md` |
 | Scouting a new optional model for the phone (shortlist from a leaderboard, then our evals) | `../research/2026-10-19-scouting-phone-models.md` (the method in §2) |
 | What was measured for the phone model and Myrme light, how, and the results in one place | `../research/2026-10-20-small-model-benchmark-summary.md` |
-| **Myrme light** — dedicated tools (OCR, extraction, embeddings on ONNX Runtime) and a very small LLM | `../research/2026-10-19-myrme-light.md` (proposed plan, phases L0–L7) |
+| **Myrme light** — dedicated tools (OCR, extraction, embeddings on ONNX Runtime) and a very small LLM | `../research/2026-10-19-myrme-light.md` (the plan, phases L0–L7; the laptop phases are done, and its one tool, the OCR, shipped in Myrme 0.7.0) |
+| Making the small model faster: runtime settings, kernels, quantisation, other engines | `../research/2026-10-19-speed.md` · `../research/2026-10-21-low-bit.md` (below Q4_0: answered, none faster) · `plan.md` (*Faster engines*) |
 | Running the assistant by hand, benchmarks | `../../agents/README.md` · `../../agents/bench/` |
 
 ## What is here
 
 ```
-crates/fm-agent       the pipeline: deterministic orchestration, meeting pass, transcription,
-                      watchdog, launcher. No fm crate and no network crate. ~6.1k lines, 122 tests.
-crates/fm-agent-run   the runner: agent-serve (supervisor + @Myrme watcher), agent-chat,
-                      the model catalogue, the downloads (feature `download`, which uses
-                      formicaria's fm-fetch pinned by tag). ~5.1k lines, 44 tests (56 with download).
-agents/               models.toml (the catalogue formicaria ships), scripts, the bench harness.
+crates/fm-agent       the pipeline: deterministic orchestration, the methods and their evals,
+                      meeting pass, transcription, watchdog, launcher. No fm crate and no network
+                      crate. ~8.7k lines with tests, 168 tests (15 of them live, `#[ignore]`d).
+crates/fm-agent-run   the runner: agent-serve (supervisor + @Myrme watcher), agent-chat, the host
+                      facade (`host`), the mail pass, the OCR (feature `ocr`, on by default), the
+                      model catalogue (`models.toml`, exported as `CATALOGUE`), the downloads
+                      (feature `download`, which uses formicaria's fm-fetch pinned by tag).
+                      ~8.1k lines with tests, 93 tests (10 of them live).
+agents/               scripts (fetch, serve, eval, integration, release pages), the bench harness.
                       runtime/ and models/ are fetched and gitignored.
+methods/<name>/       each method's METHOD.md and its eval cases (chat has none).
+docs/manual/          formicaria's assistant chapter.   docs/releases/   each version's notes.
 docs/context/         this working memory.   docs/research/   dated research, not rulings.
 ```
 
 The crate names keep the `fm-` prefix for now, so formicaria's cutover changes as little as
-possible. Renaming them is an open question in `plan.md`.
+possible. Renaming them was put off until after Phase D (`plan.md`, *Questions for the owner*);
+Phase D is done, and no rename has been decided.
 
 ## How Myrme meets formicaria
 

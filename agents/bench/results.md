@@ -5,7 +5,13 @@ case battery (`cases/*.json`, our real system prompts). **All numbers are measur
 device** — decode tok/s from llama.cpp's `timings.predicted_per_second`, RSS/VmHWM from `/proc`, VRAM
 from `nvidia-smi`, MemAvailable from `/proc/meminfo`. Nothing here is estimated. Newest first; kept
 for future reference (re-run to refresh, don't re-derive). See `README.md` for how to reproduce, and
-`../../docs/context/device-resources.md` for the device specs these run on.
+formicaria's `docs/context/device-resources.md` for the device specs these run on (it stayed in
+formicaria at the split, with `model-benchmarks-2026-07-22.md` and the model-selection research).
+
+**The defaults today** are not the ones marked *current* below, which were current on 2026-07-24:
+the laptop runs `qwen3-vl-4b` (since 2026-07-24) and the phone `qwen3.5-0.8b` (since 2026-10-20),
+per `crates/fm-agent-run/models.toml`. The measurements behind the phone's model are in
+`docs/research/2026-10-20-small-model-benchmark-summary.md`, not in this file.
 
 **How to read decode tok/s:** reading pace is ~5–10 tok/s, so anything above that streams smoothly.
 These are *our-case* rates (real system prompt + real context), so they run a bit below the synthetic
@@ -37,7 +43,7 @@ exists.
 ### 📱 Phone — Redmi (Dimensity 7300, 8 core, 7.4 GB RAM), CPU `-t 4`
 | Model | size (Q4) | decode tok/s | peak RSS | grounding | verdict |
 |---|---|---|---|---|---|
-| **lfm2.5-1.2b** *(current default)* | 695 MB | **12.4** | 1503 MB | 3 claims / **0 quotes** | fast, but can't follow quote-first |
+| **lfm2.5-1.2b** *(default on 2026-07-24)* | 695 MB | **12.4** | 1503 MB | 3 claims / **0 quotes** | fast, but can't follow quote-first |
 | qwen3-1.7b (think-off) | 1.1 GB | **8.9** | 2432 MB | 1 claim / **1 quote** | smarter grounding, ~28% slower — **open tradeoff** |
 
 *Both load safely (MemAvailable held ≥2.5 GB). RAM is not the wall; phone CPU throughput is.*
@@ -45,7 +51,7 @@ exists.
 ### 💻 Laptop — i7-11800H, **RTX 3050 4 GB (Vulkan)**, 14.9 GB RAM
 | Model | config | decode tok/s | RSS | VRAM | grounding | verdict |
 |---|---|---|---|---|---|---|
-| **qwen3-4b-2507** *(current default)* | **GPU** `-ngl 99` | **39.8** | 511 MB | 2769 MB | 2 / 2 | **the pick** — fast + well-grounded |
+| **qwen3-4b-2507** *(default on 2026-07-24)* | **GPU** `-ngl 99` | **39.8** | 511 MB | 2769 MB | 2 / 2 | **the pick** — fast + well-grounded |
 | qwen3-4b-2507 | CPU `-ngl 0` | 12.6 | 3029 MB | — | **3 / 3** | shows the **GPU = 3.2×** win |
 | qwen3-1.7b (think-off) | CPU `-ngl 0` | 29.7 | 1681 MB | — | 1 / 1 | smaller reference |
 | ~~qwen3-8b~~ | GPU | — | — | — | — | **not run** — 4.7 GB > 4 GB VRAM, would OOM |
@@ -53,7 +59,7 @@ exists.
 *The 4 GB card caps the laptop near 4B; the 4B-on-GPU is fast **and** the best-grounded model measured.*
 
 Synthetic `llama-bench` figures (higher, not our-case) are in
-`../../docs/context/model-benchmarks-2026-07-22.md`; device specs in `device-resources.md`.
+formicaria's `docs/context/model-benchmarks-2026-07-22.md`; device specs in `device-resources.md` there.
 
 <!-- new results are appended below this line by: python3 agents/bench/run.py … >> results.md -->
 

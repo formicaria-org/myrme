@@ -6,9 +6,9 @@ major N whose minor is at least the one it needs.
 
 | Myrme | Contract | Linked by formicaria | What changed for users |
 |---|---|---|---|
-| **0.7.1** | **1.6** | 0.9.9 | The mail verdict in plain words ("the meeting is still on Fri 23 Oct at 16:00", "has taken place"); a meeting that clashes with another says so, in the verdict and in the note proposed |
-| 0.7.0 | 1.6 | 0.9.7 | The phone runs Qwen3.5-0.8B and no longer offers the 450M; printed pages are read by an OCR (PP-OCRv6) on Linux, macOS and the phone, handwriting still by the vision model; a meeting that began before the newest email is past |
-| 0.6.0 | 1.5 | — (not yet linked) | The phone's default writes ~65% faster (the same model at 4-bit); a more accurate phone model is catalogued as a choice ("More accurate, slower"); the laptop's mail pass names a conversation without reading it twice, and finds one meeting more. A title eval |
+| **0.7.1** | **1.6** | 0.9.9, 0.10.0, 0.11.0 | The mail verdict in plain words ("the meeting is still on Fri 23 Oct at 16:00", "has taken place"); a meeting that clashes with another says so, in the verdict and in the note proposed |
+| 0.7.0 | 1.6 | 0.9.7, 0.9.8 | The phone runs Qwen3.5-0.8B and no longer offers the 450M; printed pages are read by an OCR (PP-OCRv6) on Linux, macOS and the phone, handwriting still by the vision model; a meeting that began before the newest email is past |
+| 0.6.0 | 1.5 | 0.9.5, 0.9.6 | The phone's default writes ~65% faster (the same model at 4-bit); a more accurate phone model is catalogued as a choice ("More accurate, slower"); the laptop's mail pass names a conversation without reading it twice, and finds one meeting more. A title eval |
 | 0.5.1 | 1.4 | formicaria 0.9.4 | The phone starts its model with the model's own context window (4096 for lfm2.5-vl-450m) instead of the global 2048, so a photo leaves room for the answer |
 | 0.5.0 | 1.4 | — (superseded by 0.5.1 before formicaria released) | The assistant chapter of formicaria's manual is written here and rendered by formicaria from the pin; the catalogue carries the phone's runtimes, so formicaria keeps no copy of either. Versions are released by their published GitHub Release page |
 | 0.4.1 | 1.3 | formicaria 0.9.3 | A model that fails to load is reported as such within seconds, on the desktop and the phone, instead of the assistant announcing itself warm after a 40-second wait; the phone also stops its transcriber then |
