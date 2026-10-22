@@ -75,7 +75,7 @@ fn the_meeting_pass_reads_real_conversations() {
             continue;
         }
         for f in meetings::parse(&answer) {
-            match meetings::resolve(&f, body, today) {
+            match meetings::resolve(&f, body, today, None) {
                 Ok(m) => eprintln!(
                     "  {} {} place={:?} by={:?} sent={:?} «{}»",
                     if m.cancelled { "CANCELLED" } else { "fixed" },

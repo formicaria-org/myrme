@@ -16,6 +16,8 @@
 //!    *that email* was sent, read off its heading, in Italian or English. Nothing found → dropped.
 //! 3. **Rust finds the time** in that sentence (`12pm`, `alle 15`, `11:30am`), never elsewhere: a time
 //!    from another sentence could belong to anything. None found → the meeting is for the day.
+//!    **A zone written right after it** ("10am Paris time", "15:00 CET") moves it onto the person's
+//!    own clock ([`crate::zone`], 2026-10-23); with none written it stays as written.
 //! 4. **The plan** ([`plan`]) decides what to propose: the conversation note takes the first meeting;
 //!    each further one becomes a proposed meeting note; anything already on the agenda (an invitation
 //!    made it), already linked, or already proposed is left alone.
@@ -25,6 +27,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::textmatch::{fold, loose};
+use crate::zone::{self, Here};
 
 use serde_json::Value;
 use time::{Date, Duration, Month, Time, Weekday};
@@ -64,6 +67,9 @@ pub struct Meeting {
     /// Whether `day` was read from the emails. A cancellation that names no day ("I can't make it")
     /// is about the meeting the conversation stands for.
     pub dated: bool,
+    /// The time as the email wrote it, when it was on another clock and was moved onto the person's:
+    /// `10:00 Paris time`. Shown beside the converted time, so the person can check the arithmetic.
+    pub written: Option<String>,
 }
 
 /// The meeting a conversation note stands for now, as [`plan`] weighs it.
@@ -416,7 +422,16 @@ fn elided(quote: &str, all: &[Block]) -> Option<String> {
 }
 
 /// Check one reported meeting against the emails and date it. `body` is the conversation note.
-pub fn resolve(f: &Found, body: &str, today: Date) -> Result<Meeting, Dropped> {
+///
+/// `here` is the person's own clock. A time the email puts on another one ("10am Paris time") is
+/// moved onto it, and its day with it; with `here` unknown, or no zone written, the time stays as
+/// written.
+pub fn resolve(
+    f: &Found,
+    body: &str,
+    today: Date,
+    here: Option<&Here>,
+) -> Result<Meeting, Dropped> {
     // The first (oldest) email with the sentence: a later reply quoting it does not make it new.
     let all = blocks(body);
     let copied = elided(&f.quote, &all).unwrap_or_else(|| f.quote.clone());
@@ -455,20 +470,33 @@ pub fn resolve(f: &Found, body: &str, today: Date) -> Result<Meeting, Dropped> {
         .or_else(|| find_day(&msg[..at], anchor, true))
         .or_else(|| model_words(&f.date, &msg).and_then(|n| read_day(&n, anchor)));
     // A meeting needs its day; a cancellation may name none ("I can't make it").
-    let (day, dated) = match day {
+    let (mut day, dated) = match day {
         Some(d) => (d, true),
         None if cancelled => (anchor, false),
         None => return Err(Dropped::NoDate),
     };
+    // A time only from the sentence itself; none there → the meeting is for the day, which is true.
+    let mut start =
+        find_time(&nquote).or_else(|| model_words(&f.time, &nquote).and_then(|n| read_time(&n)));
+    let mut end = start
+        .and(model_words(&f.end, &nquote).and_then(|n| read_time(&n)))
+        .filter(|e| Some(*e) > start);
+    // Written on another clock: moved onto the person's, on the meeting's own day (2026-10-23).
+    let mut written = None;
+    if let (Some(s), Some(z), Some(here)) = (start, zone_in(&nquote), here) {
+        if let Some((d, t)) = z.convert(day, s, here) {
+            if (d, t) != (day, s) {
+                written = Some(format!("{:02}:{:02} {}", s.hour(), s.minute(), z.label));
+            }
+            // An end that lands on another day than the start is dropped: a note's `due` shares
+            // its start's day here, and a marker is truer than a wrong end.
+            end = end.and_then(|e| z.convert(day, e, here)).filter(|(ed, _)| *ed == d).map(|p| p.1);
+            (day, start) = (d, Some(t));
+        }
+    }
     if dated && day < today {
         return Err(Dropped::Past);
     }
-    // A time only from the sentence itself; none there → the meeting is for the day, which is true.
-    let start =
-        find_time(&nquote).or_else(|| model_words(&f.time, &nquote).and_then(|n| read_time(&n)));
-    let end = start
-        .and(model_words(&f.end, &nquote).and_then(|n| read_time(&n)))
-        .filter(|e| Some(*e) > start);
     // A meeting that had begun before the newest email was sent is history too, though its day is
     // today: a follow-up at 17:31 does not fix again the 17:00 call it follows (the owner's mail,
     // 2026-10-19). A call-off is left to the day rule: it still says what happened to the meeting.
@@ -497,6 +525,7 @@ pub fn resolve(f: &Found, body: &str, today: Date) -> Result<Meeting, Dropped> {
         said_by,
         cancelled,
         dated,
+        written,
     })
 }
 
@@ -643,7 +672,18 @@ fn find_day(text: &str, anchor: Date, last: bool) -> Option<Date> {
 /// The first time written in `text`: `12pm`, `11:30am`, `15:30`, `10.30`, `alle 15`, `at 10`, `ore 9`.
 /// A bare number counts only after `at`/`alle`/`ore`/`h`/`dalle`/`verso`, or before `am`/`pm`.
 fn find_time(text: &str) -> Option<Time> {
+    times_in(&tokens(text)).into_iter().next().map(|(t, _)| t)
+}
+
+/// The clock the sentence's times are on: a zone written right after one of them, the first found.
+fn zone_in(text: &str) -> Option<zone::Zone> {
     let words = tokens(text);
+    times_in(&words).into_iter().find_map(|(_, next)| zone::after_time(&words[next..]))
+}
+
+/// Every time in `words`, in order, each with the index of the word after it.
+fn times_in(words: &[String]) -> Vec<(Time, usize)> {
+    let mut out = Vec::new();
     for (k, w) in words.iter().enumerate() {
         let core = w.trim_end_matches(|c: char| c.is_ascii_alphabetic() || c == '.');
         let suffix = &w[core.len()..];
@@ -672,10 +712,10 @@ fn find_time(text: &str) -> Option<Time> {
         };
         // `read_time` reads a bare 1–7 as the afternoon only when nothing says otherwise.
         if let Some(t) = read_time(&phrase) {
-            return Some(t);
+            out.push((t, if next_ampm { k + 2 } else { k + 1 }));
         }
     }
-    None
+    out
 }
 
 const MONTHS: [(&str, u8); 24] = [
@@ -1126,12 +1166,12 @@ mod tests {
     #[test]
     fn a_quoted_meeting_is_dated_from_its_own_message() {
         let f = found("ci vediamo giovedì alle 15 nel mio ufficio.", "giovedì", "alle 15");
-        let m = resolve(&f, BODY, date!(2026 - 10 - 06)).unwrap();
+        let m = resolve(&f, BODY, date!(2026 - 10 - 06), None).unwrap();
         assert_eq!(m.start_stamp(), "2026-10-08T15:00");
         // The second meeting is counted from Luca's message (the 7th), not Maria's.
         let f = found("E il 28 alle 10 facciamo il punto con Anna.", "il 28", "alle 10");
         assert_eq!(
-            resolve(&f, BODY, date!(2026 - 10 - 06)).unwrap().start_stamp(),
+            resolve(&f, BODY, date!(2026 - 10 - 06), None).unwrap().start_stamp(),
             "2026-10-28T10:00"
         );
     }
@@ -1149,7 +1189,7 @@ mod tests {
             "30th of October",
             "16:30",
         );
-        let m = resolve(&f, body, date!(2026 - 10 - 16)).unwrap();
+        let m = resolve(&f, body, date!(2026 - 10 - 16), None).unwrap();
         assert_eq!(m.start_stamp(), "2026-10-30T16:30");
         assert_eq!(
             m.quote,
@@ -1158,12 +1198,12 @@ mod tests {
         // The same, with "…".
         let f = found("as discussed f2f … see you on the 30th of Friday at 16:30", "", "");
         assert_eq!(
-            resolve(&f, body, date!(2026 - 10 - 16)).unwrap().start_stamp(),
+            resolve(&f, body, date!(2026 - 10 - 16), None).unwrap().start_stamp(),
             "2026-10-30T16:30"
         );
         // A piece that is in no email sinks the whole quote, as before.
         let f = found("as discussed f2f ... see you on the 2nd at 9 in the library", "", "");
-        assert_eq!(resolve(&f, body, date!(2026 - 10 - 16)), Err(Dropped::NotInEmail));
+        assert_eq!(resolve(&f, body, date!(2026 - 10 - 16), None), Err(Dropped::NotInEmail));
     }
 
     /// Paolo's reply, 2026-10-15: the model wrote "16th **of** October" where the email says "16th
@@ -1178,7 +1218,7 @@ mod tests {
             "16th of October",
             "16:30",
         );
-        let m = resolve(&f, body, date!(2026 - 10 - 15)).unwrap();
+        let m = resolve(&f, body, date!(2026 - 10 - 15), None).unwrap();
         assert_eq!(m.start_stamp(), "2026-10-16T16:30");
         assert_eq!(
             m.quote,
@@ -1187,25 +1227,25 @@ mod tests {
         assert_eq!(m.said_by.as_deref(), Some("Paolo Conti"));
 
         let f = found("Tomorrow at 9 we meet in the library to finish it.", "tomorrow", "9");
-        assert_eq!(resolve(&f, body, date!(2026 - 10 - 15)), Err(Dropped::NotInEmail));
+        assert_eq!(resolve(&f, body, date!(2026 - 10 - 15), None), Err(Dropped::NotInEmail));
     }
 
     #[test]
     fn a_meeting_carries_when_its_email_was_sent() {
         let f = found("ci vediamo giovedì alle 15 nel mio ufficio.", "giovedì", "alle 15");
-        let m = resolve(&f, BODY, date!(2026 - 10 - 06)).unwrap();
+        let m = resolve(&f, BODY, date!(2026 - 10 - 06), None).unwrap();
         assert_eq!(m.sent_at.as_deref(), Some("2026-10-06T09:12"));
         let f = found("E il 28 alle 10 facciamo il punto con Anna.", "il 28", "alle 10");
-        let m = resolve(&f, BODY, date!(2026 - 10 - 06)).unwrap();
+        let m = resolve(&f, BODY, date!(2026 - 10 - 06), None).unwrap();
         assert_eq!(m.sent_at.as_deref(), Some("2026-10-07T11:00"), "Luca's message, the newer one");
     }
 
     #[test]
     fn an_invented_quote_or_a_past_meeting_is_dropped() {
         let f = found("ci vediamo venerdì alle 9", "venerdì", "alle 9");
-        assert_eq!(resolve(&f, BODY, date!(2026 - 10 - 06)), Err(Dropped::NotInEmail));
+        assert_eq!(resolve(&f, BODY, date!(2026 - 10 - 06), None), Err(Dropped::NotInEmail));
         let f = found("ci vediamo giovedì alle 15 nel mio ufficio.", "giovedì", "alle 15");
-        assert_eq!(resolve(&f, BODY, date!(2026 - 10 - 20)), Err(Dropped::Past));
+        assert_eq!(resolve(&f, BODY, date!(2026 - 10 - 20), None), Err(Dropped::Past));
     }
 
     /// **The owner's mail (2026-10-19):** a reply after the day's call names that call's time again;
@@ -1216,12 +1256,12 @@ mod tests {
                     23 October at 4pm.\n\n### Owner Name — 2026-10-16 17:31\n\nThanks for the call.\n";
         let today = date!(2026 - 10 - 16);
         let held = found("See you today at 5pm.", "today", "5pm");
-        assert_eq!(resolve(&held, body, today), Err(Dropped::Past));
+        assert_eq!(resolve(&held, body, today, None), Err(Dropped::Past));
         let next = found("Next we meet on Friday 23 October at 4pm.", "Friday 23 October", "4pm");
-        assert_eq!(resolve(&next, body, today).unwrap().start_stamp(), "2026-10-23T16:00");
+        assert_eq!(resolve(&next, body, today, None).unwrap().start_stamp(), "2026-10-23T16:00");
         // Before the reply, the same call was still ahead.
         let before = body.split("### Owner").next().unwrap();
-        assert_eq!(resolve(&held, before, today).unwrap().start_stamp(), "2026-10-16T17:00");
+        assert_eq!(resolve(&held, before, today, None).unwrap().start_stamp(), "2026-10-16T17:00");
     }
 
     /// **The case that failed on the owner's real mail (2026-10-09).** The date is in the sentence
@@ -1241,7 +1281,7 @@ mod tests {
             quote: "We can have a chat directly that day at 12pm in RM 01-02.".into(),
             ..Default::default()
         };
-        let m = resolve(&f, body, date!(2026 - 10 - 09)).unwrap();
+        let m = resolve(&f, body, date!(2026 - 10 - 09), None).unwrap();
         assert_eq!(m.start_stamp(), "2026-10-16T12:00");
         assert_eq!(m.place.as_deref(), Some("RM 01-02"));
     }
@@ -1250,7 +1290,7 @@ mod tests {
     fn the_sentences_own_date_wins_over_whatever_the_model_said() {
         let f = found("E il 28 alle 10 facciamo il punto con Anna.", "domani", "alle 10");
         assert_eq!(
-            resolve(&f, BODY, date!(2026 - 10 - 06)).unwrap().start_stamp(),
+            resolve(&f, BODY, date!(2026 - 10 - 06), None).unwrap().start_stamp(),
             "2026-10-28T10:00"
         );
     }
@@ -1288,12 +1328,12 @@ mod tests {
             quote: "Can we meet on Thursday at 3pm?".into(),
             ..Found::default()
         };
-        assert_eq!(resolve(&found, ask, today), Err(Dropped::Unanswered));
+        assert_eq!(resolve(&found, ask, today, None), Err(Dropped::Unanswered));
         // Kim writing again is not an answer.
         let again = format!("{ask}\n### Kim — 2026-10-13 12:00\n\nAny news?\n");
-        assert_eq!(resolve(&found, &again, today), Err(Dropped::Unanswered));
+        assert_eq!(resolve(&found, &again, today, None), Err(Dropped::Unanswered));
         let answered = format!("{ask}\n### Lee — 2026-10-13 10:00\n\nSure, see you then!\n");
-        let m = resolve(&found, &answered, today).unwrap();
+        let m = resolve(&found, &answered, today, None).unwrap();
         assert_eq!(m.start_stamp(), "2026-10-15T15:00");
     }
 
@@ -1311,13 +1351,13 @@ mod tests {
             quote: both.into(),
             ..Found::default()
         };
-        let review = resolve(&found("Friday", "2pm"), body, today).unwrap();
+        let review = resolve(&found("Friday", "2pm"), body, today, None).unwrap();
         assert_eq!(review.start_stamp(), "2026-10-16T14:00");
-        let kickoff = resolve(&found("Monday", "10am"), body, today).unwrap();
+        let kickoff = resolve(&found("Monday", "10am"), body, today, None).unwrap();
         assert_eq!(kickoff.start_stamp(), "2026-10-19T10:00");
         assert_eq!(review.quote, both, "the quote shown is the one the model gave");
         // Words that point at no single sentence leave the quote whole, read as before.
-        let vague = resolve(&found("", ""), body, today).unwrap();
+        let vague = resolve(&found("", ""), body, today, None).unwrap();
         assert_eq!(vague.start_stamp(), "2026-10-19T10:00");
     }
 
@@ -1326,13 +1366,13 @@ mod tests {
         // The model said 16; the sentence says 15. The sentence wins.
         let f = found("ci vediamo giovedì alle 15 nel mio ufficio.", "giovedì", "alle 16");
         assert_eq!(
-            resolve(&f, BODY, date!(2026 - 10 - 06)).unwrap().start_stamp(),
+            resolve(&f, BODY, date!(2026 - 10 - 06), None).unwrap().start_stamp(),
             "2026-10-08T15:00"
         );
         // No time in the sentence: a meeting for the day, not a guessed hour.
         let body = "### Maria — 2026-10-06 09:12\n\nPassa da me giovedì.\n";
         let f = found("Passa da me giovedì.", "giovedì", "alle 16");
-        let m = resolve(&f, body, date!(2026 - 10 - 06)).unwrap();
+        let m = resolve(&f, body, date!(2026 - 10 - 06), None).unwrap();
         assert_eq!(m.start, None);
         assert_eq!(m.start_stamp(), "2026-10-08");
     }
@@ -1370,6 +1410,7 @@ mod tests {
             said_by: None,
             cancelled: false,
             dated: true,
+            written: None,
         }
     }
 

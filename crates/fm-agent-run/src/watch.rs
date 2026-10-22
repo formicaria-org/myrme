@@ -213,9 +213,11 @@ pub fn serve_loop<V: VaultAccess>(
                 .llm()
                 .with_temperature(0.0)
                 .with_max_tokens(fm_agent::meetings::ANSWER_TOKENS);
-            // UTC's day: this process cannot read the machine's offset (`fm_core::events`). Within a
-            // few hours of midnight a meeting "today" may be judged by the neighbouring day.
-            let today = time::OffsetDateTime::now_utc().date();
+            // The day on the person's own clock (2026-10-23); UTC's only when no zone can be read.
+            let today = agent
+                .here()
+                .map(|h| h.today())
+                .unwrap_or_else(|| time::OffsetDateTime::now_utc().date());
             mail_backlog = false;
             match agent.meeting_pass(&llm, &runtime.join("mail-meetings.json"), today) {
                 Ok(Some(said)) => {

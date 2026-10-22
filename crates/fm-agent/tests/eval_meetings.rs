@@ -21,6 +21,7 @@ mod layout;
 use fm_agent::eval::{meeting_lines, meetings_match, well_formed_array, Tally};
 use fm_agent::meetings;
 use fm_agent::openai::OpenAiStep;
+use fm_agent::zone::Here;
 use fm_agent::LlmStep;
 use serde_json::Value;
 use time::Date;
@@ -39,6 +40,11 @@ fn day(s: &str) -> Date {
         .expect("a YYYY-MM-DD day")
 }
 
+/// The case's reader's own clock, when it names one (`"here": "Asia/Singapore"`).
+fn here(case: &Value) -> Option<Here> {
+    case["here"].as_str().map(|z| Here::parse(z).expect("a zone name or offset"))
+}
+
 fn strings(v: &Value) -> Vec<String> {
     v.as_array().into_iter().flatten().filter_map(Value::as_str).map(str::to_string).collect()
 }
@@ -52,7 +58,7 @@ fn every_oracle_answer_resolves_to_what_its_case_expects() {
         let body = case["body"].as_str().unwrap();
         let today = day(case["today"].as_str().unwrap());
         let expect = strings(&case["expect"]);
-        let got = meeting_lines(&case["oracle"].to_string(), body, today);
+        let got = meeting_lines(&case["oracle"].to_string(), body, today, here(case).as_ref());
         if !meetings_match(&expect, &got) {
             wrong.push(format!("{id}: expected {expect:?}, got {got:?}"));
         }
@@ -70,7 +76,8 @@ fn recorded_answers_are_scored() {
         let expect = strings(&case["expect"]);
         for (who, answer) in case["recorded"].as_object().into_iter().flatten() {
             let answer = answer.as_str().unwrap_or_default();
-            let exact = meetings_match(&expect, &meeting_lines(answer, body, today));
+            let exact =
+                meetings_match(&expect, &meeting_lines(answer, body, today, here(case).as_ref()));
             tallies.entry(who.clone()).or_default().add(well_formed_array(answer), exact);
         }
     }
@@ -106,6 +113,7 @@ fn a_live_model_against_the_cases() {
             let id = case["id"].as_str().unwrap().to_string();
             let body = case["body"].as_str().unwrap().to_string();
             let today = day(case["today"].as_str().unwrap());
+            let zone = here(case);
             let expect = strings(&case["expect"]);
             // The prompt layout under study (`FM_LAYOUT`, `tests/layout`); `old` is production's.
             let (system, prompt) = layout::prompt(
@@ -126,7 +134,7 @@ fn a_live_model_against_the_cases() {
                 Ok(r) => r.content,
                 Err(e) => format!("ERROR: {e}"),
             };
-            let got = meeting_lines(&answer, &body, today);
+            let got = meeting_lines(&answer, &body, today, zone.as_ref());
             let exact = meetings_match(&expect, &got);
             let formed = well_formed_array(&answer);
             tally.add(formed, exact);

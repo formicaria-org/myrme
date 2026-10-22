@@ -14,13 +14,15 @@
 use time::Date;
 
 use crate::meetings;
+use crate::zone::Here;
 
 /// One line per meeting, as cases write them: `fixed 2026-10-15T15:00`, `cancelled 2026-10-15`,
-/// with ` @ <place>` when the method found one. Sorted, so order never counts.
-pub fn meeting_lines(answer: &str, body: &str, today: Date) -> Vec<String> {
+/// with ` @ <place>` when the method found one. Sorted, so order never counts. `here` is the reader's
+/// own clock (a case's `here`), onto which a time written on another is moved.
+pub fn meeting_lines(answer: &str, body: &str, today: Date, here: Option<&Here>) -> Vec<String> {
     let mut out: Vec<String> = meetings::parse(answer)
         .iter()
-        .filter_map(|f| meetings::resolve(f, body, today).ok())
+        .filter_map(|f| meetings::resolve(f, body, today, here).ok())
         .map(|m| {
             let head = if m.cancelled {
                 format!("cancelled {}", m.start_stamp())

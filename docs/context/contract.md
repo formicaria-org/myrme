@@ -123,6 +123,10 @@ side. The host-side routes (`/api/agent_status`, `agent_models`, `agent_activity
 `agent_activity_poll`, `agent_present`, `agents`) belong to formicaria; Myrme's runner reports to
 some of them.
 
+`/api/calendars` (a host-side route too) is **read** by the meeting pass for the person's zone:
+`zone`, or `offset` from a formicaria before 2026-10-23. Absent (no `calendar` feature, or a phone),
+the computer's own zone is used (`decisions.md` 2026-10-23).
+
 ## 3. The catalogue
 
 `crates/fm-agent-run/models.toml` (it was `agents/models.toml` until 2026-10-18), embedded as

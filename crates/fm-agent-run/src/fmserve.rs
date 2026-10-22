@@ -95,6 +95,12 @@ pub trait VaultAccess {
     }
     /// What the meeting pass concluded about one conversation, for the person to see. Best-effort.
     fn mail_heard(&self, _note: &str, _title: &str, _latest: &str, _said: &str) {}
+    /// The person's own clock — formicaria's *your zone* setting (`Asia/Singapore`, `+08:00`) — onto
+    /// which a meeting written on another clock is moved. `None` where it cannot be asked; the
+    /// computer's own zone is used then.
+    fn zone(&self) -> Option<String> {
+        None
+    }
     /// A proposal that also sets the allowlisted properties (`start`/`due`/`location`, added tags).
     fn propose_with(
         &self,
@@ -269,6 +275,15 @@ impl VaultAccess for FmServe {
 
     fn mail_novelty(&self) -> Option<u64> {
         self.call("mail_novelty", json!({})).ok()?["novelty"].as_u64()
+    }
+
+    /// `/api/calendars` answers the setting: `zone` since formicaria 0.15 (the setting, or the
+    /// computer's when unset), `offset` before it.
+    fn zone(&self) -> Option<String> {
+        let v = self.call("calendars", json!({})).ok()?;
+        let pick =
+            |k: &str| v[k].as_str().map(str::trim).filter(|s| !s.is_empty()).map(String::from);
+        pick("zone").or_else(|| pick("offset"))
     }
 
     fn mail_heard(&self, note: &str, title: &str, latest: &str, said: &str) {

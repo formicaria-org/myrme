@@ -16,6 +16,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use fm_agent::meetings::{self, Meeting};
+use fm_agent::zone::Here;
 use fm_agent::LlmStep;
 use serde_json::{json, Value};
 
@@ -45,7 +46,9 @@ fn named(title: &str) -> bool {
 /// still the conversation's latest word is proposed too (2026-10-15). 5: a quote shortened with "…" is
 /// checked piece by piece (2026-10-16) — a move dropped over one is read again and proposed. 6: another
 /// conversation's meeting no longer counts as already on the agenda (`mail_conversations`' `taken`).
-const PASS_VERSION: u64 = 6;
+/// 7: a time written on another clock ("10am Paris time") is moved onto the person's (2026-10-23) —
+/// so a meeting proposed at the clock it was written on is read again and proposed moving.
+const PASS_VERSION: u64 = 7;
 
 #[derive(Default)]
 struct Memory {
@@ -120,6 +123,11 @@ fn block(m: &Meeting, model: &str) -> String {
         ),
         (Some(s), None) => format!("{} {:02}:{:02}", day(m), s.hour(), s.minute()),
         _ => day(m),
+    };
+    // The time as the email wrote it, when it was moved onto the person's clock.
+    let when = match &m.written {
+        Some(w) => format!("{when} ({w})"),
+        None => when,
     };
     let place = m.place.as_deref().map(|p| format!(" · {p}")).unwrap_or_default();
     let quote = fm_agent::adjunct::defang(&m.quote, TAG).replace('\n', " ");
@@ -247,6 +255,11 @@ fn with_block(body: &str, block: &str, model: &str) -> String {
 }
 
 impl<V: VaultAccess> Agent<V> {
+    /// The person's own clock: formicaria's setting, else this computer's zone.
+    pub fn here(&self) -> Option<Here> {
+        self.fm.zone().and_then(|z| Here::parse(&z)).or_else(Here::system)
+    }
+
     /// Read at most one conversation with new mail and propose its meetings. Returns a one-line
     /// summary when it did something, `None` when there was nothing to read.
     ///
@@ -269,6 +282,7 @@ impl<V: VaultAccess> Agent<V> {
         };
         let taken = strings(&list["taken"]);
         let me = list["me"].as_str();
+        let here = self.here();
         let mut mem = Memory::load(memory);
         let today_s =
             format!("{:04}-{:02}-{:02}", today.year(), u8::from(today.month()), today.day());
@@ -307,7 +321,7 @@ impl<V: VaultAccess> Agent<V> {
             let mut ok = Vec::new();
             let mut dropped = 0usize;
             for f in &found {
-                match meetings::resolve(f, &emails, today) {
+                match meetings::resolve(f, &emails, today, here.as_ref()) {
                     Ok(m) => ok.push(m),
                     Err(_) => dropped += 1,
                 }

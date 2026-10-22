@@ -1,5 +1,5 @@
 {
-  "about": "Golden cases for M1, meetings from mail. Every name, address and exchange is invented. `body` is the conversation note as the pass reads it (`### Sender — sent`, then the email). `expect` is what a person reading the emails would put on the agenda, one line per meeting: `fixed <start stamp>` or `cancelled <day>`, plus ` @ <place>` when the place matters. `oracle` is an answer a perfect model would give, written by hand: replaying it through `meetings::parse` and `meetings::resolve` must give `expect`, which is what the CI test checks. `recorded` holds real models' answers from live runs (`tests/eval_meetings.rs`).",
+  "about": "Golden cases for M1, meetings from mail. Every name, address and exchange is invented. `body` is the conversation note as the pass reads it (`### Sender — sent`, then the email). `expect` is what a person reading the emails would put on the agenda, one line per meeting: `fixed <start stamp>` or `cancelled <day>`, plus ` @ <place>` when the place matters. `oracle` is an answer a perfect model would give, written by hand: replaying it through `meetings::parse` and `meetings::resolve` must give `expect`, which is what the CI test checks. `recorded` holds real models' answers from live runs (`tests/eval_meetings.rs`). `here`, when present, is the reader's own clock (a zone name or offset): a time the emails put on another clock must come out on this one (2026-10-23).",
   "cases": [
     {
       "body": "### Lena Okafor — 2026-10-13 09:10\n\nHi Tom,\n\nCan we meet on Thursday at 3pm in room B12 to go through chapter 2?\n\nLena\n\n### Tom Reyes — 2026-10-13 10:02\n\nThursday at 3pm in B12 works for me, see you then.\n",
@@ -502,6 +502,72 @@
       },
       "title": "Data review — Kim Laine",
       "today": "2026-10-13"
+    },
+    {
+      "id": "zone-paris",
+      "title": "Internship enquiry",
+      "today": "2026-10-23",
+      "here": "Asia/Singapore",
+      "body": "### Nathan Costa — 2026-10-22 21:05\n\nDear Baljinder,\n\nThank you for your message. Would Tuesday the 27th suit you for a call?\n\nNathan\n\n### Baljinder Bal — 2026-10-23 00:27\n\nDear Nathan,\n\nTuesday 27th at 10am Paris time works for me. Here the zoom link: https://zoom.example/j/123\n\nBest,\nBaljinder\n",
+      "expect": [
+        "fixed 2026-10-27T17:00"
+      ],
+      "oracle": [
+        {
+          "status": "fixed",
+          "title": "Internship call",
+          "date": "Tuesday 27th",
+          "time": "10am",
+          "end": "",
+          "place": "https://zoom.example/j/123",
+          "quote": "Tuesday 27th at 10am Paris time works for me."
+        }
+      ],
+      "recorded": {}
+    },
+    {
+      "id": "zone-new-york-next-day",
+      "title": "Panel prep",
+      "today": "2026-10-23",
+      "here": "Asia/Singapore",
+      "body": "### Dana Whitfield — 2026-10-23 09:40\n\nHi Tom,\n\nLet's do the panel prep on Monday 2 November at 8pm New York time, which I know is early morning for you.\n\nDana\n\n### Tom Reyes — 2026-10-23 10:15\n\nThat works, see you then.\n",
+      "expect": [
+        "fixed 2026-11-03T09:00"
+      ],
+      "oracle": [
+        {
+          "status": "fixed",
+          "title": "Panel prep",
+          "date": "Monday 2 November",
+          "time": "8pm",
+          "end": "",
+          "place": "",
+          "quote": "Let's do the panel prep on Monday 2 November at 8pm New York time, which I know is early morning for you."
+        }
+      ],
+      "recorded": {}
+    },
+    {
+      "id": "zone-unwritten-stays",
+      "title": "Coffee",
+      "today": "2026-10-23",
+      "here": "Asia/Singapore",
+      "body": "### Lena Okafor — 2026-10-23 08:00\n\nHi Tom, I'm in Paris this week. Can we talk on Wednesday at 3pm?\n\n### Tom Reyes — 2026-10-23 08:30\n\nWednesday at 3pm is fine.\n",
+      "expect": [
+        "fixed 2026-10-28T15:00"
+      ],
+      "oracle": [
+        {
+          "status": "fixed",
+          "title": "Call",
+          "date": "Wednesday",
+          "time": "3pm",
+          "end": "",
+          "place": "",
+          "quote": "Wednesday at 3pm is fine."
+        }
+      ],
+      "recorded": {}
     }
   ]
 }

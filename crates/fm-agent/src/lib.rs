@@ -42,6 +42,7 @@ pub mod textmatch;
 pub mod titles;
 pub mod transcribe;
 pub mod watchdog;
+pub mod zone;
 
 /// How much of the host note a turn shows the model.
 pub const HOST_NOTE_CHARS: usize = 1200;
