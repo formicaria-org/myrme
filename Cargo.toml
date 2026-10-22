@@ -12,7 +12,7 @@ edition = "2021"
 # **Myrme's release version.** A tag `v<version>` must equal it (CI refuses one that does not), and
 # formicaria shows it. What a version promises formicaria is the contract version below, in
 # `fm_agent_run` (`docs/context/contract.md`, *Versions*).
-version = "0.7.1"
+version = "0.8.0"
 license = "MIT"
 
 [workspace.dependencies]
