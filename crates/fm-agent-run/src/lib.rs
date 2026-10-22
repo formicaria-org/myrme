@@ -29,7 +29,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// models — and an app moves to them by changing a tag and nothing else.
 pub const CONTRACT_MAJOR: u32 = 1;
 /// See [`CONTRACT_MAJOR`].
-pub const CONTRACT_MINOR: u32 = 6;
+pub const CONTRACT_MINOR: u32 = 7;
 
 /// **The model catalogue** — models, their pins and licences, and the runtime archives per platform
 /// (`models.toml`, beside this crate). Embedded so that whoever links Myrme has it without knowing

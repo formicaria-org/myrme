@@ -49,6 +49,13 @@ pub trait ReadPage: Send + Sync {
     fn read_page(&self, image: &[u8]) -> Result<Page, String>;
     /// What read it, for the provenance line under the text (e.g. `PP-OCRv6 small`).
     fn model(&self) -> &str;
+    /// The picture read turned clockwise by `quarter` degrees (90, 180 or 270): a packet is often
+    /// photographed on its side (`label::read_with` tries the turns). A reader that cannot turn a
+    /// picture says so, and the upright reading is the one there is.
+    fn read_turned(&self, image: &[u8], quarter: u16) -> Result<Page, String> {
+        let _ = (image, quarter);
+        Err("this reader does not turn pictures".into())
+    }
 }
 
 /// One recognised region: where it is and what it says.
@@ -110,6 +117,25 @@ pub fn onnxruntime_at(
     let lib = manifest.onnxruntime_lib(crate::manifest::Manifest::platform_key()?)?;
     let p = dir.join(DIR).join(lib);
     p.exists().then_some(p)
+}
+
+/// **One OCR per process**, opened the first time it is asked for and kept: the assistant's
+/// reading turns and a label read by the app share it (contract 1.7), rather than each loading the
+/// models. A device that has not got all of it yet is asked again next time — the files may have
+/// arrived since.
+pub fn shared(
+    dir: &Path,
+    manifest: &crate::manifest::Manifest,
+    bundle: Option<&Path>,
+) -> Result<Arc<dyn ReadPage>, String> {
+    static ONE: std::sync::Mutex<Option<Arc<dyn ReadPage>>> = std::sync::Mutex::new(None);
+    let mut one = ONE.lock().map_err(|_| "the OCR failed earlier".to_string())?;
+    if let Some(o) = one.as_ref() {
+        return Ok(o.clone());
+    }
+    let o = open(dir, manifest, bundle)?;
+    *one = Some(o.clone());
+    Ok(o)
 }
 
 /// **Open the OCR if this device has all of it** — the three files the catalogue pins, in
@@ -189,23 +215,42 @@ impl ReadPage for PpOcr {
             .map_err(|e| format!("cannot decode the image: {e}"))?
             .to_rgb8();
         let engine = self.engine.lock().map_err(|_| "the OCR failed earlier".to_string())?;
-        let result = engine.predict(vec![page]).map_err(|e| format!("the OCR failed: {e}"))?;
-        let mut pieces = Vec::new();
-        for r in result.first().map(|r| r.text_regions.as_slice()).unwrap_or_default() {
-            if let Some((text, conf)) = r.text_with_confidence() {
-                let ys = r.bounding_box.points.iter().map(|p| p.y);
-                let top = ys.clone().fold(f32::MAX, f32::min);
-                let bottom = ys.fold(f32::MIN, f32::max);
-                let left = r.bounding_box.points.iter().map(|p| p.x).fold(f32::MAX, f32::min);
-                pieces.push(Piece { top, bottom, left, text: text.to_string(), conf });
-            }
-        }
-        Ok(reading_order(pieces))
+        read_rgb(&engine, page)
     }
 
     fn model(&self) -> &str {
         "PP-OCRv6 small"
     }
+
+    fn read_turned(&self, image: &[u8], quarter: u16) -> Result<Page, String> {
+        let page = image::load_from_memory(image)
+            .map_err(|e| format!("cannot decode the image: {e}"))?
+            .to_rgb8();
+        let turned = match quarter {
+            90 => image::imageops::rotate90(&page),
+            180 => image::imageops::rotate180(&page),
+            270 => image::imageops::rotate270(&page),
+            _ => page,
+        };
+        let engine = self.engine.lock().map_err(|_| "the OCR failed earlier".to_string())?;
+        read_rgb(&engine, turned)
+    }
+}
+
+#[cfg(feature = "ocr")]
+fn read_rgb(engine: &oar_ocr::oarocr::OAROCR, page: image::RgbImage) -> Result<Page, String> {
+    let result = engine.predict(vec![page]).map_err(|e| format!("the OCR failed: {e}"))?;
+    let mut pieces = Vec::new();
+    for r in result.first().map(|r| r.text_regions.as_slice()).unwrap_or_default() {
+        if let Some((text, conf)) = r.text_with_confidence() {
+            let ys = r.bounding_box.points.iter().map(|p| p.y);
+            let top = ys.clone().fold(f32::MAX, f32::min);
+            let bottom = ys.fold(f32::MIN, f32::max);
+            let left = r.bounding_box.points.iter().map(|p| p.x).fold(f32::MAX, f32::min);
+            pieces.push(Piece { top, bottom, left, text: text.to_string(), conf });
+        }
+    }
+    Ok(reading_order(pieces))
 }
 
 #[cfg(test)]

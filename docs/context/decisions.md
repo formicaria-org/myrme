@@ -521,6 +521,35 @@ as default for the light version and devices like smartphones"*.
   is seen before the meeting is accepted. formicaria gives starts, not ends, so the measure is an
   hour, the same as formicaria's calendar.
 
+## 2026-10-21 — a label is read by the OCR first; a phone can read one `#method` `#contract`
+
+**The owner:**
+- *"Using the ocr model for ingredients and label scanning with a photograph … This will be in the
+  next myrme release"*;
+- of the plan, *"I think it looks overly complex"*, then *"stay with only 1 and 2 and drop the
+  vocabulary"*: the rotation retry with a minimum-text rule, and labels on the phone through the
+  OCR's text. The vocabulary and the LLM's correction of ingredients are dropped (they gained one
+  point, `../research/2026-10-20-packet-labels.md` §3a).
+
+**Decision.**
+- **`label::read_with` has the OCR read a label first** (contract 1.7). Measured on thirty packets
+  against figures checked by hand on the photos (§3c–3e of the research): the OCR's text, read by
+  formicaria's `labelText.ts`, got **155 of 210 figures right and 14 wrong, in 0.67 s** on a laptop
+  CPU; the phone's vision model got 85 right in 28 s, the laptop's 88 in 40 s.
+- **Turned only when upright reads too little.** "Too little" is the **minimum-text rule** for labels:
+  fewer than [`ENOUGH`] = 4 figures (a number with a unit, or with decimals, never a percentage).
+  Then the three other turns are tried, stopping at the first that is enough; the reading with the
+  most figures is kept. Pages of writing are not turned: there it quadrupled the time of every
+  handwritten page for nothing (§3b).
+- **A vision model reads only when the OCR found too little**, and only one fit for labels (the
+  2026-10-13 rule stands: the phone's is not). Where there is none, what the OCR read is given if it
+  holds any figure, for the person to check and complete; nothing at all is said plainly.
+- **So a phone reads labels**, with the OCR it already has for pages: `ready_json_with` is ready
+  wherever the OCR is.
+- **One OCR per process** (`ocr::shared`): the launchers and the app's label reading share it.
+
+**Not measured before release:** the OCR's time on the phone (the timing run is ready).
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading

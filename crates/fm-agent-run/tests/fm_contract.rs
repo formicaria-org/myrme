@@ -15,13 +15,14 @@ use fm_agent_run::fm_agent::transcribe;
 use fm_agent_run::fm_agent::watchdog::{Limits, ResourceMonitor, StopFlag, SystemMonitor};
 use fm_agent_run::fmserve::{Origin, VaultAccess};
 use fm_agent_run::installed::{resolve, sweep, sweep_whisper, whisper_on_disk, Installed};
-use fm_agent_run::label::{read, ready_json};
+use fm_agent_run::label::{read, read_with, ready_json, ready_json_with};
 use fm_agent_run::manifest::{whisper_language, Manifest};
 use fm_agent_run::nativelib::lib_dir_from_maps;
 /// Android-only (`cfg(target_os = "android")`): the phone's host locates the bundled runtime with
 /// it. Its parsing half is checked everywhere.
 #[cfg(target_os = "android")]
 use fm_agent_run::nativelib::native_lib_dir;
+use fm_agent_run::ocr::{shared, ReadPage};
 use fm_agent_run::watch::{serve_loop, wait_ready};
 use fm_agent_run::{Agent, ImageReader, CATALOGUE, CONTRACT_MAJOR, CONTRACT_MINOR, VERSION};
 
@@ -43,12 +44,12 @@ use fm_agent_run::host::{
 #[cfg(feature = "download")]
 use fm_agent_run::host::BUNDLED_ONNXRUNTIME;
 
-/// The contract this file checks is 1.6 (`CONTRACT_MAJOR`/`CONTRACT_MINOR`). Changing what it names
+/// The contract this file checks is 1.7 (`CONTRACT_MAJOR`/`CONTRACT_MINOR`). Changing what it names
 /// means changing the contract version too — a removal or rename is a new major, an addition a new
 /// minor — and the two are compared here so one cannot move without the other.
 #[test]
-fn this_list_is_contract_1_6() {
-    assert_eq!((fm_agent_run::CONTRACT_MAJOR, fm_agent_run::CONTRACT_MINOR), (1, 6));
+fn this_list_is_contract_1_7() {
+    assert_eq!((fm_agent_run::CONTRACT_MAJOR, fm_agent_run::CONTRACT_MINOR), (1, 7));
     assert!(
         fm_agent_run::VERSION.split('.').count() == 3,
         "a release version is MAJOR.MINOR.PATCH"
@@ -108,6 +109,21 @@ fn the_ocr_formicaria_packages_is_named_and_pinned() {
         a.ocr.is_some()
     }
     let _ = agent;
+}
+
+/// Contract 1.7: a label read by the OCR first. Named with the types formicaria passes.
+#[test]
+fn labels_are_read_by_the_ocr_first() {
+    type Shared = fn(
+        &std::path::Path,
+        &Manifest,
+        Option<&std::path::Path>,
+    ) -> Result<std::sync::Arc<dyn ReadPage>, String>;
+    let _: Shared = shared;
+    let _: fn(Option<&dyn ReadPage>, Option<&ImageReader>, &[u8]) -> _ = read_with;
+    let _: fn(Option<&dyn ReadPage>, Option<&ImageReader>) -> serde_json::Value = ready_json_with;
+    // No OCR and no reader: said plainly, before any picture.
+    assert_eq!(ready_json_with(None, None)["ready"], false);
 }
 
 /// The catalogue formicaria embeds on the phone and writes beside the desktop program parses.

@@ -13,7 +13,7 @@ _Taken from formicaria at tag v0.9.2 (commit e670190) on 2026-10-18; the Rust it
 Two numbers, kept apart:
 - **The release version** (`fm_agent_run::VERSION`, `Cargo.toml`, the `v…` tag) changes with
   every release.
-- **The contract version** (`fm_agent_run::CONTRACT_MAJOR`.`CONTRACT_MINOR`, now **1.6**) changes
+- **The contract version** (`fm_agent_run::CONTRACT_MAJOR`.`CONTRACT_MINOR`, now **1.7**) changes
   only when this document does.
   - **Major:** anything listed below is renamed, removed or changes meaning. formicaria checks the
     major at compile time, so an app written for another major refuses to build and says why. It
@@ -24,7 +24,7 @@ So formicaria can take any newer Myrme release of the same contract major by cha
 nothing else. That is how methods, prompts, evals, models and the runtime reach users without a
 formicaria code change. `docs/context/releases.md` lists every release with its contract version.
 
-The list in part 1 is compile-checked as contract 1.6 (`tests/fm_contract.rs`). Changing it means
+The list in part 1 is compile-checked as contract 1.7 (`tests/fm_contract.rs`). Changing it means
 changing the contract version in the same commit.
 
 ## 1. Rust items formicaria names
@@ -47,10 +47,21 @@ git grep -hoE "fm_agent(_run)?::[A-Za-z_]+(::[A-Za-z_]+)*(::\{[^}]*\})?" <tag> -
 | `fm_agent_run::fmserve::{Origin, VaultAccess}` | phone: the agent's way into the vault |
 | `fm_agent_run::installed::{Installed, resolve, sweep, sweep_whisper, whisper_on_disk}` | Settings: what is on disk, handing disk back |
 | `fm_agent_run::label::{read, ready_json}` | Settings: the model's label |
+| `fm_agent_run::label::{read_with, ready_json_with}`, `fm_agent_run::ocr::{shared, ReadPage}` (1.7) | desktop + phone: a label read by the OCR first |
 | `fm_agent_run::manifest::{Manifest, Manifest::read, Manifest::platform_key, whisper_language}` | the catalogue |
 | `Manifest::phone_choices`, `Model::{phone_label, bytes, mmproj_bytes}` (1.5) | phone: the model chooser (shown only with two or more choices; one since 2026-10-20) |
 | `fm_agent_run::nativelib::native_lib_dir` (Android only) | phone: where the bundled runtime lives |
 | `fm_agent_run::watch::{serve_loop, wait_ready}` | phone: the watch loop |
+
+**Contract 1.7 adds labels read by the OCR** (Myrme 0.8.0):
+- `ocr::shared(dir, manifest, bundle)`: the one OCR of the process, opened from the tools dir the
+  first time it is asked for; the launchers' `Agent::ocr` comes from it too, so the models are loaded
+  once. `ReadPage::read_turned`: the picture read turned (a provided method; a reader that cannot
+  turn says so).
+- `label::read_with(ocr, reader, image)` and `label::ready_json_with(ocr, reader)`: a label read by
+  the OCR — turned when upright holds too few figures — and by a vision model fit for labels only
+  when the OCR found too little. The answer has the shape `read`'s has (`text`, `model`), so the
+  page reads it as before; `read` and `ready_json` are unchanged.
 
 **Contract 1.6 adds the OCR of Myrme light** (Myrme 0.7.0):
 - `host::BUNDLED_ONNXRUNTIME`: ONNX Runtime's name in the APK, which formicaria's packaging stages

@@ -1,6 +1,9 @@
 # Packet labels with the OCR, an ingredient vocabulary and the small LLM (research, 2026-10-20)
 
-> **Status: research for Myrme 0.8.0; nothing adopted.** The owner: *"Using the ocr model for
+> **Status: done for Myrme 0.8.0 (2026-10-21).** Adopted: the OCR reads labels first, turned when
+> upright reads too little, and a phone reads labels (§3c–3e; `decisions.md`, 2026-10-21). Dropped
+> on the owner's word: the vocabulary and the LLM's correction of ingredients (§3a, §4).
+> Earlier status: research for Myrme 0.8.0; nothing adopted. The owner: *"Using the ocr model for
 > ingredients and label scanning with a photograph, we can improve it with the llm by doing some RAG
 > with real known ingredients that one can expect in food (we should make sure it is available
 > because sometimes products have ingredients that a normal person does not). This will be in the
@@ -117,7 +120,69 @@ anyway. It was left out of Myrme 0.7.1 and kept as a patch
 (`~/bench-scratch/labels-tools/ocr-rotation.patch`). For 0.8.0, it should run only for a label, or
 use an orientation model.
 
+
+### 3c. Nutrition tables, with references checked by hand (2026-10-21)
+
+The seven figures of all thirty tables were read off the photos
+(`~/bench-scratch/labels/nut-corrections.json`). Where the OCR and Open Food Facts agreed on every
+figure, the five packets were taken as checked. **Open Food Facts was wrong for about half the
+packets**: an older recipe (Pringles: 516 kcal for 530, 4 g sugars for 0.9; Weetabix), rounding
+(protein 13 for 12.8), salt entered wrongly (passata 1.25 for 0.50; tomatoes 0.1 for 0.01; two
+Nutellas 0), and a column mixed up (85% chocolate in Ukrainian: carbohydrate 35.3 for 19.9). A "<0.5"
+on a label is right for any reading from 0 to 0.5.
+
+Re-scored (210 figures; `score_nut.py`):
+
+| Reader | Right | Wrong | Empty | Wholly right | Time |
+|---|---|---|---|---|---|
+| OCR + `labelText.ts` as it was | 113 | 31 | 66 | 9 | ~0.5 s |
+| Qwen3.5-0.8B (phone) | 79 | 14 | 117 | 7 | median 28 s |
+| qwen3-vl-4b (laptop) | 87 | 14 | 109 | 8 | median 40 s |
+
+### 3d. The page's reader, taught the OCR's faults (formicaria, 2026-10-21)
+
+The wrong and empty figures were mostly how the plain lines were read, not the OCR:
+
+| Fault | Example | Now |
+|---|---|---|
+| The unit "g" read as a 9 | `Matières grasses 9 30.9` (fat 9) | a bare 9 before another figure is the unit |
+| Two tables side by side, one line | `kcal 359 305 15% di cui ZUCCHERI g 3,5` | the line is cut at a name that follows figures |
+| The serving column printed first | `per serving per 100g` | the heading says which figure of a line to take |
+| kJ and kcal of two columns on one line | `2024 kJ 263 kJ 63 kcal` / `482 kcal` | the kcal that agrees with the kJ |
+| `kJ/kcal 1518/358` | the J read as l | paired in order |
+| A unit glued on: `11g` read as `119` | protein 119 g in 100 g | over 100 g in 100 g is left empty |
+| Two unrelated names on one line | `Carbohydrate: of which saturates: 10.6g` | left empty |
+| A nutrient and its "of which" run together | `GRASSI di cui … saturi 6.8g 0.6g` | the first figure is the wider one's — only when an "of which" stands between the names ("grassi saturi" is one name) |
+| A heading run together | `Por100g` | read |
+| The ingredients printed above the table | `sale` in the list | reading starts at the heading |
+| Languages | Baltic, Dutch, Nordic, Polish, Czech/Slovak, Hungarian names | read |
+
+OCR text from 3c, read again: **149 right, 13 wrong, 48 empty, 15 wholly right.** The same reader on
+the vision models' Markdown tables also improved slightly (85 and 88 right), so nothing was given up
+there.
+
+### 3e. `label::read_with`, with the turns (Myrme, 2026-10-21)
+
+The real OCR through `read_with` on all thirty photos (laptop CPU, `zz_label_bench`, not committed):
+
+| | Right | Wrong | Empty | Wholly right | Time a label |
+|---|---|---|---|---|---|
+| **OCR first, turned when too few figures** | **155** | **14** | 41 | **15** | **0.67 s** mean, 2.6 s at most |
+
+- The Penne box, photographed on its side, went from nothing to 7 of 7.
+- **Nine of the fourteen wrong figures are two packets** whose values are printed out of line with
+  their names (a multilingual block; a yeast-extract lid). Both raise the reader's doubts ("sugars
+  are more than the carbohydrate"), which the person sees beside the picture.
+- Still empty: a table in Hebrew (sodium, not salt, and names not read), a can held in a hand with
+  the table a few millimetres high, and a blurred jar.
+- "Figures" counts decimals as well as numbers with units: a table that prints its unit once, in
+  its own column, otherwise read as too little and was turned, or handed to a vision model, for
+  nothing.
+
 ## 4. The vocabulary: sources and licences (checked 2026-10-20)
+
+> **Dropped (2026-10-20, the owner: *"stay with only 1 and 2 and drop the vocabulary"*).** Kept
+> here for the record: the sources and their licences, in case it is taken up again.
 
 | Source | What | Languages | Licence, when compiled into the app |
 |---|---|---|---|
@@ -134,6 +199,11 @@ use an orientation model.
 - **formicaria's food list** (already in the app) for ordinary foods.
 
 ## 5. The plan for 0.8.0, each step judged on the eval
+
+**As done (2026-10-21):** 1 (the eval, with the nutrition references checked by hand, §3c); 2 (the
+turns, for labels only, with the minimum-text rule as their trigger, §3e); 5 (labels on the phone,
+through `read_with` and the page's reader, §3d–3e). 3 and 4, the vocabulary and the LLM's
+correction, were dropped. The plan as it was:
 
 1. **The eval:** hand-checked references for the 30 packets, scored on ingredient recall and the
    seven nutrition figures.

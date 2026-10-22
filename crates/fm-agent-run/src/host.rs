@@ -742,7 +742,7 @@ impl Tools {
             reads_labels: manifest.reads_labels(&model_name),
             shared_mail_prompt: manifest.shared_mail_prompt(&model_name),
             image_specialist: None,
-            ocr: match crate::ocr::open(&self.dir, manifest, Some(bundle.dir())) {
+            ocr: match crate::ocr::shared(&self.dir, manifest, Some(bundle.dir())) {
                 Ok(o) => {
                     (h.log)("study agent: typed pages read by the OCR");
                     Some(o)
