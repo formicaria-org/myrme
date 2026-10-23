@@ -21,7 +21,9 @@ clippy = "cargo clippy --workspace --all-targets --features fm-agent-run/downloa
 deny = "cargo deny check"
 build = "cargo build --release -p fm-agent-run --features fm-agent-run/download"
 # The single gate: CI runs exactly this.
-ci = { depends-on = ["fmt", "clippy", "test", "test-download", "deny"] }
+# No person identified in a public repository (`agents/privacy.sh`; CLAUDE.md).
+privacy = "sh agents/privacy.sh"
+ci = { depends-on = ["fmt", "clippy", "test", "test-download", "deny", "privacy"] }
 
 # Running the assistant by hand, unchanged from formicaria (paths are relative to this repo).
 fetch-model = "bash agents/fetch.sh"
