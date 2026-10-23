@@ -148,7 +148,7 @@ fn tokens_of(s: &str) -> usize {
 ///
 /// **The box is our writing, not the exchange**, and it repeats the arrangement the assistant found
 /// last time. Left in, a small model read its own earlier answer first and reported it again over a
-/// later email that moved the meeting (all three moved meetings, the owner's mail, 2026-10-15); and a
+/// later email that moved the meeting (all three moved meetings, a user's mail, 2026-10-15); and a
 /// quote matched inside it had no email to date it from. Both the model and [`resolve`] read this.
 pub fn without_box(body: &str) -> String {
     let mut out = String::with_capacity(body.len());
@@ -350,7 +350,7 @@ fn sentences(raw: &str) -> Vec<&str> {
 }
 
 /// The email sentence a near quote stands for: the model copied a sentence *almost* exactly ("16th
-/// **of** October" for the "16th October" the email says — the owner's mail, 2026-10-15). At least
+/// **of** October" for the "16th October" the email says — a user's mail, 2026-10-15). At least
 /// five words, and at least 80% of the words in common with the closer of the two; the best match
 /// wins, a later email on a tie. Returns the email and the sentence as the email writes it — the
 /// date is then read from **that**, never from the model's version.
@@ -498,7 +498,7 @@ pub fn resolve(
         return Err(Dropped::Past);
     }
     // A meeting that had begun before the newest email was sent is history too, though its day is
-    // today: a follow-up at 17:31 does not fix again the 17:00 call it follows (the owner's mail,
+    // today: a follow-up at 17:31 does not fix again the 17:00 call it follows (a user's mail,
     // 2026-10-19). A call-off is left to the day rule: it still says what happened to the meeting.
     let newest = all.iter().filter_map(|b| b.at.as_deref()).max();
     if dated
@@ -872,7 +872,7 @@ pub fn read_day(phrase: &str, anchor: Date) -> Option<Date> {
             })
         }
         // "next week on friday", "venerdì della settimana prossima": that weekday of the FOLLOWING
-        // week — written on Thursday 15 Oct, Friday 23 Oct, not the next day (the owner's mail,
+        // week — written on Thursday 15 Oct, Friday 23 Oct, not the next day (a user's mail,
         // 2026-10-15).
         (None, None, Some(w))
             if (has("week") && has("next"))
@@ -1182,19 +1182,16 @@ mod tests {
     #[test]
     fn a_quote_shortened_with_dots_stands_on_its_dated_piece() {
         let body = "### Anna — 2026-10-16 17:34\n\nDear Kai,\n\nas discussed f2f, I suggest the following \
-                    for the next steps.\n\nThanks and see you on the 30th of Friday at 16:30 Singapore \
+                    for the next steps.\n\nThanks and see you on the 30th of Friday at 16:30 Tokyo \
                     time online.\n";
         let f = found(
-            "as discussed f2f, I suggest the following ... Thanks and see you on the 30th of Friday at 16:30 Singapore time online.",
+            "as discussed f2f, I suggest the following ... Thanks and see you on the 30th of Friday at 16:30 Tokyo time online.",
             "30th of October",
             "16:30",
         );
         let m = resolve(&f, body, date!(2026 - 10 - 16), None).unwrap();
         assert_eq!(m.start_stamp(), "2026-10-30T16:30");
-        assert_eq!(
-            m.quote,
-            "Thanks and see you on the 30th of Friday at 16:30 Singapore time online."
-        );
+        assert_eq!(m.quote, "Thanks and see you on the 30th of Friday at 16:30 Tokyo time online.");
         // The same, with "…".
         let f = found("as discussed f2f … see you on the 30th of Friday at 16:30", "", "");
         assert_eq!(
@@ -1212,9 +1209,9 @@ mod tests {
     fn a_near_copy_stands_as_the_emails_own_sentence_and_an_invention_does_not() {
         let body = "### Anna — 2026-10-15 17:40\n\nI have to move it online tomorrow at 16:30.\n\n\
                     ### Paolo Conti — 2026-10-15 20:51\n\nThank you. Tomorrow (16th October) at 16:30 \
-                    Singapore time works well for me. I'll join via the Zoom link.\n";
+                    Tokyo time works well for me. I'll join via the Zoom link.\n";
         let f = found(
-            "Tomorrow (16th of October) at 16:30 Singapore time works well for me. I'll join via the Zoom link.",
+            "Tomorrow (16th of October) at 16:30 Tokyo time works well for me. I'll join via the Zoom link.",
             "16th of October",
             "16:30",
         );
@@ -1222,7 +1219,7 @@ mod tests {
         assert_eq!(m.start_stamp(), "2026-10-16T16:30");
         assert_eq!(
             m.quote,
-            "Tomorrow (16th October) at 16:30 Singapore time works well for me. I'll join via the Zoom link."
+            "Tomorrow (16th October) at 16:30 Tokyo time works well for me. I'll join via the Zoom link."
         );
         assert_eq!(m.said_by.as_deref(), Some("Paolo Conti"));
 
@@ -1248,7 +1245,7 @@ mod tests {
         assert_eq!(resolve(&f, BODY, date!(2026 - 10 - 20), None), Err(Dropped::Past));
     }
 
-    /// **The owner's mail (2026-10-19):** a reply after the day's call names that call's time again;
+    /// **A user's mail (2026-10-19):** a reply after the day's call names that call's time again;
     /// larger models reported it beside the next meeting, and the day rule let it through.
     #[test]
     fn a_meeting_already_begun_when_the_newest_email_was_sent_is_past() {
@@ -1264,7 +1261,7 @@ mod tests {
         assert_eq!(resolve(&held, before, today, None).unwrap().start_stamp(), "2026-10-16T17:00");
     }
 
-    /// **The case that failed on the owner's real mail (2026-10-09).** The date is in the sentence
+    /// **The case that failed on a user's real mail (2026-10-09).** The date is in the sentence
     /// before the quote, the room number looks like a date, and the model's own day words were a
     /// translation ("16 ottobre") of what the email said.
     #[test]
@@ -1299,18 +1296,18 @@ mod tests {
     fn dates_and_times_are_found_in_running_text() {
         let a = date!(2026 - 09 - 18);
         assert_eq!(
-            find_day(&loose("P.s. 2nd of October 2026 at 11:30am Singapore time."), a, false),
+            find_day(&loose("P.s. 2nd of October 2026 at 11:30am Tokyo time."), a, false),
             Some(date!(2026 - 10 - 02))
         );
         assert_eq!(
-            find_time(&loose("2nd of October 2026 at 11:30am Singapore time")),
+            find_time(&loose("2nd of October 2026 at 11:30am Tokyo time")),
             Some(time!(11:30))
         );
         assert_eq!(
-            find_day(&loose("We can try next week Monday 28th of Sep at Singapore 5pm:"), a, false),
+            find_day(&loose("We can try next week Monday 28th of Sep at Tokyo 5pm:"), a, false),
             Some(date!(2026 - 09 - 28))
         );
-        assert_eq!(find_time(&loose("Monday 28th of Sep at Singapore 5pm:")), Some(time!(17:00)));
+        assert_eq!(find_time(&loose("Monday 28th of Sep at Tokyo 5pm:")), Some(time!(17:00)));
         assert_eq!(find_day(&loose("room RM 01-02, project 2999-00001, 15.30"), a, false), None);
         assert_eq!(find_time(&loose("project AB1234X 2999-00001 for 3 students")), None);
         assert_eq!(
@@ -1423,7 +1420,7 @@ mod tests {
         Meeting { sent_at: Some(at.into()), place: place.map(Into::into), ..meeting(day, h) }
     }
 
-    /// The owner's case: 16 Oct 14:00 fixed on 2 Oct, still in the history, and a reply today.
+    /// A user's case: 16 Oct 14:00 fixed on 2 Oct, still in the history, and a reply today.
     const READ: Option<&str> = Some("2026-10-02T17:52");
     const OLD: &str = "2026-10-02T17:52";
     const NEW: &str = "2026-10-15T17:46";
@@ -1496,7 +1493,7 @@ mod tests {
         m
     }
 
-    /// Marta, 15 Oct 14:19: "won't be able to make our meeting at 12 pm" tomorrow, no new time yet.
+    /// Greta, 15 Oct 14:19: "won't be able to make our meeting at 12 pm" tomorrow, no new time yet.
     #[test]
     fn a_new_email_calling_the_meeting_off_proposes_marking_it_cancelled() {
         let none = HashSet::new();
@@ -1564,7 +1561,7 @@ mod tests {
         assert!(p.cancel.is_none(), "the same email fixes another time: a move");
     }
 
-    /// Marta's whole exchange: she cancels, then a new time is proposed — that is a move, not a cancel.
+    /// Greta's whole exchange: she cancels, then a new time is proposed — that is a move, not a cancel.
     #[test]
     fn a_cancellation_followed_by_a_new_time_is_a_move() {
         let none = HashSet::new();

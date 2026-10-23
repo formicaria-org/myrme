@@ -3,7 +3,7 @@
 > **Research, not a ruling.** About 19 searches and fetches by a research agent on 2026-10-18,
 > condensed here. **[mem]** = the agent's prior knowledge, not re-checked; **[unverified]** =
 > secondary sources only. Sizes are approximate. Nearly every accuracy figure is vendor-reported.
-> **None of this replaces a 30–50 item eval on the owner's own data.**
+> **None of this replaces a 30–50 item eval on a user's own data.**
 
 Budget assumed: a phone gives ~1–2 GB to a model; **one generative model resident at a time**;
 non-LLM specialists (OCR, pose, ASR, embedder) are each under ~250 MB.
@@ -34,7 +34,7 @@ plays the dateparser role in-process.)*
 | **PaddleOCR-VL** 0.9B (v1.5) | <1 GB [unverified] | Apache-2.0 [mem] | transformers, vLLM; llama.cpp since ~b8110 [unverified] | Q4/Q8 | 109 languages, OmniDocBench v1.5 94.5 (arXiv 2601.21957) |
 | Granite-Docling-258M | 258M | Apache-2.0 | transformers; community GGUF | yes | page → Markdown/DocTags |
 | Qwen3-VL-2B-Instruct | ~1.5 GB total | Apache-2.0 [mem] | official GGUF, mtmd | borderline | only general "read my messy note" option |
-| LFM2.5-VL-450M / 1.6B | 0.45/1.6B | LFM Open License (revenue-capped) | GGUF, LiteRT | yes | **on the owner's phone today** |
+| LFM2.5-VL-450M / 1.6B | 0.45/1.6B | LFM Open License (revenue-capped) | GGUF, LiteRT | yes | **on a user's phone today** |
 | TrOCR-small-handwritten | ~61M | MIT | ONNX | yes | line-level only, English |
 | Florence-2 base/large | 0.23/0.77B | MIT [mem] | ONNX | yes | weak handwriting [mem] |
 | **PP-FormulaNet-S** | small | Apache-2.0 | ONNX | yes | math → LaTeX (arXiv 2503.18382) |
@@ -42,7 +42,7 @@ plays the dateparser role in-process.)*
 **Pick by content:** printed → PP-OCRv5; structured pages → PaddleOCR-VL (or Granite-Docling where
 size matters); math crops → PP-FormulaNet-S/Texo; handwriting/whiteboards → PaddleOCR-VL then
 Qwen3-VL-2B. **No on-device handwriting benchmark exists for small VLMs** — build a 50-image eval
-from the owner's notes.
+from a user's notes.
 
 ## (c) Audio → text and dictation
 | Candidate | Size | License | Runtime | Phone | Note |

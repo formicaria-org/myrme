@@ -6,7 +6,7 @@
 > run says "not run". The detail and the reasoning are in:
 > - `2026-10-19-speed.md` (phone timings, the 450M, Qwen3.5-0.8B's photo cap);
 > - `2026-10-19-myrme-light.md` (the dedicated tools);
-> - `2026-10-19-scouting-phone-models.md` §4 (the leaderboard shortlist and the owner's real mail).
+> - `2026-10-19-scouting-phone-models.md` §4 (the leaderboard shortlist and a user's real mail).
 
 ## 1. How each batch was run
 
@@ -54,7 +54,7 @@ recorded answers (batch F), on another runtime and device: compare them with car
 The 450M's ‡ figures are from the speed study's laptop-GPU runs (`2026-10-19-improving-the-fast-model.md`
 §1). They are not phone runs.
 
-## 3. Meetings on the owner's real mail (batch C)
+## 3. Meetings on a user's real mail (batch C)
 
 Five conversations, 3–7 emails each, 1.5–4.5k characters.
 

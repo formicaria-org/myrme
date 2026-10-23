@@ -462,7 +462,7 @@ as default for the light version and devices like smartphones"*.
 
   | | The 450M | Qwen3.5-0.8B |
   |---|---|---|
-  | Owner's real mail: meetings found | 0 of 4 | 2 of 4 |
+  | A user's real mail: meetings found | 0 of 4 | 2 of 4 |
   | Invented meetings: meetings found | 1 of 11 | 8 of 11 |
   | Recipes: ingredients found / invented | 89–102 / 16–18 | 245–248 / 1–2 |
   | Handwriting / typed pages (WER) | 96% / 49% | 43% / 2.3% (photos capped at 1024 image tokens) |

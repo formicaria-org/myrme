@@ -437,7 +437,7 @@ fn proc_sample() -> Result<Resources, WatchdogError> {
     // **On Android we do not even attempt the read**, which is not the same as tolerating its
     // failure: the kernel audits every *denied* open, so a tolerated read at the poll interval —
     // two models × one sample each, every 2 s — wrote ~1 `avc: denied` line per second into logcat
-    // forever. Measured on the owner's phone 2026-07-31: the app's own log buffer was ~90 %
+    // forever. Measured on a user's phone 2026-07-31: the app's own log buffer was ~90 %
     // `name="loadavg"` denials, which is both noise in the one diagnostic channel a phone has and a
     // syscall per poll that can never succeed. A denial you have decided to live with should not be
     // re-provoked on a timer.

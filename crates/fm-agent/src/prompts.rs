@@ -93,7 +93,7 @@ emails support. Answer ONLY with a JSON object, no other text, with these keys:\
 the Moonshot project\" or \"Director of the Robotics Lab\". Never guess what the emails do not say.";
 
 /// The meeting pass's question: **where do the meetings stand now**, after the last message — not
-/// "which meetings does it fix". Measured on `qwen3-vl-4b` against the owner's real mail (2026-10-15):
+/// "which meetings does it fix". Measured on `qwen3-vl-4b` against a user's real mail (2026-10-15):
 /// the old wording reported every moved meeting at its *old* time, and missed a cancellation; this one
 /// reported all five states right (two moves with their links, a proposal for the following week, a
 /// confirmation, and a call-off). An "agreed" key was tried and dropped: it answered `true` for a time

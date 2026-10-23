@@ -40,7 +40,7 @@ exists.
   laptop's 4 GB VRAM and would OOM (a concurrent-run overcommit crashed the machine once on 2026-07-24;
   never again).
 
-### 📱 Phone — Redmi (Dimensity 7300, 8 core, 7.4 GB RAM), CPU `-t 4`
+### 📱 Phone (Dimensity 7300, 8 core, 7.4 GB RAM), CPU `-t 4`
 | Model | size (Q4) | decode tok/s | peak RSS | grounding | verdict |
 |---|---|---|---|---|---|
 | **lfm2.5-1.2b** *(default on 2026-07-24)* | 695 MB | **12.4** | 1503 MB | 3 claims / **0 quotes** | fast, but can't follow quote-first |

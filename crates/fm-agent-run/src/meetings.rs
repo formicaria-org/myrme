@@ -729,16 +729,16 @@ mod tests {
     fn a_meeting_within_the_hour_of_another_is_a_clash() {
         let list = json!({
             "conversations": [
-                {"id": "A", "title": "Li Shuhan", "start": "2026-10-23T16:00"},
+                {"id": "A", "title": "Mei Lin", "start": "2026-10-23T16:00"},
                 {"id": "B", "title": "Siyu Hou", "start": "2026-10-23T16:00"},
                 {"id": "C", "title": "Chen Tingyu", "start": "2026-10-30T17:00"}
             ],
             "linked": {"C": ["2026-10-24T10:00"]},
             "taken": ["2026-10-27T09:30"]
         });
-        // The owner's case: two conversations, one Friday at 16:00.
+        // A user's case: two conversations, one Friday at 16:00.
         let c = clash("2026-10-23T16:00", "B", &list).unwrap();
-        assert!(c.contains("Li Shuhan") && c.contains("Fri 23 Oct at 16:00"), "{c}");
+        assert!(c.contains("Mei Lin") && c.contains("Fri 23 Oct at 16:00"), "{c}");
         assert!(clash("2026-10-23T16:45", "B", &list).is_some(), "under an hour apart");
         assert!(clash("2026-10-23T17:00", "B", &list).is_none(), "an hour apart is not a clash");
         assert!(clash("2026-10-23T16:00", "Z", &list).is_some());

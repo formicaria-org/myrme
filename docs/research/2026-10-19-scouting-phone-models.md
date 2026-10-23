@@ -135,7 +135,7 @@ reasoning-cost gate, and its screen was stopped.
 The artificial meetings are 62–227 characters, one or two emails each. Real exchanges are longer,
 and they are where a larger model should show its worth.
 
-**The real set:** the five mail conversations in the owner's vault on 2026-10-19:
+**The real set:** the five mail conversations in a user's vault on 2026-10-19:
 - **four accepted meetings**, scored on the time the owner kept;
 - **one conversation not accepted**, where the right answer is no meeting;
 - each 3–7 emails, 1.5–4.5k characters, with links as places.

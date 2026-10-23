@@ -20,7 +20,7 @@
 # model that fits a phone's RAM and stays responsive).
 #
 # PHONE (2026-10-20, `docs/research/2026-10-20-small-model-benchmark-summary.md`): **qwen3.5-0.8b**,
-# the phone's only model. The 450M was faster only: on the owner's real mail it found none of four
+# the phone's only model. The 450M was faster only: on a user's real mail it found none of four
 # meetings, and it read handwriting at 96% WER and typed pages at 49%. One `phone_label` means no
 # chooser (formicaria shows one only for two or more). A phone already running a 450M keeps it and is
 # offered this default (`installed.rs`, the owner's 2026-10-10 rule).

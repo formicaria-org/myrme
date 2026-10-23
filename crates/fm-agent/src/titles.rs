@@ -1,4 +1,4 @@
-//! A conversation note's title — **who it is with, and who they are to the person** ("Marta Bianchi —
+//! A conversation note's title — **who it is with, and who they are to the person** ("Greta Lind —
 //! Master student, gaze estimation project") — in place of the email subject it was created with
 //! ("Re: Fw: Asking about the project course"). The owner asked for it on 2026-10-15.
 //!
@@ -43,7 +43,7 @@ pub fn check(name: &str, about: &str, body: &str, me: Option<&str>) -> Option<St
     Some(format!("{} — {}", display_name(name), about.trim().trim_end_matches('.')))
 }
 
-/// `MARTA BIANCHI` → `Marta Bianchi`; a name already in mixed case is left as written.
+/// `GRETA LIND` → `Greta Lind`; a name already in mixed case is left as written.
 fn display_name(name: &str) -> String {
     let name = name.trim();
     if name.chars().any(char::is_lowercase) {
@@ -64,23 +64,18 @@ fn display_name(name: &str) -> String {
 mod tests {
     use super::*;
 
-    const BODY: &str = "### MARTA BIANCHI — 2026-10-15 14:19\n\nI won't be able to make it.\n\n\
+    const BODY: &str = "### GRETA LIND — 2026-10-15 14:19\n\nI won't be able to make it.\n\n\
                         ### Anna Ferri — 2026-10-15 15:33\n\nNo problem.\n";
 
     #[test]
     fn a_name_from_the_emails_and_a_few_words_make_the_title() {
         assert_eq!(
-            check(
-                "MARTA BIANCHI",
-                "Master student, attention estimation",
-                BODY,
-                Some("Anna Ferri")
-            )
-            .as_deref(),
-            Some("Marta Bianchi — Master student, attention estimation")
+            check("GRETA LIND", "Master student, image segmentation", BODY, Some("Anna Ferri"))
+                .as_deref(),
+            Some("Greta Lind — Master student, image segmentation")
         );
         assert_eq!(
-            check("Marta Bianchi", "Collaborator.", BODY, None),
+            check("Greta Lind", "Collaborator.", BODY, None),
             None,
             "one word says too little"
         );
@@ -90,10 +85,10 @@ mod tests {
     fn an_invented_name_the_owner_or_a_long_description_is_refused() {
         let me = Some("Anna Ferri");
         assert_eq!(check("Maria Rossi", "Master student", BODY, me), None, "not in the emails");
-        assert_eq!(check("Anna Ferri", "Professor at NUS", BODY, me), None, "the owner");
+        assert_eq!(check("Anna Ferri", "Professor at a university", BODY, me), None, "the owner");
         assert_eq!(
             check(
-                "Marta Bianchi",
+                "Greta Lind",
                 "Collaborator on gaze estimation and social navigation planning",
                 BODY,
                 me

@@ -408,7 +408,7 @@ by default too; `enable_thinking=false` works).
 - **Not adopted on these numbers**; it would also need the runtime upgrade. Kept in the shortlist
   (`2026-10-19-scouting-phone-models.md`).
 
-### The small LLM: the shortlist and the owner's real mail — 2026-10-19
+### The small LLM: the shortlist and a user's real mail — 2026-10-19
 
 The full numbers are in `2026-10-19-scouting-phone-models.md` §4. The shortlisted models are
 MiniCPM5-1B and 2B, Qwen3.5-2B, K2-Horizon-3.7B and LFM2.5-2.6B, all on b11731. The headline:
@@ -437,7 +437,7 @@ MiniCPM5-1B and 2B, Qwen3.5-2B, K2-Horizon-3.7B and LFM2.5-2.6B, all on b11731. 
 | APK and download size | every phone carries the runtime; tools add downloads | measured in L0; tools are per-feature offers |
 | GLiNER2's ONNX export is several graphs, run by young community engines | L2 might need the older GLiNER, or our own orchestration | start with `gline-rs` (GLiNER); GLiNER2 only if it beats it on our eval |
 | Handwriting | no small tool reads it well; the capped VLM reaches 43–45% | handwriting keeps the VLM fallback; a dedicated reader is a later question |
-| Languages | the owner's mail is English, Italian and Chinese | every eval keeps its Italian and Chinese cases; `gliner_multi`, PP-OCRv5's multilingual dictionaries |
+| Languages | a user's mail is English, Italian and Chinese | every eval keeps its Italian and Chinese cases; `gliner_multi`, PP-OCRv5's multilingual dictionaries |
 | Licences | some popular tools are non-commercial | each `[[models]]` entry carries its licence; the 2026-10-18 watch-list applies; GLiNER's v0/v1 weights are CC-BY-NC, v2.1 is the pick |
 | Two runtimes to maintain | update risk, as the vision encoder's 2.7× slowdown on llama.cpp master showed | pin both; measure before any upgrade |
 | iOS | no assistant there today | out of scope; ONNX Runtime ships for iOS if it is ever wanted |
