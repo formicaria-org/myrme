@@ -68,8 +68,9 @@ threads_mobile = 4
 # concise). Raise it here for longer answers — a formula + explanation needs more than the old 600.
 max_reply_chars = 2000
 
-# GPU policy for the desktop runtime: "auto" (use the best GPU when one is present, else CPU), "on"
-# (always offload), or "off" (CPU only). Default is GPU-when-available.
+# GPU policy for the desktop runtime: "auto" (a discrete GPU when one is present, else the CPU — an
+# integrated GPU is skipped, since the laptop model ran slower on one than on the CPU; 2026-10-23),
+# "on" (offload to any GPU, an integrated one included), or "off" (CPU only). Default is "auto".
 gpu = "auto"
 
 # --- Audio→transcript runtime (whisper.cpp). ---------------------------------------------------------

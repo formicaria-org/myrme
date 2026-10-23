@@ -138,6 +138,15 @@ fn run() -> Result<(), String> {
     // GPU (and a GPU-capable runtime), the model offloads; with no GPU it silently runs on CPU. `--ngl`
     // overrides.
     let ngl = a.ngl.unwrap_or_else(|| manifest.gpu_layers());
+    // **`auto` is a discrete GPU, else the CPU** (`decisions.md` 2026-10-23): when every GPU the
+    // runtime sees is integrated, the model would run slower on it than on the CPU (5.7 against
+    // 14.4 tok/s, measured), so it is started with `--device none` — not `-ngl 0`, which still sends
+    // large batches to the GPU. Only when nobody chose: an explicit `--ngl` is taken as given.
+    let placement = if a.ngl.is_none() && ngl > 0 {
+        crate::gpu::place(&manifest.gpu, crate::gpu::probe(&runtime).as_deref())
+    } else {
+        crate::gpu::Placement::AsConfigured
+    };
 
     // Launch the model under the watchdog (preflight → resource caps → guaranteed kill). Its
     // stdout/stderr are inherited (not nulled) so a crash is visible in the agent log.
@@ -161,6 +170,15 @@ fn run() -> Result<(), String> {
         &ngl.to_string(),
         "--no-warmup",
     ]);
+    if let crate::gpu::Placement::CpuOnly { integrated } = &placement {
+        cmd.args(["--device", "none"]);
+        // Said once, in the agent log: a slow assistant should leave a reason a person can find.
+        eprintln!(
+            "note: only an integrated GPU ({}) — the model runs on the CPU, which is faster there; \
+             gpu = \"on\" in models.toml uses the GPU anyway",
+            integrated.join(", ")
+        );
+    }
     manifest.add_template_flags(&mut cmd, &model_name);
     // The multimodal projector, when this model has one and it has actually been fetched. Present ⇒
     // the same server also answers image turns; absent ⇒ it serves text-only, exactly as it always

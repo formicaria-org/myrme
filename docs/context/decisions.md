@@ -577,6 +577,32 @@ formicaria's side is its `decisions.md` entry of the same date.
 **Contract:** additive — a new dependency (`jiff`, MIT OR Unlicense) and one more existing formicaria
 route read. `resolve`/`meeting_lines` gained a parameter; neither is in the contract.
 
+## 2026-10-23 (later) — an integrated GPU is not "a GPU" for `gpu = "auto"` `#model`
+
+**What prompted it.** A laptop whose discrete GPU had dropped out ran the 4B laptop model on its
+integrated GPU, because `auto` passed `-ngl 99` and llama.cpp offloads to any Vulkan device. Measured
+on one laptop with the shipped runtime (`docs/research/2026-10-23-integrated-gpu-fallback.md` §2): the
+integrated GPU writes 5.7 tok/s, the CPU 14.4; it reads 80 against 95. The phone's Mali showed the same
+(speed study §2.4). The owner: *"implement the iGPU fix in Myrme"*.
+
+**Decision.**
+- **`auto` means a discrete GPU when there is one, else the CPU.** Before launch `agent-serve` asks the
+  staged runtime (`llama-bench --list-devices`), and when every Vulkan device reports `uma: 1` it starts
+  the server with **`--device none`** (not `-ngl 0`, which still sends large batches to the GPU), and
+  says so once in the agent log (`crates/fm-agent-run/src/gpu.rs`).
+- **Every failure keeps the old launch**: no probe binary, a probe slower than 20 s, output it cannot
+  read. A machine with a working discrete GPU never loses it to this.
+- **`on` still uses any GPU** (the way to force a strong integrated one, none of which is measured yet);
+  `off` and an explicit `--ngl` are unchanged. macOS (Metal) is left alone.
+
+**Test:** the decision and the parser are unit-tested; `the_staged_runtime_still_reports_devices_in_this_shape`
+pins the line's shape against a staged runtime (`MYRME_RUNTIME` or `agents/runtime`; skipped where none is
+staged), so a runtime bump that changes it fails there. Checked end to end on the laptop above: the server
+started with `--device none` and the note in the log.
+
+**Contract:** none. `contract.md` does not name the `gpu` key; its values and the `models.toml` format are
+unchanged, and the new module is private. Whisper (`whisper-server`) is not covered: it was not measured.
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading

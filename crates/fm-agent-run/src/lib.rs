@@ -48,6 +48,9 @@ pub mod agent_serve;
 #[cfg(feature = "download")]
 pub mod fetch;
 pub mod fmserve;
+/// Where the laptop model runs under `gpu = "auto"`: a discrete GPU, else the CPU — never an
+/// integrated GPU it would be slower on.
+mod gpu;
 /// What an app needs to host Myrme on a desktop: one folder, a few questions (contract 1.1). With
 /// `download`, which a desktop host has: provisioning is most of what it does.
 #[cfg(feature = "download")]
