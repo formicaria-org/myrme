@@ -40,7 +40,7 @@ fn day(s: &str) -> Date {
         .expect("a YYYY-MM-DD day")
 }
 
-/// The case's reader's own clock, when it names one (`"here": "Asia/Singapore"`).
+/// The case's reader's own clock, when it names one (`"here": "Asia/Tokyo"`).
 fn here(case: &Value) -> Option<Here> {
     case["here"].as_str().map(|z| Here::parse(z).expect("a zone name or offset"))
 }

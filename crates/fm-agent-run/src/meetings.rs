@@ -46,7 +46,7 @@ fn named(title: &str) -> bool {
 /// still the conversation's latest word is proposed too (2026-10-15). 5: a quote shortened with "…" is
 /// checked piece by piece (2026-10-16) — a move dropped over one is read again and proposed. 6: another
 /// conversation's meeting no longer counts as already on the agenda (`mail_conversations`' `taken`).
-/// 7: a time written on another clock ("10am Paris time") is moved onto the person's (2026-10-23) —
+/// 7: a time written on another clock ("10am Berlin time") is moved onto the person's (2026-10-23) —
 /// so a meeting proposed at the clock it was written on is read again and proposed moving.
 const PASS_VERSION: u64 = 7;
 

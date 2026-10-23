@@ -504,23 +504,23 @@
       "today": "2026-10-13"
     },
     {
-      "id": "zone-paris",
-      "title": "Internship enquiry",
+      "id": "zone-berlin",
+      "title": "Project call",
       "today": "2026-10-23",
-      "here": "Asia/Singapore",
-      "body": "### Nathan Costa — 2026-10-22 21:05\n\nDear Baljinder,\n\nThank you for your message. Would Tuesday the 27th suit you for a call?\n\nNathan\n\n### Baljinder Bal — 2026-10-23 00:27\n\nDear Nathan,\n\nTuesday 27th at 10am Paris time works for me. Here the zoom link: https://zoom.example/j/123\n\nBest,\nBaljinder\n",
+      "here": "Asia/Tokyo",
+      "body": "### Jonas Weber — 2026-10-22 21:05\n\nDear Tom,\n\nThank you for your message. Would Tuesday the 27th suit you for a call?\n\nJonas\n\n### Tom Reyes — 2026-10-23 00:27\n\nDear Jonas,\n\nTuesday 27th at 10am Berlin time works for me. Here is the link: https://meet.example/abc-123\n\nBest,\nTom\n",
       "expect": [
-        "fixed 2026-10-27T17:00"
+        "fixed 2026-10-27T18:00"
       ],
       "oracle": [
         {
           "status": "fixed",
-          "title": "Internship call",
+          "title": "Project call",
           "date": "Tuesday 27th",
           "time": "10am",
           "end": "",
-          "place": "https://zoom.example/j/123",
-          "quote": "Tuesday 27th at 10am Paris time works for me."
+          "place": "https://meet.example/abc-123",
+          "quote": "Tuesday 27th at 10am Berlin time works for me."
         }
       ],
       "recorded": {}
@@ -529,10 +529,10 @@
       "id": "zone-new-york-next-day",
       "title": "Panel prep",
       "today": "2026-10-23",
-      "here": "Asia/Singapore",
+      "here": "Asia/Tokyo",
       "body": "### Dana Whitfield — 2026-10-23 09:40\n\nHi Tom,\n\nLet's do the panel prep on Monday 2 November at 8pm New York time, which I know is early morning for you.\n\nDana\n\n### Tom Reyes — 2026-10-23 10:15\n\nThat works, see you then.\n",
       "expect": [
-        "fixed 2026-11-03T09:00"
+        "fixed 2026-11-03T10:00"
       ],
       "oracle": [
         {
@@ -551,8 +551,8 @@
       "id": "zone-unwritten-stays",
       "title": "Coffee",
       "today": "2026-10-23",
-      "here": "Asia/Singapore",
-      "body": "### Lena Okafor — 2026-10-23 08:00\n\nHi Tom, I'm in Paris this week. Can we talk on Wednesday at 3pm?\n\n### Tom Reyes — 2026-10-23 08:30\n\nWednesday at 3pm is fine.\n",
+      "here": "Asia/Tokyo",
+      "body": "### Lena Okafor — 2026-10-23 08:00\n\nHi Tom, I'm in Berlin this week. Can we talk on Wednesday at 3pm?\n\n### Tom Reyes — 2026-10-23 08:30\n\nWednesday at 3pm is fine.\n",
       "expect": [
         "fixed 2026-10-28T15:00"
       ],

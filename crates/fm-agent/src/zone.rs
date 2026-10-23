@@ -1,24 +1,24 @@
 //! Which clock a meeting time in an email is on, and moving it onto the person's own — formicaria
 //! `decisions.md` 2026-10-23, *a time written in another zone is moved onto yours*.
 //!
-//! An email said "Tuesday 27th at 10am Paris time"; the meeting went on a Singapore agenda at 10:00,
-//! seven hours early (the owner's mail, 2026-10-23). So once [`crate::meetings`] has found a time,
+//! An email that fixed a meeting "at 10am <city> time" put it on an agenda in another zone at 10:00,
+//! hours away from when it was (2026-10-23). So once [`crate::meetings`] has found a time,
 //! the words **right after it** are read for the clock it is on:
 //!
-//! - a place, then "time": `Paris time`, `New York time`, `Italian time`, `ora di Parigi`,
-//!   `ora italiana`, `heure de Paris`;
+//! - a place, then "time": `Berlin time`, `New York time`, `Italian time`, `ora di Berlino`,
+//!   `ora italiana`, `heure de Londres`;
 //! - an abbreviation: `CET`, `GMT`, `UTC`, `SGT`, `PT`, … (read as the place's clock, which is what
 //!   a writer means by "EST" in July);
 //! - an offset: `UTC+2`, `GMT-05:00`.
 //!
-//! Only right after the time — "at 10am (Paris time)", "15:00 CET" — because that is where a writer
-//! puts it; a place anywhere else in a sentence ("I'm in Paris that week") says where someone is, not
+//! Only right after the time — "at 10am (Berlin time)", "15:00 CET" — because that is where a writer
+//! puts it; a place anywhere else in a sentence ("I'm in Berlin that week") says where someone is, not
 //! which clock a time is on. **A time with no zone written stays as written**: the writer's clock
 //! cannot be known, and guessing is how a meeting moves by hours.
 //!
 //! The conversion is the zone database's, on the meeting's own day, so a daylight-saving change
-//! between the email and the meeting is counted: 10:00 in Paris is 16:00 in Singapore on 23 October
-//! 2026 and 17:00 on the 27th.
+//! between the email and the meeting is counted: 10:00 in Berlin is 17:00 in Tokyo on 23 October 2026
+//! and 18:00 on the 27th.
 
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -29,7 +29,7 @@ use time::{Date, Month, Time};
 /// The clock a time was written on, as found in the email.
 #[derive(Debug, Clone)]
 pub struct Zone {
-    /// How the box names it: `Paris time`, `CET`, `UTC+02:00`.
+    /// How the box names it: `Berlin time`, `CET`, `UTC+02:00`.
     pub label: String,
     tz: TimeZone,
 }
@@ -39,7 +39,7 @@ pub struct Zone {
 pub struct Here(TimeZone);
 
 impl Here {
-    /// `Asia/Singapore`, `+08:00`, `-05:30`, `Z` or `UTC`. `None` for anything else: a wrong zone
+    /// `Asia/Tokyo`, `+09:00`, `-05:30`, `Z` or `UTC`. `None` for anything else: a wrong zone
     /// moves every meeting by hours, so nothing is guessed.
     pub fn parse(name: &str) -> Option<Here> {
         let n = name.trim();
@@ -120,8 +120,8 @@ fn signed_offset(s: &str) -> Option<i32> {
 const ABBREVIATIONS: [(&str, &str); 37] = [
     ("utc", "UTC"),
     ("gmt", "UTC"),
-    ("cet", "Europe/Paris"),
-    ("cest", "Europe/Paris"),
+    ("cet", "Europe/Berlin"),
+    ("cest", "Europe/Berlin"),
     ("bst", "Europe/London"),
     ("wet", "Europe/Lisbon"),
     ("west", "Europe/Lisbon"),
@@ -178,7 +178,7 @@ const PLACES: [(&str, &str); 52] = [
     ("geneva", "Europe/Zurich"),
     ("dutch", "Europe/Amsterdam"),
     ("netherlands", "Europe/Amsterdam"),
-    ("central european", "Europe/Paris"),
+    ("central european", "Europe/Berlin"),
     ("japan", "Asia/Tokyo"),
     ("japanese", "Asia/Tokyo"),
     ("korea", "Asia/Seoul"),
@@ -199,7 +199,7 @@ const PLACES: [(&str, &str); 52] = [
     ("pacific", "America/Los_Angeles"),
     ("san francisco", "America/Los_Angeles"),
     ("seattle", "America/Los_Angeles"),
-    // Italian: "ora di Parigi", "ora italiana".
+    // Italian: "ora di Berlino", "ora italiana".
     ("parigi", "Europe/Paris"),
     ("francese", "Europe/Paris"),
     ("londra", "Europe/London"),
@@ -216,7 +216,7 @@ const PLACES: [(&str, &str); 52] = [
     ("londres", "Europe/London"),
 ];
 
-/// Every city the zone database names, lower-cased with spaces: `europe/paris` → `paris`,
+/// Every city the zone database names, lower-cased with spaces: `europe/berlin` → `berlin`,
 /// `america/new_york` → `new york`. The first name for a city wins, in the database's sorted order.
 fn cities() -> &'static HashMap<String, String> {
     static CITIES: OnceLock<HashMap<String, String>> = OnceLock::new();
@@ -244,7 +244,7 @@ fn place(words: &[String]) -> Option<&'static str> {
     cities().get(&phrase).map(String::as_str)
 }
 
-/// The zone named by `iana`, labelled by its city: `Europe/Paris` → `Paris time`.
+/// The zone named by `iana`, labelled by its city: `Europe/Berlin` → `Berlin time`.
 fn by_place(iana: &str) -> Option<Zone> {
     let tz = TimeZone::get(iana).ok()?;
     let city = iana.rsplit('/').next().unwrap_or(iana).replace('_', " ");
@@ -285,7 +285,7 @@ pub fn after_time(words: &[String]) -> Option<Zone> {
         let label = if *iana == "UTC" { "UTC".to_string() } else { w.to_uppercase() };
         return Some(Zone { label, tz });
     }
-    // "Paris time", "New York time", "Italian time zone": one to three words, then "time".
+    // "Berlin time", "New York time", "Italian time zone": one to three words, then "time".
     for k in 1..=3 {
         if words.get(k).is_some_and(|w| w == "time" || w == "timezone") {
             if let Some(iana) = place(&words[..k]) {
@@ -293,7 +293,7 @@ pub fn after_time(words: &[String]) -> Option<Zone> {
             }
         }
     }
-    // "ora di Parigi", "ora italiana", "heure de Paris", "heure française".
+    // "ora di Berlino", "ora italiana", "heure de Londres", "heure française".
     if matches!(first.as_str(), "ora" | "heure") {
         let from =
             if words.get(1).is_some_and(|w| matches!(w.as_str(), "di" | "de")) { 2 } else { 1 };
@@ -315,22 +315,22 @@ mod tests {
         s.split_whitespace().map(str::to_string).collect()
     }
 
-    fn sg() -> Here {
-        Here::parse("Asia/Singapore").unwrap()
+    fn tokyo() -> Here {
+        Here::parse("Asia/Tokyo").unwrap()
     }
 
     #[test]
     fn a_place_and_time_is_read_and_converted_on_the_meetings_own_day() {
-        let z = after_time(&words("paris time works for me")).unwrap();
-        assert_eq!(z.label, "Paris time");
-        // Paris leaves summer time on 25 October 2026: +2 before, +1 after.
+        let z = after_time(&words("berlin time works for me")).unwrap();
+        assert_eq!(z.label, "Berlin time");
+        // Berlin leaves summer time on 25 October 2026: +2 before, +1 after.
         assert_eq!(
-            z.convert(date!(2026 - 10 - 23), time!(10:00), &sg()),
-            Some((date!(2026 - 10 - 23), time!(16:00)))
+            z.convert(date!(2026 - 10 - 23), time!(10:00), &tokyo()),
+            Some((date!(2026 - 10 - 23), time!(17:00)))
         );
         assert_eq!(
-            z.convert(date!(2026 - 10 - 27), time!(10:00), &sg()),
-            Some((date!(2026 - 10 - 27), time!(17:00)))
+            z.convert(date!(2026 - 10 - 27), time!(10:00), &tokyo()),
+            Some((date!(2026 - 10 - 27), time!(18:00)))
         );
     }
 
@@ -339,8 +339,8 @@ mod tests {
         let z = after_time(&words("new york time")).unwrap();
         assert_eq!(z.label, "New York time");
         assert_eq!(
-            z.convert(date!(2026 - 11 - 02), time!(20:00), &sg()),
-            Some((date!(2026 - 11 - 03), time!(09:00)))
+            z.convert(date!(2026 - 11 - 02), time!(20:00), &tokyo()),
+            Some((date!(2026 - 11 - 03), time!(10:00)))
         );
     }
 
@@ -351,14 +351,14 @@ mod tests {
         let z = after_time(&words("utc+2")).unwrap();
         assert_eq!(z.label, "UTC+02:00");
         assert_eq!(
-            z.convert(date!(2026 - 10 - 27), time!(10:00), &sg()),
-            Some((date!(2026 - 10 - 27), time!(16:00)))
+            z.convert(date!(2026 - 10 - 27), time!(10:00), &tokyo()),
+            Some((date!(2026 - 10 - 27), time!(17:00)))
         );
         assert_eq!(after_time(&words("gmt -5")).unwrap().label, "UTC-05:00");
         assert_eq!(after_time(&words("ora italiana")).unwrap().label, "Rome time");
-        assert_eq!(after_time(&words("ora di parigi")).unwrap().label, "Paris time");
-        assert_eq!(after_time(&words("heure de paris")).unwrap().label, "Paris time");
-        assert_eq!(after_time(&words("singapore time")).unwrap().label, "Singapore time");
+        assert_eq!(after_time(&words("ora di berlino")).unwrap().label, "Berlin time");
+        assert_eq!(after_time(&words("heure de londres")).unwrap().label, "London time");
+        assert_eq!(after_time(&words("tokyo time")).unwrap().label, "Tokyo time");
         assert_eq!(after_time(&words("pacific time")).unwrap().label, "Los Angeles time");
     }
 
@@ -372,15 +372,15 @@ mod tests {
 
     #[test]
     fn your_zone_is_a_name_or_an_offset_and_nothing_else() {
-        let here = Here::parse("+08:00").unwrap();
+        let here = Here::parse("+09:00").unwrap();
         let z = after_time(&words("utc")).unwrap();
         assert_eq!(
             z.convert(date!(2026 - 10 - 27), time!(9:00), &here),
-            Some((date!(2026 - 10 - 27), time!(17:00)))
+            Some((date!(2026 - 10 - 27), time!(18:00)))
         );
-        assert!(Here::parse("Europe/Paris").is_some());
+        assert!(Here::parse("Europe/Berlin").is_some());
         assert!(Here::parse("Z").is_some());
-        assert!(Here::parse("Paris").is_none());
+        assert!(Here::parse("Berlin").is_none());
         assert!(Here::parse("+25:00").is_none());
         assert!(Here::parse("").is_none());
     }

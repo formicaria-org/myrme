@@ -95,7 +95,7 @@ pub trait VaultAccess {
     }
     /// What the meeting pass concluded about one conversation, for the person to see. Best-effort.
     fn mail_heard(&self, _note: &str, _title: &str, _latest: &str, _said: &str) {}
-    /// The person's own clock — formicaria's *your zone* setting (`Asia/Singapore`, `+08:00`) — onto
+    /// The person's own clock — formicaria's *your zone* setting (`Asia/Tokyo`, `+09:00`) — onto
     /// which a meeting written on another clock is moved. `None` where it cannot be asked; the
     /// computer's own zone is used then.
     fn zone(&self) -> Option<String> {

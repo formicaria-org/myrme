@@ -55,6 +55,18 @@ Its router names the file to open before you touch each area. The working plan i
 5. **A method ships with an eval:** exact-match on its structured output, including cases where the
    right answer is "nothing".
 
+## Never write personal details into this repo — it is public
+
+**Standing rule.** Nothing about the owner's person goes into any file, comment, test, eval case,
+commit message, tag message or release note: not where they or their devices are (cities,
+countries, a zone tied to them, travel), which devices they use, names or addresses of anyone in
+their mail or calendar, what a meeting or an email said, their institution, and no figures or
+excerpts from their own vault or its history. Describe an incident generically ("a device in zone B
+opened a vault begun in zone A"); give tests and eval cases invented people and neutral example
+zones. A product requirement may be quoted only when the quote carries no personal fact. Debugging
+on real data is fine locally — never copy what it showed into the repo. Re-read every commit, tag
+and release text for this before it leaves the machine.
+
 ## Before you add anything
 
 Ask the same four questions formicaria asks:

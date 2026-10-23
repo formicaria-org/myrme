@@ -552,26 +552,26 @@ as default for the light version and devices like smartphones"*.
 
 ## 2026-10-23 — a meeting time written on another clock is moved onto the person's `#method` `#contract`
 
-**The owner:** an email said *"Tuesday 27th at 10am Paris time"*; the pass proposed 10:00, it was
-accepted, and the Singapore agenda showed 10:00 instead of 17:00. *"we need to adjust for: laptop
-time zone, the time zone in the calendar and the one of the meeting."* formicaria's side is its
-`decisions.md` entry of the same date.
+**Asked:** an email fixed a meeting *"at 10am <city> time"*; the pass proposed 10:00, it was
+accepted, and an agenda in another zone showed 10:00 instead of the hour it was there. *"we need to
+adjust for: laptop time zone, the time zone in the calendar and the one of the meeting."*
+formicaria's side is its `decisions.md` entry of the same date.
 
 **Decision.**
 - **Rust reads the zone, never the model** (design rule 2): `fm_agent::zone::after_time` reads the
   words right after a time the sentence holds — a place and "time" (any city in the zone database,
   plus countries, adjectives, US regions and Italian/French city names), an abbreviation (`CET`,
-  `SGT`, `PT`; not `ET`, which is French "and"), or an offset (`UTC+2`). Nowhere else: "I'm in Paris
+  `SGT`, `PT`; not `ET`, which is French "and"), or an offset (`UTC+2`). Nowhere else: "I'm in Berlin
   this week" names a place, not a clock. No zone written → as written.
 - **`meetings::resolve` takes the person's clock** (`Option<&Here>`) and moves day and time onto it
   with the zone database (`jiff`), on the meeting's own day — so the 25 October change is counted.
-  `Meeting::written` keeps the email's own time (`10:00 Paris time`) for the box.
+  `Meeting::written` keeps the email's own time (`10:00 Berlin time`) for the box.
 - **The person's clock** comes from formicaria's existing `/api/calendars` (`zone`, or `offset` from a
   formicaria before 2026-10-23), else the computer's zone. "Today" is that clock's day, not UTC's.
 - **`PASS_VERSION` 7**: every conversation is read once more, so a meeting proposed on the clock it was
   written on is proposed moving.
 
-**Eval:** three cases (`zone-paris`, `zone-new-york-next-day`, `zone-unwritten-stays`); a case's
+**Eval:** three cases (`zone-berlin`, `zone-new-york-next-day`, `zone-unwritten-stays`); a case's
 `here` names the reader's clock. Recorded answers score exactly as before on the seventeen others.
 
 **Contract:** additive — a new dependency (`jiff`, MIT OR Unlicense) and one more existing formicaria

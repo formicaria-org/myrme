@@ -16,7 +16,7 @@
 //!    *that email* was sent, read off its heading, in Italian or English. Nothing found → dropped.
 //! 3. **Rust finds the time** in that sentence (`12pm`, `alle 15`, `11:30am`), never elsewhere: a time
 //!    from another sentence could belong to anything. None found → the meeting is for the day.
-//!    **A zone written right after it** ("10am Paris time", "15:00 CET") moves it onto the person's
+//!    **A zone written right after it** ("10am Berlin time", "15:00 CET") moves it onto the person's
 //!    own clock ([`crate::zone`], 2026-10-23); with none written it stays as written.
 //! 4. **The plan** ([`plan`]) decides what to propose: the conversation note takes the first meeting;
 //!    each further one becomes a proposed meeting note; anything already on the agenda (an invitation
@@ -68,7 +68,7 @@ pub struct Meeting {
     /// is about the meeting the conversation stands for.
     pub dated: bool,
     /// The time as the email wrote it, when it was on another clock and was moved onto the person's:
-    /// `10:00 Paris time`. Shown beside the converted time, so the person can check the arithmetic.
+    /// `10:00 Berlin time`. Shown beside the converted time, so the person can check the arithmetic.
     pub written: Option<String>,
 }
 
@@ -423,7 +423,7 @@ fn elided(quote: &str, all: &[Block]) -> Option<String> {
 
 /// Check one reported meeting against the emails and date it. `body` is the conversation note.
 ///
-/// `here` is the person's own clock. A time the email puts on another one ("10am Paris time") is
+/// `here` is the person's own clock. A time the email puts on another one ("10am Berlin time") is
 /// moved onto it, and its day with it; with `here` unknown, or no zone written, the time stays as
 /// written.
 pub fn resolve(
