@@ -12,7 +12,10 @@ it).
 
 ## Pipeline
 
-1. **The conversation note**, without Myrme's own box (`meetings::without_box`).
+1. **The conversation note**, without Myrme's own box (`meetings::without_box`), its headings on
+   formicaria's clock (`meetings::on_clock`, since 0.10.0): a heading written with its offset is read
+   onto that clock, keeping the sender's own stamp beside it when the two differ. The clock is
+   formicaria's (`VaultAccess::clock`), never this process's; with none the pass does not run.
 2. **A window of it, not the whole exchange** (since 2026-10-24, `meetings::window`): the emails
    since the last read, the email before them, and the emails whose sentences fix a meeting still to
    come or ask a question still open (`meetings::Ledger`). The emails left out are one line written by
@@ -31,11 +34,13 @@ it).
 4. **Rust checks and dates each item** against the whole conversation (`meetings::resolve`):
    - the quote must be in the emails;
    - the date is read in that sentence, or earlier in the same email, counted from the day that
-     email was sent;
+     email was sent — the sender's own day (since 0.10.0);
    - the time is read only in that sentence;
    - a meeting that is already past is dropped, and so is one that began before the newest email
      was sent (since Myrme 0.7.0).
-5. **The plan** (`meetings::plan`) decides what to propose. A meeting restated without its time on a
+5. **The plan** (`meetings::plan`) decides what to propose. A start goes to formicaria as an RFC 3339
+   moment when its clock says it takes one (`instants`), else as a stamp on its clock; what was
+   proposed is remembered as instants, so a change of zone asks nothing twice (since 0.10.0). A meeting restated without its time on a
    day that already holds one of the conversation's meetings is that meeting (2026-10-24). The person
    accepts or rejects each proposal.
 6. **The verdict in words** (`fm-agent-run`'s `meetings.rs`, since Myrme 0.7.1): the mail panel's
@@ -48,7 +53,7 @@ the authority on what runs.
 
 ## Eval
 
-`eval/cases.json`: 21 invented conversations, in English and Italian. They cover:
+`eval/cases.json`: 23 invented conversations, in English and Italian. They cover:
 - moves and call-offs, including a call-off followed by a new time;
 - "that day";
 - two meetings in one email;
@@ -58,6 +63,7 @@ the authority on what runs.
 - a question accepted, a question declined, a question unanswered;
 - three cases whose right answer is *nothing*;
 - a long exchange with a meeting a week, a long email, and the next meeting accepted with "OK"
+- headings with their offset, one written late in the sender's evening ("tomorrow" is the sender's)
   (`weekly-long`, 2026-10-24).
 
 In the live run (`--ignored`), constrained on production's layouts, each case is read as the pass

@@ -19,7 +19,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use fm_agent::meetings::{self, Meeting};
-use fm_agent::zone::Here;
+use fm_agent::zone::{Clock, Here};
 use fm_agent::LlmStep;
 use serde_json::{json, Value};
 
@@ -67,7 +67,9 @@ struct Memory {
 }
 
 impl Memory {
-    fn load(path: &Path) -> Self {
+    /// Read the memory, its remembered starts onto `here` (2026-10-24, later): `proposed_at` holds them
+    /// as instants; a file from before has only `proposed`, naive, taken as on `here`.
+    fn load(path: &Path, here: Option<&Here>) -> Self {
         let v: Value = std::fs::read_to_string(path)
             .ok()
             .and_then(|t| serde_json::from_str(&t).ok())
@@ -81,11 +83,12 @@ impl Memory {
             // Under older rules: forget where reading stopped, so the conversation is read again.
             let last =
                 if current { e["last"].as_str().unwrap_or("").to_string() } else { String::new() };
-            let proposed = e["proposed"]
+            let list = if e["proposed_at"].is_array() { &e["proposed_at"] } else { &e["proposed"] };
+            let proposed = list
                 .as_array()
                 .into_iter()
                 .flatten()
-                .filter_map(|s| s.as_str().map(str::to_string))
+                .filter_map(|s| s.as_str().map(|s| meetings::stamp_on(s, here)))
                 .collect();
             m.seen.insert(id.clone(), (last, proposed));
             if e["titled"].as_bool() == Some(true) {
@@ -93,13 +96,15 @@ impl Memory {
             }
             // Read under older rules: read again from the start.
             if current && e["ledger"].is_object() {
-                m.ledgers.insert(id.clone(), meetings::Ledger::from_json(&e["ledger"]));
+                m.ledgers.insert(id.clone(), meetings::Ledger::from_json(&e["ledger"], here));
             }
         }
         m
     }
 
-    fn save(&self, path: &Path) {
+    /// Write the memory, every remembered start as the instant it is on `here` (`proposed_at`), with
+    /// the naive copies an older Myrme reads (`proposed`).
+    fn save(&self, path: &Path, here: Option<&Here>) {
         let empty = (String::new(), HashSet::new());
         let ids: HashSet<&String> =
             self.seen.keys().chain(self.titled.iter()).chain(self.ledgers.keys()).collect();
@@ -109,12 +114,13 @@ impl Memory {
                 let (last, proposed) = self.seen.get(id).unwrap_or(&empty);
                 let mut p: Vec<&String> = proposed.iter().collect();
                 p.sort();
-                let mut e = json!({ "last": last, "proposed": p });
+                let at: Vec<String> = p.iter().map(|s| meetings::to_instant(s, here)).collect();
+                let mut e = json!({ "last": last, "proposed": p, "proposed_at": at });
                 if self.titled.contains(id) {
                     e["titled"] = json!(true);
                 }
                 if let Some(l) = self.ledgers.get(id) {
-                    e["ledger"] = l.to_json();
+                    e["ledger"] = l.to_json(here);
                 }
                 (id.clone(), e)
             })
@@ -271,9 +277,14 @@ fn with_block(body: &str, block: &str, model: &str) -> String {
 }
 
 impl<V: VaultAccess> Agent<V> {
-    /// The person's own clock: formicaria's setting, else this computer's zone.
-    pub fn here(&self) -> Option<Here> {
-        self.fm.zone().and_then(|z| Here::parse(&z)).or_else(Here::system)
+    /// **The person's clock — formicaria's, never this process's** (2026-10-24, later): its `clock`
+    /// (contract 1.8), else the zone an older formicaria's `/api/calendars` answers, today counted on
+    /// it. `None` when neither: what needs a clock then does not run.
+    pub fn clock(&self) -> Option<Clock> {
+        if let Some(c) = self.fm.clock().and_then(|v| Clock::from_answer(&v)) {
+            return Some(c);
+        }
+        self.fm.zone().and_then(|z| Here::parse(&z)).map(|h| Clock::on(h, false))
     }
 
     /// Read at most one conversation with new mail and propose its meetings. Returns a one-line
@@ -285,8 +296,9 @@ impl<V: VaultAccess> Agent<V> {
         &self,
         llm: &L,
         memory: &Path,
-        today: time::Date,
+        clock: &Clock,
     ) -> Result<Option<String>, String> {
+        let today = clock.today;
         // No mail on this device, or nothing listening: nothing to do, and not an error.
         let Ok(list) = self.fm.mail_conversations() else { return Ok(None) };
         let strings = |v: &Value| -> HashSet<String> {
@@ -298,8 +310,17 @@ impl<V: VaultAccess> Agent<V> {
         };
         let taken = strings(&list["taken"]);
         let me = list["me"].as_str();
-        let here = self.here();
-        let mut mem = Memory::load(memory);
+        let here = Some(clock.here.clone());
+        let mut mem = Memory::load(memory, here.as_ref());
+        // A start as formicaria takes it: an instant when it says it can (`instants`), so a clock that
+        // moves between this pass and its write cannot misread it.
+        let to_fm = |stamp: String| -> String {
+            if clock.instants {
+                meetings::rfc3339_on(&stamp, &clock.here).unwrap_or(stamp)
+            } else {
+                stamp
+            }
+        };
         let today_s =
             format!("{:04}-{:02}-{:02}", today.year(), u8::from(today.month()), today.day());
 
@@ -310,12 +331,17 @@ impl<V: VaultAccess> Agent<V> {
             if mem.seen.get(id).is_some_and(|(l, _)| l == last) {
                 continue;
             }
+            // Compared on formicaria's clock (2026-10-24); `last` itself is kept as it came, for
+            // equality only.
+            let last_on = meetings::stamp_on(last, here.as_ref());
+            let last_on = last_on.as_str();
             let title = conv["title"].as_str().unwrap_or("");
             let note = self.fm.get(id)?;
             let body = note["body"].as_str().unwrap_or_default().to_string();
             // The exchange alone: our own box repeats last time's answer, and a small model read it
             // first and gave it again over a later email that moved the meeting.
-            let emails = meetings::without_box(&body);
+            // On formicaria's clock: a heading written with its offset is read onto it (2026-10-24).
+            let emails = meetings::on_clock(&meetings::without_box(&body), here.as_ref());
 
             // **One step of the reading** (2026-10-24): the model reads a window — the emails since
             // its last read and the ones still in play — held to the answer's schema (measured on
@@ -336,7 +362,7 @@ impl<V: VaultAccess> Agent<V> {
             mem.ledgers.insert(id.to_string(), step.ledger.clone());
             if !step.done {
                 // Not at the newest email yet: nothing is planned from a part of the exchange.
-                mem.save(memory);
+                mem.save(memory, here.as_ref());
                 let to = step.ledger.read.as_deref().map(when).unwrap_or_default();
                 return Ok(Some(format!("reading \u{201c}{title}\u{201d}: read up to {to}")));
             }
@@ -354,7 +380,7 @@ impl<V: VaultAccess> Agent<V> {
                 start: s,
                 upcoming: s >= today_s.as_str(),
                 place: conv["location"].as_str().filter(|p| !p.is_empty()),
-                latest: Some(last),
+                latest: Some(last_on),
             });
             let linked = strings(&list["linked"][id]);
             let (read_to, proposed) = mem.seen.get(id).cloned().unwrap_or_default();
@@ -380,8 +406,8 @@ impl<V: VaultAccess> Agent<V> {
                     with_block(&body, &warned(block(m, &self.model), &clashes), &self.model);
                 // A new time also lifts an earlier call-off: the meeting is on again.
                 let mut props = json!({
-                    "start": m.start_stamp(),
-                    "due": m.due_stamp(),
+                    "start": to_fm(m.start_stamp()),
+                    "due": to_fm(m.due_stamp()),
                     "addTags": ["meeting"],
                     "removeTags": [CANCELLED],
                 });
@@ -440,8 +466,8 @@ impl<V: VaultAccess> Agent<V> {
                 let mut note = json!({
                     "title": m.title,
                     "body": body,
-                    "start": m.start_stamp(),
-                    "due": m.due_stamp(),
+                    "start": to_fm(m.start_stamp()),
+                    "due": to_fm(m.due_stamp()),
                     "tags": ["meeting", "mail"],
                 });
                 if let Some(p) = &m.place {
@@ -452,13 +478,13 @@ impl<V: VaultAccess> Agent<V> {
                 made += 1;
             }
             mem.seen.insert(id.to_string(), (last.to_string(), now_proposed));
-            mem.save(memory);
+            mem.save(memory, here.as_ref());
             // In words a person reads (the owner, 2026-10-20: *"some wrong words there"* — a meeting
             // that "stays at" a time already gone, and timestamps).
             let mut said = if verdict.is_empty() {
                 match conv["start"].as_str() {
                     // Begun before the newest email: it took place, and that email changed nothing.
-                    Some(s) if s.get(..16).unwrap_or(s) < last.get(..16).unwrap_or(last) => {
+                    Some(s) if s.get(..16).unwrap_or(s) < last_on.get(..16).unwrap_or(last_on) => {
                         format!("no change \u{2014} the meeting on {} has taken place", when(s))
                     }
                     Some(s) => with_clash(
@@ -493,12 +519,12 @@ impl<V: VaultAccess> Agent<V> {
             }
             let note = self.fm.get(id)?;
             let body = note["body"].as_str().unwrap_or_default().to_string();
-            let emails = meetings::without_box(&body);
+            let emails = meetings::on_clock(&meetings::without_box(&body), here.as_ref());
             let new_title = self.title_once(llm, &mut mem, id, title, &emails, me);
             if let Some(t) = &new_title {
                 self.propose_title(id, &body, t)?;
             }
-            mem.save(memory);
+            mem.save(memory, here.as_ref());
             return Ok(Some(match new_title {
                 Some(t) => format!("proposed the title \u{201c}{t}\u{201d}"),
                 None => format!("no title found for \u{201c}{title}\u{201d}"),
@@ -693,6 +719,12 @@ mod tests {
         p
     }
 
+    /// A clock on UTC with its day given — the tests name their clock rather than inherit the
+    /// machine's (2026-10-24, later).
+    fn on(day: time::Date) -> Clock {
+        Clock::at(Here::parse("UTC").unwrap(), day, false)
+    }
+
     fn agent() -> Agent<MailVault> {
         Agent {
             fm: MailVault::default(),
@@ -725,7 +757,7 @@ mod tests {
         let mem = scratch();
         let a = agent();
         let llm = Canned(ANSWER.into(), RefCell::new(0));
-        let said = a.meeting_pass(&llm, &mem, date!(2026 - 10 - 06)).unwrap().unwrap();
+        let said = a.meeting_pass(&llm, &mem, &on(date!(2026 - 10 - 06))).unwrap().unwrap();
         assert!(
             said.contains("2 proposal(s)") && said.contains("one more possible meeting"),
             "{said}"
@@ -754,6 +786,55 @@ mod tests {
         assert_eq!(new["start"], "2026-10-28T10:00");
         assert!(new["body"].as_str().unwrap().contains("note:C1"), "linked back");
         assert_eq!(calls.len(), 2, "the invented meeting was not proposed");
+    }
+
+    /// **Headings with their offset, and a formicaria that takes instants** (2026-10-24, later): the
+    /// emails' times are read onto the person's clock, and what is proposed is sent as a moment with
+    /// that clock's offset — so a change of zone between this pass and the write cannot move it.
+    #[test]
+    fn offset_headings_are_read_on_the_clock_and_starts_go_as_instants() {
+        let mem = scratch();
+        let a = agent();
+        *a.fm.body.borrow_mut() = Some(
+            "### Maria — 2026-10-06 09:12 +02:00\n\nCi vediamo giovedì alle 15 in aula 3.\n\n\
+             ### Luca — 2026-10-07 11:00 +02:00\n\nE il 28 alle 10 facciamo il punto.\n"
+                .into(),
+        );
+        let llm = Canned(ANSWER.into(), RefCell::new(0));
+        let tokyo = Clock::at(Here::parse("Asia/Tokyo").unwrap(), date!(2026 - 10 - 06), true);
+        a.meeting_pass(&llm, &mem, &tokyo).unwrap().unwrap();
+        let calls = a.fm.calls.borrow();
+        assert_eq!(calls[0].1["props"]["start"], "2026-10-08T15:00:00+09:00");
+        assert_eq!(calls[1].1["start"], "2026-10-28T10:00:00+09:00");
+        assert_eq!(calls.len(), 2, "{calls:?}");
+        drop(calls);
+        let asked = *llm.1.borrow();
+
+        // Read again with nothing new: not asked, on any clock.
+        let other = Clock::at(Here::parse("+01:00").unwrap(), date!(2026 - 10 - 06), true);
+        assert_eq!(a.meeting_pass(&llm, &mem, &other).unwrap(), None);
+        assert_eq!(*llm.1.borrow(), asked, "nothing new: the model was not asked again");
+    }
+
+    /// **A meeting proposed is remembered as the moment it is**, so reading it on another clock gives
+    /// the same moment, and a memory from before (naive starts) is taken as on the clock it is read on.
+    #[test]
+    fn the_memory_keeps_a_proposed_meeting_s_moment_across_a_change_of_zone() {
+        let mem = scratch();
+        let utc = Here::parse("UTC").unwrap();
+        let east = Here::parse("+02:00").unwrap();
+        let mut m = Memory::default();
+        m.seen.insert(
+            "C1".into(),
+            ("2026-10-07T11:00".into(), HashSet::from(["2026-10-08T15:00".to_string()])),
+        );
+        m.save(&mem, Some(&utc));
+        let back = Memory::load(&mem, Some(&east));
+        assert_eq!(back.seen["C1"].1, HashSet::from(["2026-10-08T17:00".to_string()]));
+
+        std::fs::write(&mem, r#"{"C1":{"last":"x","proposed":["2026-10-08T15:00"]}}"#).unwrap();
+        let old = Memory::load(&mem, Some(&east));
+        assert_eq!(old.seen["C1"].1, HashSet::from(["2026-10-08T15:00".to_string()]));
     }
 
     /// **A reply that only confirms the meeting changes nothing — and says so.** A collaborator's "sounds good,
@@ -803,7 +884,7 @@ mod tests {
             },
             ..agent()
         };
-        a.meeting_pass(&llm, &mem, date!(2026 - 10 - 16)).unwrap();
+        a.meeting_pass(&llm, &mem, &on(date!(2026 - 10 - 16))).unwrap();
         let said = a.fm.heard.borrow()[0].1.clone();
         assert!(
             said.contains("is still on Fri 23 Oct at 16:00 \u{2014} but it clashes with"),
@@ -816,7 +897,7 @@ mod tests {
             fm: MailVault { start: Some("2026-10-01T09:00"), ..Default::default() },
             ..agent()
         };
-        a.meeting_pass(&llm, &mem, date!(2026 - 10 - 16)).unwrap();
+        a.meeting_pass(&llm, &mem, &on(date!(2026 - 10 - 16))).unwrap();
         let said = a.fm.heard.borrow()[0].1.clone();
         assert_eq!(said, "no change \u{2014} the meeting on Thu 1 Oct at 09:00 has taken place");
     }
@@ -829,7 +910,7 @@ mod tests {
             ..agent()
         };
         let llm = Canned("[]".into(), RefCell::new(0));
-        a.meeting_pass(&llm, &mem, date!(2026 - 10 - 16)).unwrap();
+        a.meeting_pass(&llm, &mem, &on(date!(2026 - 10 - 16))).unwrap();
         assert!(a.fm.calls.borrow().is_empty(), "nothing proposed");
         assert_eq!(
             *a.fm.heard.borrow(),
@@ -850,7 +931,7 @@ mod tests {
         .unwrap();
         let a = agent();
         let llm = Canned(ANSWER.into(), RefCell::new(0));
-        a.meeting_pass(&llm, &mem, date!(2026 - 10 - 06)).unwrap();
+        a.meeting_pass(&llm, &mem, &on(date!(2026 - 10 - 06))).unwrap();
         assert_eq!(
             *llm.1.borrow(),
             2,
@@ -868,8 +949,8 @@ mod tests {
         let mem = scratch();
         let a = agent();
         let llm = Canned(ANSWER.into(), RefCell::new(0));
-        a.meeting_pass(&llm, &mem, date!(2026 - 10 - 06)).unwrap();
-        assert_eq!(a.meeting_pass(&llm, &mem, date!(2026 - 10 - 06)).unwrap(), None);
+        a.meeting_pass(&llm, &mem, &on(date!(2026 - 10 - 06))).unwrap();
+        assert_eq!(a.meeting_pass(&llm, &mem, &on(date!(2026 - 10 - 06))).unwrap(), None);
         assert_eq!(
             *llm.1.borrow(),
             2,
@@ -911,7 +992,7 @@ mod tests {
         let mut a = agent();
         a.shared_mail_prompt = true;
         let llm = Recording(RefCell::new(Vec::new()));
-        a.meeting_pass(&llm, &mem, date!(2026 - 10 - 06)).unwrap();
+        a.meeting_pass(&llm, &mem, &on(date!(2026 - 10 - 06))).unwrap();
         let calls = llm.0.borrow();
         assert_eq!(calls.len(), 2, "the meetings, then the title");
         assert_eq!(calls[0].0, calls[1].0, "one system prompt: the emails are a cached prefix");
@@ -930,7 +1011,7 @@ mod tests {
         let mem = scratch();
         let a = agent();
         let llm = ByAsk(RefCell::new(0));
-        a.meeting_pass(&llm, &mem, date!(2026 - 10 - 06)).unwrap();
+        a.meeting_pass(&llm, &mem, &on(date!(2026 - 10 - 06))).unwrap();
         {
             let calls = a.fm.calls.borrow();
             assert_eq!(calls.len(), 1, "no meeting, so the title alone: {calls:?}");
@@ -941,7 +1022,7 @@ mod tests {
             assert_eq!(calls[0].1["body"], BODY, "the text is left as it is");
         }
         // Asked once: nothing more, with or without new mail.
-        assert_eq!(a.meeting_pass(&llm, &mem, date!(2026 - 10 - 06)).unwrap(), None);
+        assert_eq!(a.meeting_pass(&llm, &mem, &on(date!(2026 - 10 - 06))).unwrap(), None);
         assert_eq!(a.fm.calls.borrow().len(), 1);
     }
 
@@ -1009,7 +1090,7 @@ mod tests {
         let today = date!(2026 - 10 - 23);
         let mut said = Vec::new();
         for _ in 0..10 {
-            match a.meeting_pass(&llm, &mem, today).unwrap() {
+            match a.meeting_pass(&llm, &mem, &on(today)).unwrap() {
                 Some(s) if s.starts_with("reading") => said.push(s),
                 Some(s) => {
                     said.push(s);
@@ -1029,7 +1110,7 @@ mod tests {
         text.push_str("### Ana Ruiz — 2026-10-24 00:33\n\nOK, I'm free at that time.\n");
         *a.fm.body.borrow_mut() = Some(text);
         llm.0.borrow_mut().clear();
-        a.meeting_pass(&llm, &mem, date!(2026 - 10 - 24)).unwrap().unwrap();
+        a.meeting_pass(&llm, &mem, &on(date!(2026 - 10 - 24))).unwrap().unwrap();
         let prompts = llm.0.borrow();
         assert_eq!(prompts.len(), 1, "one call for one new email");
         let p = &prompts[0];

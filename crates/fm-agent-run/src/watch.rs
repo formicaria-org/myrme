@@ -97,6 +97,8 @@ pub fn serve_loop<V: VaultAccess>(
     // something, and it is asked at every poll — seconds, not the minute rescan — so a reply reaches
     // the meeting pass as soon as it reaches the vault. `None` until first asked, which counts as new.
     let mut mail_seen: Option<u64> = None;
+    // Said once, not every minute: formicaria tells no clock (2026-10-24, later).
+    let mut said_no_clock = false;
     // Present as **Myrme**, the one name a person types on every device (2026-10-18); the model's
     // name still addresses it (`convo::addressed_here`), it is just not what the `@` list offers.
     agent.fm.present(convo::MYRME, agent.image_reader().as_ref()); // show online at once, before the first heartbeat tick
@@ -205,7 +207,9 @@ pub fn serve_loop<V: VaultAccess>(
         // the loop. `decisions.md` 2026-10-09, *the assistant proposes meetings*.
         let novelty = agent.fm.mail_novelty();
         let mail_new = novelty.is_some() && novelty != mail_seen;
-        if (force_scan || mail_backlog || mail_new) && !worked {
+        // **Only where this device reads the mail** (2026-10-24, later): a second desktop syncing the
+        // same vault would otherwise propose every meeting a second time.
+        if (force_scan || mail_backlog || mail_new) && !worked && novelty.is_some() {
             mail_seen = novelty;
             // The answer is capped so prompt + answer always fit the model's window together
             // (`fm_agent::meetings::TEXT_TOKENS`).
@@ -213,13 +217,17 @@ pub fn serve_loop<V: VaultAccess>(
                 .llm()
                 .with_temperature(0.0)
                 .with_max_tokens(fm_agent::meetings::ANSWER_TOKENS);
-            // The day on the person's own clock (2026-10-23); UTC's only when no zone can be read.
-            let today = agent
-                .here()
-                .map(|h| h.today())
-                .unwrap_or_else(|| time::OffsetDateTime::now_utc().date());
+            // **formicaria's clock, never this process's** (2026-10-24, later): with none, no pass.
+            let Some(clock) = agent.clock() else {
+                if !said_no_clock {
+                    eprintln!("meeting pass: formicaria tells no clock — meetings are not read");
+                    said_no_clock = true;
+                }
+                mail_backlog = false;
+                continue;
+            };
             mail_backlog = false;
-            match agent.meeting_pass(&llm, &runtime.join("mail-meetings.json"), today) {
+            match agent.meeting_pass(&llm, &runtime.join("mail-meetings.json"), &clock) {
                 Ok(Some(said)) => {
                     println!("@{name} {said}");
                     mail_backlog = true;

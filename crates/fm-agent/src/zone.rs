@@ -34,9 +34,45 @@ pub struct Zone {
     tz: TimeZone,
 }
 
-/// The person's own clock — formicaria's *your zone* setting, or the computer's.
+/// The person's own clock — **formicaria's app clock**, never this process's own zone (2026-10-24,
+/// later, *Myrme follows formicaria's clock*).
 #[derive(Debug, Clone)]
 pub struct Here(TimeZone);
+
+/// **The clock formicaria says the person is on** (its `clock` command, contract 1.8): the zone, the
+/// day it is there, and whether formicaria takes times as instants (RFC 3339 `start`/`due`).
+#[derive(Debug, Clone)]
+pub struct Clock {
+    pub here: Here,
+    pub today: Date,
+    pub instants: bool,
+}
+
+impl Clock {
+    /// A clock on `here`, today on it.
+    pub fn on(here: Here, instants: bool) -> Clock {
+        let today = here.today();
+        Clock { here, today, instants }
+    }
+
+    /// A clock with its day given — for a test, or a day formicaria named.
+    pub fn at(here: Here, today: Date, instants: bool) -> Clock {
+        Clock { here, today, instants }
+    }
+
+    /// formicaria's `clock` answer; `None` when it names no zone (it cannot read one) or one this
+    /// does not parse. Its `today` is taken when it is a day, so both sides agree on the day.
+    pub fn from_answer(v: &serde_json::Value) -> Option<Clock> {
+        let here = Here::parse(v["zone"].as_str()?)?;
+        let today = v["today"]
+            .as_str()
+            .and_then(|d| {
+                time::Date::parse(d, &time::format_description::well_known::Iso8601::DATE).ok()
+            })
+            .unwrap_or_else(|| here.today());
+        Some(Clock { here, today, instants: v["instants"].as_bool().unwrap_or(false) })
+    }
+}
 
 impl Here {
     /// `Asia/Tokyo`, `+09:00`, `-05:30`, `Z` or `UTC`. `None` for anything else: a wrong zone
@@ -55,9 +91,45 @@ impl Here {
         TimeZone::get(n).ok().map(Here)
     }
 
-    /// The computer's own zone, when it can be read.
-    pub fn system() -> Option<Here> {
-        TimeZone::try_system().ok().map(Here)
+    /// The moment `day` at `at` is on this clock, Unix seconds (`jiff`'s compatible rule in a gap or
+    /// a repeated hour).
+    pub fn instant(&self, day: Date, at: Time) -> Option<i64> {
+        let dt = jiff::civil::DateTime::new(
+            i16::try_from(day.year()).ok()?,
+            u8::from(day.month()) as i8,
+            day.day() as i8,
+            at.hour() as i8,
+            at.minute() as i8,
+            0,
+            0,
+        )
+        .ok()?;
+        Some(dt.to_zoned(self.0.clone()).ok()?.timestamp().as_second())
+    }
+
+    /// A moment (Unix seconds) as a day and a time on this clock.
+    pub fn local(&self, unix: i64) -> Option<(Date, Time)> {
+        let z = jiff::Timestamp::from_second(unix).ok()?.to_zoned(self.0.clone());
+        let d = civil_date(z.date())?;
+        Some((d, Time::from_hms(z.hour() as u8, z.minute() as u8, 0).ok()?))
+    }
+
+    /// This clock's offset at a moment, in seconds east of UTC.
+    pub fn offset_at(&self, unix: i64) -> i32 {
+        jiff::Timestamp::from_second(unix).map(|t| self.0.to_offset(t).seconds()).unwrap_or(0)
+    }
+
+    /// The clock's name for a person: `Asia/Tokyo`, else its offset now (`+05:45`, `UTC`).
+    pub fn label(&self) -> String {
+        if let Some(n) = self.0.iana_name() {
+            return n.to_string();
+        }
+        let s = self.offset_at(jiff::Timestamp::now().as_second());
+        if s == 0 {
+            return "UTC".into();
+        }
+        let (sign, a) = if s < 0 { ('-', -s) } else { ('+', s) };
+        format!("{sign}{:02}:{:02}", a / 3600, a % 3600 / 60)
     }
 
     /// The day it is now on this clock — the day a meeting "today" is judged by.
@@ -383,5 +455,13 @@ mod tests {
         assert!(Here::parse("Berlin").is_none());
         assert!(Here::parse("+25:00").is_none());
         assert!(Here::parse("").is_none());
+    }
+
+    #[test]
+    fn a_clock_is_named_by_its_zone_else_its_offset() {
+        assert_eq!(Here::parse("Asia/Tokyo").unwrap().label(), "Asia/Tokyo");
+        assert_eq!(Here::parse("+05:45").unwrap().label(), "+05:45");
+        assert_eq!(Here::parse("-03:30").unwrap().label(), "-03:30");
+        assert_eq!(Here::parse("utc").unwrap().label(), "UTC");
     }
 }

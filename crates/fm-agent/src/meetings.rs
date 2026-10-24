@@ -300,6 +300,131 @@ pub fn parse(answer: &str) -> Vec<Found> {
     Vec::new()
 }
 
+// ── One clock (2026-10-24, later) ─────────────────────────────────────────────────────────────────
+//
+// `decisions.md` 2026-10-24 (later), *Myrme follows formicaria's clock*. Every time the pass compares
+// is put on one clock — formicaria's — at the door, so the comparisons below stay plain text and
+// `plan` is unchanged; what is remembered between passes is kept as an instant.
+
+/// `2026-10-07 09:12 +02:00`, `2026-10-07 09:12 Z`, `2026-10-07T09:12:37+02:00`, `…Z` → Unix seconds;
+/// `None` for a time with no offset — which is then taken as on the clock, as before.
+fn with_offset(when: &str) -> Option<i64> {
+    let w = when.trim();
+    let (dt, off) = if let Some(rest) = w.strip_suffix('Z') {
+        (rest.trim_end(), 0)
+    } else {
+        let at = w.rfind(['+', '-']).filter(|&i| i >= 16)?;
+        let (sign, hm) = (if &w[at..at + 1] == "-" { -1 } else { 1 }, w[at + 1..].replace(':', ""));
+        if hm.len() != 4 || !hm.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        let secs = sign * (hm[..2].parse::<i64>().ok()? * 3600 + hm[2..].parse::<i64>().ok()? * 60);
+        (w[..at].trim_end(), secs)
+    };
+    if dt.len() < 16 {
+        return None;
+    }
+    let day = Date::parse(&dt[..10], &time::format_description::well_known::Iso8601::DATE).ok()?;
+    let sep = dt.as_bytes()[10];
+    if sep != b' ' && sep != b'T' {
+        return None;
+    }
+    let (h, m): (u8, u8) = (dt[11..13].parse().ok()?, dt[14..16].parse().ok()?);
+    let s: u8 = dt.get(17..19).and_then(|x| x.parse().ok()).unwrap_or(0);
+    let t = Time::from_hms(h, m, s).ok()?;
+    Some(time::PrimitiveDateTime::new(day, t).assume_utc().unix_timestamp() - off)
+}
+
+fn naive(day: Date, at: Time, sep: char) -> String {
+    format!(
+        "{:04}-{:02}-{:02}{sep}{:02}:{:02}",
+        day.year(),
+        u8::from(day.month()),
+        day.day(),
+        at.hour(),
+        at.minute()
+    )
+}
+
+/// **The conversation's headings on one clock**: `### Ana — 2026-10-07 09:12 +02:00` (formicaria 0.20)
+/// becomes the heading that moment is on `here`; one written without an offset is left as written.
+/// Only heading lines change, so a quote is still found in the email it came from.
+///
+/// **The sender's own stamp is kept beside it when the two differ**, `### Ana — 2026-10-08 05:30
+/// (sent 2026-10-07 22:30 -05:00)`: the stamps are compared on one clock, but "tomorrow" in that
+/// email is the sender's tomorrow, the 8th — counted from the 7th, as [`heading_day`] reads it.
+pub fn on_clock(body: &str, here: Option<&Here>) -> String {
+    let Some(here) = here else { return body.to_string() };
+    let mut out = String::with_capacity(body.len());
+    for line in body.split_inclusive('\n') {
+        let (text, end) = match line.strip_suffix('\n') {
+            Some(t) => (t, "\n"),
+            None => (line, ""),
+        };
+        let moved = text.strip_prefix("### ").and_then(|head| {
+            let (who, when) = head.rsplit_once(" — ")?;
+            let (d, t) = here.local(with_offset(when)?)?;
+            let on = naive(d, t, ' ');
+            let w = when.trim();
+            // The stamp as the sender wrote it, without its offset: the same moment's wording there.
+            let theirs =
+                w.strip_suffix('Z').unwrap_or(w).get(..16).unwrap_or(w).replacen('T', " ", 1);
+            if theirs == on {
+                Some(format!("### {who} — {on}"))
+            } else {
+                Some(format!("### {who} — {on} (sent {w})"))
+            }
+        });
+        match moved {
+            Some(m) => {
+                out.push_str(&m);
+                out.push_str(end);
+            }
+            None => out.push_str(line),
+        }
+    }
+    out
+}
+
+/// A `mail_last` (or any moment) on `here`: RFC 3339 with an offset becomes `YYYY-MM-DDTHH:MM` on it;
+/// a naive one is left as it is.
+pub fn stamp_on(s: &str, here: Option<&Here>) -> String {
+    here.and_then(|h| h.local(with_offset(s)?))
+        .map(|(d, t)| naive(d, t, 'T'))
+        .unwrap_or_else(|| s.to_string())
+}
+
+/// A naive timed start on `here` as the instant it is, `YYYY-MM-DDTHH:MMZ`, to be remembered; a day
+/// (or a value with no clock to read it on) is kept as it is.
+pub fn to_instant(stamp: &str, here: Option<&Here>) -> String {
+    let at = || -> Option<String> {
+        if stamp.len() < 16 || with_offset(stamp).is_some() {
+            return None;
+        }
+        let day =
+            Date::parse(&stamp[..10], &time::format_description::well_known::Iso8601::DATE).ok()?;
+        let t = Time::from_hms(stamp[11..13].parse().ok()?, stamp[14..16].parse().ok()?, 0).ok()?;
+        let unix = here?.instant(day, t)?;
+        let utc = time::OffsetDateTime::from_unix_timestamp(unix).ok()?;
+        Some(format!("{}Z", naive(utc.date(), utc.time(), 'T')))
+    };
+    at().unwrap_or_else(|| stamp.to_string())
+}
+
+/// A start as formicaria should receive it: RFC 3339 with the clock's offset at that moment
+/// (`2026-11-02T16:30:00+08:00`) — one formicaria converts onto the vault's clock once.
+pub fn rfc3339_on(stamp: &str, here: &Here) -> Option<String> {
+    if stamp.len() < 16 {
+        return None;
+    }
+    let day =
+        Date::parse(&stamp[..10], &time::format_description::well_known::Iso8601::DATE).ok()?;
+    let t = Time::from_hms(stamp[11..13].parse().ok()?, stamp[14..16].parse().ok()?, 0).ok()?;
+    let off = here.offset_at(here.instant(day, t)?);
+    let (sign, a) = if off < 0 { ('-', -off) } else { ('+', off) };
+    Some(format!("{}:00{sign}{:02}:{:02}", naive(day, t, 'T'), a / 3600, a % 3600 / 60))
+}
+
 // ── Reading only what is new (2026-10-24) ───────────────────────────────────────────────────────
 //
 // `decisions.md` 2026-10-24, *the meeting pass reads what is new since its last read*. The model was
@@ -331,23 +456,28 @@ pub struct Kept {
 
 impl Ledger {
     /// As stored in the pass's memory file: `{"read": …, "keep": [[at, start|null]], "print": "hex"}`.
-    pub fn to_json(&self) -> Value {
+    /// A kept start is remembered as the instant it is on `here` (2026-10-24, later), so a change of
+    /// zone does not move it.
+    pub fn to_json(&self, here: Option<&Here>) -> Value {
         serde_json::json!({
             "read": self.read,
-            "keep": self.keep.iter().map(|k| serde_json::json!([k.at, k.start])).collect::<Vec<_>>(),
+            "keep": self.keep.iter().map(|k| {
+                serde_json::json!([k.at, k.start.as_deref().map(|s| to_instant(s, here))])
+            }).collect::<Vec<_>>(),
             "print": format!("{:016x}", self.print),
         })
     }
 
-    /// Read back what [`Ledger::to_json`] wrote; anything else is an empty ledger.
-    pub fn from_json(v: &Value) -> Self {
+    /// Read back what [`Ledger::to_json`] wrote, its starts onto `here`; anything else is an empty
+    /// ledger. A start written before 2026-10-24 (naive) is taken as on `here`.
+    pub fn from_json(v: &Value, here: Option<&Here>) -> Self {
         let keep = v["keep"]
             .as_array()
             .into_iter()
             .flatten()
             .filter_map(|k| {
                 let at = k[0].as_str()?.to_string();
-                Some(Kept { at, start: k[1].as_str().map(str::to_string) })
+                Some(Kept { at, start: k[1].as_str().map(|s| stamp_on(s, here)) })
             })
             .collect();
         Ledger {
@@ -738,6 +868,8 @@ fn near_sentence<'a>(quote: &str, all: &'a [Block]) -> Option<(&'a Block, String
 /// `Maria Rossi — 2026-10-07 09:12` → 7 October 2026.
 fn heading_day(head: &str) -> Option<Date> {
     let (_, when) = head.rsplit_once(" — ").or_else(|| head.rsplit_once(" - "))?;
+    // The sender's own day, when [`on_clock`] kept it: the day their words are counted from.
+    let when = when.split_once("(sent ").map_or(when, |(_, sent)| sent);
     let d = when.trim().get(..10)?;
     let mut it = d.split('-');
     let (y, m, dd) =
@@ -2325,8 +2457,17 @@ mod tests {
             ],
             print: 0xdead_beef_0123_4567,
         };
-        assert_eq!(Ledger::from_json(&l.to_json()), l);
-        assert_eq!(Ledger::from_json(&Value::Null), Ledger::default());
+        assert_eq!(Ledger::from_json(&l.to_json(None), None), l);
+        assert_eq!(Ledger::from_json(&Value::Null, None), Ledger::default());
+        // On a clock, the kept start is an instant at rest and the same wall time back on that clock;
+        // read on another clock it is that clock's wall time for the same moment.
+        let tokyo = Here::parse("Asia/Tokyo").unwrap();
+        let stored = l.to_json(Some(&tokyo));
+        assert_eq!(stored["keep"][0][1], "2026-11-02T07:30Z");
+        assert_eq!(Ledger::from_json(&stored, Some(&tokyo)), l);
+        let berlin = Here::parse("Europe/Berlin").unwrap();
+        let moved = Ledger::from_json(&stored, Some(&berlin));
+        assert_eq!(moved.keep[0].start.as_deref(), Some("2026-11-02T08:30"));
     }
 
     #[test]
@@ -2349,6 +2490,75 @@ mod tests {
             s.ledger.read.as_deref(),
             Some("2026-10-23T09:30"),
             "not read again at every check"
+        );
+    }
+
+    #[test]
+    fn a_heading_with_its_offset_is_put_on_the_clock_and_one_without_is_left() {
+        let tokyo = Here::parse("Asia/Tokyo").unwrap();
+        let body = "### Ana Ruiz — 2026-10-07 09:12 +02:00\n\nSee you.\n### Tom Reyes — 2026-10-07 18:00\n\nOK.\n";
+        let got = on_clock(body, Some(&tokyo));
+        assert!(
+            got.starts_with("### Ana Ruiz — 2026-10-07 16:12 (sent 2026-10-07 09:12 +02:00)\n"),
+            "{got}"
+        );
+        assert!(got.contains("### Tom Reyes — 2026-10-07 18:00\n"), "a legacy heading stays");
+        assert!(got.contains("See you.") && got.ends_with("OK.\n"));
+        assert_eq!(on_clock(body, None), body);
+        // Across the fall-back night, two offsets are two moments, an hour apart as written.
+        let utc = Here::parse("UTC").unwrap();
+        let fold = "### A — 2026-10-25 02:30 +02:00\n### B — 2026-10-25 02:10 +01:00\n";
+        let got = on_clock(fold, Some(&utc));
+        assert!(
+            got.contains("### A — 2026-10-25 00:30") && got.contains("### B — 2026-10-25 01:10"),
+            "{got}"
+        );
+        // The same wording on both clocks: nothing kept beside it.
+        let same = on_clock("### A — 2026-10-07 09:12 +09:00\n", Some(&tokyo));
+        assert_eq!(same, "### A — 2026-10-07 09:12\n");
+    }
+
+    /// **"Tomorrow" is the sender's tomorrow**: written late on the 7th at −05:00 it is the 8th, though
+    /// the email is already on the 8th on the reader's clock (read from there, it would be the 9th).
+    /// The hour, with no zone written, stays as written (2026-10-23).
+    #[test]
+    fn a_relative_day_is_counted_from_the_sender_s_own_day() {
+        let tokyo = Here::parse("Asia/Tokyo").unwrap();
+        let body = on_clock(
+            "### Ana Ruiz — 2026-10-07 22:30 -05:00\n\nWe talk tomorrow at 6pm, as agreed.\n",
+            Some(&tokyo),
+        );
+        assert!(body.contains("— 2026-10-08 12:30 (sent 2026-10-07 22:30 -05:00)"), "{body}");
+        let f = Found {
+            status: "fixed".into(),
+            quote: "We talk tomorrow at 6pm, as agreed.".into(),
+            title: "Talk".into(),
+            date: "tomorrow".into(),
+            time: "6pm".into(),
+            end: String::new(),
+            place: String::new(),
+        };
+        let m = resolve(&f, &body, date!(2026 - 10 - 07), Some(&tokyo)).unwrap();
+        assert_eq!(m.start_stamp(), "2026-10-08T18:00", "the 8th, not the 9th");
+        let all = blocks(&body);
+        assert_eq!(
+            all[1].at.as_deref(),
+            Some("2026-10-08T12:30"),
+            "compared on the reader's clock"
+        );
+    }
+
+    #[test]
+    fn a_moment_is_kept_as_an_instant_and_read_back_on_any_clock() {
+        let tokyo = Here::parse("Asia/Tokyo").unwrap();
+        assert_eq!(stamp_on("2026-10-24T00:33:00+08:00", Some(&tokyo)), "2026-10-24T01:33");
+        assert_eq!(stamp_on("2026-10-24T00:33", Some(&tokyo)), "2026-10-24T00:33");
+        assert_eq!(to_instant("2026-11-02T16:30", Some(&tokyo)), "2026-11-02T07:30Z");
+        assert_eq!(to_instant("2026-11-02", Some(&tokyo)), "2026-11-02", "a day is a day");
+        assert_eq!(stamp_on("2026-11-02T07:30Z", Some(&tokyo)), "2026-11-02T16:30");
+        assert_eq!(
+            rfc3339_on("2026-11-02T16:30", &tokyo).as_deref(),
+            Some("2026-11-02T16:30:00+09:00")
         );
     }
 }

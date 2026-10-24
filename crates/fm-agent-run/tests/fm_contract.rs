@@ -44,12 +44,12 @@ use fm_agent_run::host::{
 #[cfg(feature = "download")]
 use fm_agent_run::host::BUNDLED_ONNXRUNTIME;
 
-/// The contract this file checks is 1.7 (`CONTRACT_MAJOR`/`CONTRACT_MINOR`). Changing what it names
+/// The contract this file checks is 1.8 (`CONTRACT_MAJOR`/`CONTRACT_MINOR`). Changing what it names
 /// means changing the contract version too — a removal or rename is a new major, an addition a new
 /// minor — and the two are compared here so one cannot move without the other.
 #[test]
-fn this_list_is_contract_1_7() {
-    assert_eq!((fm_agent_run::CONTRACT_MAJOR, fm_agent_run::CONTRACT_MINOR), (1, 7));
+fn this_list_is_contract_1_8() {
+    assert_eq!((fm_agent_run::CONTRACT_MAJOR, fm_agent_run::CONTRACT_MINOR), (1, 8));
     assert!(
         fm_agent_run::VERSION.split('.').count() == 3,
         "a release version is MAJOR.MINOR.PATCH"
@@ -149,4 +149,16 @@ fn the_files_formicaria_reads_are_where_it_reads_them() {
     .expect("docs/manual/assistant.md, formicaria's assistant chapter");
     // `<ManualLink page="user/assistant.html" section="turn-it-on">` in formicaria's Settings.
     assert!(manual.lines().any(|l| l.trim_start_matches('#').trim() == "Turn it on"));
+}
+
+/// Contract 1.8: formicaria's clock, which a vault gives the assistant (`/api/clock` on the desktop;
+/// the phone's own `VaultAccess` answers it in process). The answer is read for `zone`, `today` and
+/// `instants`; nothing else is assumed of it.
+#[test]
+fn a_vault_gives_the_assistant_formicaria_s_clock() {
+    use fm_agent_run::fmserve::VaultAccess;
+    fn clock<V: VaultAccess>(v: &V) -> Option<serde_json::Value> {
+        v.clock()
+    }
+    let _ = clock::<fm_agent_run::fmserve::FmServe>;
 }

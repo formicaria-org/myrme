@@ -127,9 +127,10 @@ fn a_live_model_against_the_cases() {
         let mut seconds = 0.0;
         for case in file["cases"].as_array_mut().expect("cases") {
             let id = case["id"].as_str().unwrap().to_string();
-            let body = case["body"].as_str().unwrap().to_string();
             let today = day(case["today"].as_str().unwrap());
             let zone = here(case);
+            // Shown to the model as the pass shows it: headings with an offset on the reader's clock.
+            let body = meetings::on_clock(case["body"].as_str().unwrap(), zone.as_ref());
             let expect = strings(&case["expect"]);
             // The prompt layout under study (`FM_LAYOUT`, `tests/layout`); `old` is production's.
             let (system, prompt) = layout::prompt(

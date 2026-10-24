@@ -20,9 +20,11 @@ use crate::zone::Here;
 /// with ` @ <place>` when the method found one. Sorted, so order never counts. `here` is the reader's
 /// own clock (a case's `here`), onto which a time written on another is moved.
 pub fn meeting_lines(answer: &str, body: &str, today: Date, here: Option<&Here>) -> Vec<String> {
+    // The emails as the pass reads them: headings with an offset on the reader's clock (2026-10-24).
+    let body = meetings::on_clock(body, here);
     let mut out: Vec<String> = meetings::parse(answer)
         .iter()
-        .filter_map(|f| meetings::resolve(f, body, today, here).ok())
+        .filter_map(|f| meetings::resolve(f, &body, today, here).ok())
         .map(|m| {
             let head = if m.cancelled {
                 format!("cancelled {}", m.start_stamp())

@@ -1,5 +1,5 @@
 {
-  "about": "Golden cases for M1, meetings from mail. Every name, address and exchange is invented. `body` is the conversation note as the pass reads it (`### Sender — sent`, then the email). `expect` is what a person reading the emails would put on the agenda, one line per meeting: `fixed <start stamp>` or `cancelled <day>`, plus ` @ <place>` when the place matters. `oracle` is an answer a perfect model would give, written by hand: replaying it through `meetings::parse` and `meetings::resolve` must give `expect`, which is what the CI test checks. `recorded` holds real models' answers from live runs (`tests/eval_meetings.rs`). `here`, when present, is the reader's own clock (a zone name or offset): a time the emails put on another clock must come out on this one (2026-10-23).",
+  "about": "Golden cases for M1, meetings from mail. Every name, address and exchange is invented. `body` is the conversation note as the pass reads it (`### Sender — sent`, then the email). `expect` is what a person reading the emails would put on the agenda, one line per meeting: `fixed <start stamp>` or `cancelled <day>`, plus ` @ <place>` when the place matters. `oracle` is an answer a perfect model would give, written by hand: replaying it through `meetings::parse` and `meetings::resolve` must give `expect`, which is what the CI test checks. `recorded` holds real models' answers from live runs (`tests/eval_meetings.rs`). `here`, when present, is the reader's own clock (a zone name or offset): a time the emails put on another clock must come out on this one (2026-10-23). A heading may carry its offset (`### Sender — 2026-10-07 22:30 -05:00`, formicaria 0.20): it is read onto `here` as the pass reads it, and a day the email names (\"tomorrow\") is counted from the sender's own day (2026-10-24).",
   "cases": [
     {
       "body": "### Lena Okafor — 2026-10-13 09:10\n\nHi Tom,\n\nCan we meet on Thursday at 3pm in room B12 to go through chapter 2?\n\nLena\n\n### Tom Reyes — 2026-10-13 10:02\n\nThursday at 3pm in B12 works for me, see you then.\n",
@@ -591,6 +591,48 @@
       "recorded": {},
       "title": "Ana Ruiz — Student, project",
       "today": "2026-10-24"
+    },
+    {
+      "id": "offset-headings-sender-day",
+      "title": "Draft review",
+      "today": "2026-10-08",
+      "here": "Asia/Tokyo",
+      "body": "### Ana Ruiz — 2026-10-07 22:30 -05:00\n\nHi Tom,\n\nShall we go through the draft tomorrow at 6pm?\n\nAna\n\n### Tom Reyes — 2026-10-08 13:05 +09:00\n\nYes, 6pm works. See you then.\n",
+      "expect": [
+        "fixed 2026-10-08T18:00"
+      ],
+      "oracle": [
+        {
+          "status": "fixed",
+          "title": "Draft review",
+          "date": "tomorrow",
+          "time": "6pm",
+          "end": "",
+          "place": "",
+          "quote": "Shall we go through the draft tomorrow at 6pm?"
+        }
+      ]
+    },
+    {
+      "id": "offset-headings-weekday",
+      "title": "Chapter review",
+      "today": "2026-10-12",
+      "here": "-03:30",
+      "body": "### Lena Okafor — 2026-10-12 08:15 +01:00\n\nDear Tom,\n\nCould we review chapter 3 on Friday at 11am in room C4?\n\nLena\n\n### Tom Reyes — 2026-10-12 06:40 -03:30\n\nFriday at 11am in C4 is good for me.\n",
+      "expect": [
+        "fixed 2026-10-16T11:00 @ C4"
+      ],
+      "oracle": [
+        {
+          "status": "fixed",
+          "title": "Chapter review",
+          "date": "Friday",
+          "time": "11am",
+          "end": "",
+          "place": "C4",
+          "quote": "Friday at 11am in C4 is good for me."
+        }
+      ]
     }
   ]
 }

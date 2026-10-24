@@ -239,6 +239,33 @@ fn an_edit_that_cannot_be_placed_proposes_nothing_in_formicaria() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// **formicaria's clock through the real door** (contract 1.8): a device that chose its zone in
+/// Settings → Clock answers it at `/api/clock`, and Myrme reads that clock — zone, today, instants —
+/// never its own. A formicaria from before 0.19 has no such route: then nothing is asserted but that
+/// the assistant does not invent one.
+#[test]
+#[ignore = "needs a built fm-serve; run `pixi run integration`"]
+fn the_assistant_reads_formicaria_s_clock() {
+    let root = temp_root("clock");
+    let dir = root.join("config").join("formicaria");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("clock.json"), r#"{"zone": "Asia/Kathmandu"}"#).unwrap();
+    let (_server, port) = start(&root);
+    let a = agent(port, 0);
+    let Some(answer) = a.fm.clock() else {
+        assert!(a.clock().is_none_or(|c| !c.instants), "an older formicaria takes no instants");
+        eprintln!("this formicaria has no /api/clock (before 0.19): the fallback holds");
+        let _ = std::fs::remove_dir_all(&root);
+        return;
+    };
+    assert_eq!(answer["zone"], "Asia/Kathmandu", "{answer}");
+    let c = a.clock().expect("a clock");
+    assert_eq!(c.here.label(), "Asia/Kathmandu");
+    assert!(c.instants, "formicaria 0.19 takes a start as a moment");
+    assert_eq!(answer["today"].as_str(), Some(c.today.to_string().as_str()));
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// formicaria's half of the recipe-heading contract: its recipe template names every heading a
 /// recipe note from Myrme has (`fm_agent::recipe::TEMPLATE_HEADINGS`; Myrme's half is a unit test
 /// there). Reads the pinned checkout `pixi run integration` builds from (`FM_SRC`).

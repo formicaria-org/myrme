@@ -29,7 +29,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// models — and an app moves to them by changing a tag and nothing else.
 pub const CONTRACT_MAJOR: u32 = 1;
 /// See [`CONTRACT_MAJOR`].
-pub const CONTRACT_MINOR: u32 = 7;
+pub const CONTRACT_MINOR: u32 = 8;
 
 /// **The model catalogue** — models, their pins and licences, and the runtime archives per platform
 /// (`models.toml`, beside this crate). Embedded so that whoever links Myrme has it without knowing
@@ -230,7 +230,11 @@ impl<V: VaultAccess> Agent<V> {
         // relevant context the user chose by linking, not a vault-wide search (that fed a tiny model a
         // pile of unrelated fragments it parroted back). `/search` still adds the web.
         on_stage("reading this note");
-        let mut context = self.host_note(note)?;
+        // A chat turn is told the day; an edit is not — it points at the note's words, and a small
+        // model given more to point at points wrong more often (2026-10-18).
+        let mut context: Vec<InputDoc> =
+            if intent.propose { Vec::new() } else { self.today().into_iter().collect() };
+        context.extend(self.host_note(note)?);
         context.extend(self.linked_notes(note)?);
         // Web search is best-effort: if the proxy is unreachable, don't fail the whole turn — answer
         // from notes/memory and *tell the user* the answer isn't web-grounded (a wrong answer that
@@ -734,6 +738,25 @@ impl<V: VaultAccess> Agent<V> {
         out.extend(middle.into_iter().map(|i| msgs[i].clone()));
         out.push(msgs[last].clone());
         Ok(out.join("\n"))
+    }
+
+    /// **What day it is, on formicaria's clock** (2026-10-24, later) — one line of provided context, so
+    /// "next Monday" in a chat is counted from the person's today, never this process's. Nothing when
+    /// formicaria has no clock to give.
+    fn today(&self) -> Option<InputDoc> {
+        let c = self.clock()?;
+        let d = c.today;
+        Some(InputDoc {
+            label: "today".into(),
+            text: format!(
+                "Today is {}, {} {} {} ({}).",
+                d.weekday(),
+                d.day(),
+                d.month(),
+                d.year(),
+                c.here.label()
+            ),
+        })
     }
 
     /// The host note itself — what the discussion is about, so always included.
@@ -1534,6 +1557,95 @@ mod tests {
             reply.contains("Neither audio transcription nor image reading"),
             "it must name what is missing, got: {reply}"
         );
+    }
+
+    /// **A chat is told the person's day, on formicaria's clock** (2026-10-24, later): "next Monday"
+    /// is counted from formicaria's today, not this process's; with no clock nothing is said.
+    #[test]
+    fn a_chat_is_told_today_on_formicaria_s_clock_and_an_edit_is_not() {
+        struct Clocked(Option<Value>);
+        impl VaultAccess for Clocked {
+            fn get(&self, _: &str) -> Result<Value, String> {
+                Ok(json!({ "title": "Plans", "body": "Lunch with Ana Ruiz soon." }))
+            }
+            fn thread(&self, _: &str) -> Result<Value, String> {
+                Ok(json!({ "messages": [] }))
+            }
+            fn discussions(&self) -> Result<Value, String> {
+                Ok(json!([]))
+            }
+            fn alive(&self) -> bool {
+                true
+            }
+            fn reply(&self, _: &str, _: &str) -> Result<Value, String> {
+                Ok(Value::Null)
+            }
+            fn reply_as(&self, _: &str, _: &str, _: &str, _: &str) -> Result<Value, String> {
+                Ok(json!({ "id": "R1" }))
+            }
+            fn create_proposal(
+                &self,
+                _: &str,
+                _: &str,
+                _: &str,
+                _: &str,
+                _: &Origin,
+            ) -> Result<Value, String> {
+                Ok(Value::Null)
+            }
+            fn blob_bytes(&self, _: &str) -> Result<(Vec<u8>, String), String> {
+                Err("none".into())
+            }
+            fn activity(&self, _: &str, _: &str, _: &str) {}
+            fn activity_done(&self, _: &str) {}
+            fn present(&self, _: &str, _: Option<&crate::ImageReader>) {}
+            fn clock(&self) -> Option<Value> {
+                self.0.clone()
+            }
+        }
+        /// Answers "fine" and keeps every prompt it was shown.
+        struct Shown(std::cell::RefCell<Vec<String>>);
+        impl fm_agent::LlmStep for &Shown {
+            fn complete(&self, _: &str, u: &str) -> Result<fm_agent::LlmResponse, AgentError> {
+                self.0.borrow_mut().push(u.to_string());
+                Ok(fm_agent::LlmResponse::complete("fine"))
+            }
+        }
+        let agent = |clock: Option<Value>| Agent {
+            fm: Clocked(clock),
+            model_port: 0,
+            model: "test".into(),
+            searxng_port: None,
+            web_direct: false,
+            whisper_port: None,
+            whisper_model: String::new(),
+            vision: false,
+            read_prompt: None,
+            reads_labels: false,
+            shared_mail_prompt: false,
+            image_specialist: None,
+            ocr: None,
+            max_reply_chars: 600,
+            history_budget: 4000,
+            device: "laptop".into(),
+        };
+        let clock =
+            json!({ "v": 1, "zone": "Asia/Tokyo", "today": "2026-10-24", "instants": true });
+        let ask = convo::parse("when is next Monday?");
+
+        let shown = Shown(Default::default());
+        agent(Some(clock.clone())).conversation_turn(&shown, "N1", &ask, &|_| {}).unwrap();
+        let first = shown.0.borrow()[0].clone();
+        assert!(first.starts_with("Today is Saturday, 24 October 2026 (Asia/Tokyo)."), "{first}");
+
+        let shown = Shown(Default::default());
+        agent(None).conversation_turn(&shown, "N1", &ask, &|_| {}).unwrap();
+        assert!(!shown.0.borrow()[0].contains("Today is"), "no clock, no day said");
+
+        let shown = Shown(Default::default());
+        let edit = convo::parse("add a line: Lunch on Monday /propose");
+        let _ = agent(Some(clock)).conversation_turn(&shown, "N1", &edit, &|_| {});
+        assert!(shown.0.borrow().iter().all(|p| !p.contains("Today is")), "an edit is not told");
     }
 
     /// **`/recipe` on a written note proposes a recipe of only what was written** (2026-10-18).

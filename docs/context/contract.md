@@ -13,7 +13,7 @@ _Taken from formicaria at tag v0.9.2 (commit e670190) on 2026-10-18; the Rust it
 Two numbers, kept apart:
 - **The release version** (`fm_agent_run::VERSION`, `Cargo.toml`, the `v…` tag) changes with
   every release.
-- **The contract version** (`fm_agent_run::CONTRACT_MAJOR`.`CONTRACT_MINOR`, now **1.7**) changes
+- **The contract version** (`fm_agent_run::CONTRACT_MAJOR`.`CONTRACT_MINOR`, now **1.8**) changes
   only when this document does.
   - **Major:** anything listed below is renamed, removed or changes meaning. formicaria checks the
     major at compile time, so an app written for another major refuses to build and says why. It
@@ -24,7 +24,7 @@ So formicaria can take any newer Myrme release of the same contract major by cha
 nothing else. That is how methods, prompts, evals, models and the runtime reach users without a
 formicaria code change. `docs/context/releases.md` lists every release with its contract version.
 
-The list in part 1 is compile-checked as contract 1.7 (`tests/fm_contract.rs`). Changing it means
+The list in part 1 is compile-checked as contract 1.8 (`tests/fm_contract.rs`). Changing it means
 changing the contract version in the same commit.
 
 ## 1. Rust items formicaria names
@@ -48,10 +48,17 @@ git grep -hoE "fm_agent(_run)?::[A-Za-z_]+(::[A-Za-z_]+)*(::\{[^}]*\})?" <tag> -
 | `fm_agent_run::installed::{Installed, resolve, sweep, sweep_whisper, whisper_on_disk}` | Settings: what is on disk, handing disk back |
 | `fm_agent_run::label::{read, ready_json}` | Settings: the model's label |
 | `fm_agent_run::label::{read_with, ready_json_with}`, `fm_agent_run::ocr::{shared, ReadPage}` (1.7) | desktop + phone: a label read by the OCR first |
+| `VaultAccess::clock` (1.8) | phone: formicaria's clock, given to the assistant in process |
 | `fm_agent_run::manifest::{Manifest, Manifest::read, Manifest::platform_key, whisper_language}` | the catalogue |
 | `Manifest::phone_choices`, `Model::{phone_label, bytes, mmproj_bytes}` (1.5) | phone: the model chooser (shown only with two or more choices; one since 2026-10-20) |
 | `fm_agent_run::nativelib::native_lib_dir` (Android only) | phone: where the bundled runtime lives |
 | `fm_agent_run::watch::{serve_loop, wait_ready}` | phone: the watch loop |
+
+**Contract 1.8 adds formicaria's clock** (Myrme 0.10.0, `decisions.md` 2026-10-24 later):
+- `VaultAccess::clock() -> Option<Value>`, a provided method answering `None`: formicaria's `clock`
+  answer. The desktop's `FmServe` asks `/api/clock` (part 2); the phone's vault answers it in
+  process. With no answer the assistant falls back to `VaultAccess::zone`, and with neither it does
+  nothing that needs a clock — it never uses its own process's zone.
 
 **Contract 1.7 adds labels read by the OCR** (Myrme 0.8.0):
 - `ocr::shared(dir, manifest, bundle)`: the one OCR of the process, opened from the tools dir the
@@ -123,9 +130,14 @@ side. The host-side routes (`/api/agent_status`, `agent_models`, `agent_activity
 `agent_activity_poll`, `agent_present`, `agents`) belong to formicaria; Myrme's runner reports to
 some of them.
 
-`/api/calendars` (a host-side route too) is **read** by the meeting pass for the person's zone:
-`zone`, or `offset` from a formicaria before 2026-10-23. Absent (no `calendar` feature, or a phone),
-the computer's own zone is used (`decisions.md` 2026-10-23).
+**`/api/clock`** (contract 1.8, formicaria 0.19) is **read** for the person's clock — the zone
+every time is on and the day it is: `{"v": 1, "zone", "today", "instants", …}`. Myrme reads `zone`
+(an IANA name or `±HH:MM`; `null` when formicaria cannot read one), `today` (`YYYY-MM-DD` on that
+zone) and `instants` (`true` when `propose_with`/`propose_note` take a `start`/`due` as an RFC 3339
+moment, which formicaria puts onto the vault's clock itself). A field it does not know is ignored.
+Before 0.19 there is no such route: `/api/calendars`'s `zone` (or `offset`, before 2026-10-23) is
+read instead, with naive starts. With neither, the meeting pass does not run, and says so once in
+the log (`decisions.md` 2026-10-24 later; it replaces the computer's own zone, 2026-10-23).
 
 ## 3. The catalogue
 

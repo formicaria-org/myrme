@@ -23,7 +23,9 @@ build = "cargo build --release -p fm-agent-run --features fm-agent-run/download"
 # The single gate: CI runs exactly this.
 # No person identified in a public repository (`agents/privacy.sh`; CLAUDE.md).
 privacy = "sh agents/privacy.sh"
-ci = { depends-on = ["fmt", "clippy", "test", "test-download", "deny", "privacy"] }
+# No clock but formicaria's (`agents/clock.sh`; decisions.md 2026-10-24, later).
+clock = "sh agents/clock.sh"
+ci = { depends-on = ["fmt", "clippy", "test", "test-download", "deny", "privacy", "clock"] }
 
 # Running the assistant by hand, unchanged from formicaria (paths are relative to this repo).
 fetch-model = "bash agents/fetch.sh"

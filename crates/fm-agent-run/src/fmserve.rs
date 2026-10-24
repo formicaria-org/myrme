@@ -95,10 +95,15 @@ pub trait VaultAccess {
     }
     /// What the meeting pass concluded about one conversation, for the person to see. Best-effort.
     fn mail_heard(&self, _note: &str, _title: &str, _latest: &str, _said: &str) {}
-    /// The person's own clock — formicaria's *your zone* setting (`Asia/Tokyo`, `+09:00`) — onto
-    /// which a meeting written on another clock is moved. `None` where it cannot be asked; the
-    /// computer's own zone is used then.
+    /// The zone an older formicaria (before 0.19) answers in `/api/calendars` — used only when
+    /// [`VaultAccess::clock`] has no answer. Never this process's own zone (2026-10-24, later).
     fn zone(&self) -> Option<String> {
+        None
+    }
+    /// **formicaria's app clock** (contract 1.8, 2026-10-24): its `clock` answer — `zone`, `today`,
+    /// `instants` and more (`fm_agent::zone::Clock::from_answer` reads it). `None` where it cannot be
+    /// asked; then the assistant does nothing that needs a clock.
+    fn clock(&self) -> Option<Value> {
         None
     }
     /// A proposal that also sets the allowlisted properties (`start`/`due`/`location`, added tags).
@@ -277,8 +282,13 @@ impl VaultAccess for FmServe {
         self.call("mail_novelty", json!({})).ok()?["novelty"].as_u64()
     }
 
+    /// formicaria's `clock` (0.19 and later).
+    fn clock(&self) -> Option<Value> {
+        self.call("clock", json!({})).ok().filter(|v| v.is_object())
+    }
+
     /// `/api/calendars` answers the setting: `zone` since formicaria 0.15 (the setting, or the
-    /// computer's when unset), `offset` before it.
+    /// computer's when unset), `offset` before it. Read only when `clock` has no answer.
     fn zone(&self) -> Option<String> {
         let v = self.call("calendars", json!({})).ok()?;
         let pick =

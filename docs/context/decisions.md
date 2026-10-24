@@ -552,6 +552,9 @@ as default for the light version and devices like smartphones"*.
 
 ## 2026-10-23 — a meeting time written on another clock is moved onto the person's `#method` `#contract`
 
+> SUPERSEDED IN PART (2026-10-24, later, *Myrme follows formicaria's clock*): the person's clock is
+> formicaria's only — never the computer's, which Myrme no longer asks.
+
 **Asked:** an email fixed a meeting *"at 10am <city> time"*; the pass proposed 10:00, it was
 accepted, and an agenda in another zone showed 10:00 instead of the hour it was there. *"we need to
 adjust for: laptop time zone, the time zone in the calendar and the one of the meeting."*
@@ -667,6 +670,56 @@ an email that has left the window, where a full read gave it another chance at e
 place sent once in an email that has left the window cannot be copied by the model, so a later
 meeting at the same link is proposed without it. A first read of a long conversation takes several
 calls of the pass.
+
+## 2026-10-24 (later) — Myrme follows formicaria's clock; times are kept as instants `#method` `#contract`
+
+> Reverses, in part, *a meeting time written on another clock is moved onto the person's*
+> (2026-10-23): "the person's clock is formicaria's setting, **else the computer's zone**" — Myrme no
+> longer asks the computer.
+
+**What prompted it.** formicaria's time-zone audit (`formicaria/docs/context/time-zones-audit-2026-10-24.md`
+§2b, §6.2): Myrme and formicaria each kept their own idea of the person's zone and of today. Myrme took
+the zone the readers used, not the store's; fell back to its own system lookup when formicaria did not
+answer (always, on the phone); computed today itself; and remembered what it proposed as naive stamps,
+so after a change of zone the same meeting could be proposed twice. formicaria 0.19 made one app clock
+and serves it (`clock`).
+
+**Decision.**
+1. **The clock comes from formicaria only** (`VaultAccess::clock`, contract **1.8**, defaulted): its
+   zone and its `today`. With an older formicaria, the zone `/api/calendars` answers, today counted on
+   it. **Never this process's own zone**: with neither, the meeting pass does not run (said once in
+   the log) and chat says no date. `pixi run clock` (part of `ci`, `agents/clock.sh`) fails on any
+   system-zone or local-time call in `crates/*/src`.
+2. **One clock inside a pass.** A heading or `mail_last` written with its offset (formicaria 0.20) is
+   read onto the clock as it is parsed; one written without (older notes) is taken as on it. Every
+   comparison in the pass is then between times on the same clock, and `plan` is unchanged.
+3. **What is remembered is instants**: the starts proposed (`proposed_at`) and the ledger's kept
+   starts are written as UTC instants and read back onto the clock in force, so a change of zone does
+   not make an old meeting look new. The naive copies (`proposed`) are still written for a downgrade,
+   and a file without `proposed_at` is read on the clock in force at the upgrade. **`PASS_VERSION`
+   stays 8**: the loader reads both forms, so nothing is read again for this. The ledger's read point
+   stays a heading stamp: after a change of zone the offset headings are rewritten onto the new clock,
+   the ledger's fingerprint no longer matches, and the conversation is read again from its start — one
+   costly read, never a skipped email.
+4. **Times are proposed as instants** when formicaria says it takes them (`instants: true`): RFC 3339
+   with the clock's offset, which formicaria converts onto the vault's clock once.
+5. **Chat is told today's date**, on formicaria's clock, with its zone — one line of provided context
+   (`today` in `conversation_turn`), in keeping with the minimal chat prompt (2026-07-22). An edit
+   (`/propose`) is not told: it points at the note's words, and more to point at is more to point
+   wrong at (2026-10-18).
+6. **Only a device that reads mail runs the meeting pass** (`mail_novelty` is `Some`): two desktops
+   syncing one vault would otherwise both propose.
+7. **A day an email names is counted from the sender's own day.** On the reader's clock, an email
+   written late on the 7th at −05:00 is already on the 8th, and its "tomorrow" would be the 9th.
+   `on_clock` keeps the sender's stamp beside the converted one when the two differ
+   (`### Ana — 2026-10-08 12:30 (sent 2026-10-07 22:30 -05:00)`); stamps are compared on the reader's
+   clock, and `heading_day` counts from the sent day. The hour, with no zone written, still stays as
+   written (2026-10-23). Eval: `offset-headings-sender-day`, `offset-headings-weekday`; the eval
+   reads each body through `on_clock`, as the pass does.
+
+**What it costs, said.** A heading written before formicaria 0.20, after a change of zone, is still
+read on the clock in force, which can put it hours off; formicaria 0.20 gives those headings their
+offset from Gmail.
 
 ## Rulings inherited from formicaria (before 2026-10-18)
 

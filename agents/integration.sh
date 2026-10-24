@@ -32,6 +32,14 @@ fi
 # Default features: the build formicaria ships. No UI is embedded (none is needed over /api).
 # Built from inside the checkout, so its own Cargo configuration applies (a developer's local
 # `[patch]` of Myrme, for instance), exactly as a build there would.
-(cd "$SRC" && cargo build -q --release -p fm-serve)
-FM_SERVE_BIN="$SRC/target/release/fm-serve" FM_SRC="$SRC" FM_TAG="$TAG" \
+# **A developer's checkout builds into a target of its own** (2026-10-24): its `target/release`
+# holds the `fm-serve` the desktop launcher runs, and this build — another feature set, the UI of
+# whenever `ui/dist` was last built — replaced it. `.fm/checkout-target` is build output that
+# formicaria's `pixi run free-space` removes.
+TARGET="$SRC/target"
+if [ -n "${FM_CHECKOUT:-}" ]; then
+  TARGET="$HERE/.fm/checkout-target"
+fi
+(cd "$SRC" && CARGO_TARGET_DIR="$TARGET" cargo build -q --release -p fm-serve)
+FM_SERVE_BIN="$TARGET/release/fm-serve" FM_SRC="$SRC" FM_TAG="$TAG" \
   cargo test -q -p fm-agent-run --test integration_fm -- --ignored --nocapture
