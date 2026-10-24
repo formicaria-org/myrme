@@ -27,6 +27,10 @@ Its router names the file to open before you touch each area. The working plan i
   removal, rename or change of meaning is a new major, and needs formicaria's change ready first.
 - **formicaria pins Myrme by tag, never by branch.** A tag formicaria pins is never moved or
   deleted.
+- **Whenever the owner asks for a release, push `main` and the tag together** once the local gate
+  (`pixi run ci`, `pixi run integration`) passes (owner, 2026-10-24: *"do not wait for main ci …
+  this should be done whenever I want you to release"*). Never wait for the run on `main`; the
+  tag's own run publishes the Release page, and only that page makes it a release.
 
 ## House rules
 
