@@ -6,7 +6,8 @@ major N whose minor is at least the one it needs.
 
 | Myrme | Contract | Linked by formicaria | What changed for users |
 |---|---|---|---|
-| **0.8.1** | **1.7** | — | A laptop whose only GPU is integrated runs the model on the CPU, about 2.5× faster at writing there, and says so in the assistant's log; a discrete GPU is used as before |
+| **0.9.0** | **1.7** | — | The meeting pass reads only what is new since its last read, so a long exchange with a meeting a week gets its next meeting proposed; an answer cut at the cap, or one that repeats itself, is read again instead of being taken for "no meetings"; a meeting restated without its time is the one already on that day |
+| 0.8.1 | 1.7 | — | A laptop whose only GPU is integrated runs the model on the CPU, about 2.5× faster at writing there, and says so in the assistant's log; a discrete GPU is used as before |
 | 0.8.0 | 1.7 | 0.15.0 – 0.16.0 | A packet's label is read by the OCR first, turned when upright reads too little, and a phone can read one; a meeting time written on another clock ("10am Berlin time", "15:00 CET") is moved onto the person's, on the meeting's own day |
 | 0.7.1 | 1.6 | 0.9.9 – 0.14.0 | The mail verdict in plain words ("the meeting is still on Fri 23 Oct at 16:00", "has taken place"); a meeting that clashes with another says so, in the verdict and in the note proposed |
 | 0.7.0 | 1.6 | 0.9.7, 0.9.8 | The phone runs Qwen3.5-0.8B and no longer offers the 450M; printed pages are read by an OCR (PP-OCRv6) on Linux, macOS and the phone, handwriting still by the vision model; a meeting that began before the newest email is past |
