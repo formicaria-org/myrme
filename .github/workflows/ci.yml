@@ -45,9 +45,15 @@ jobs:
   # **A version is released when its page is published** (decisions.md, 2026-10-19): only after the
   # gate and the integration test pass. On a tag it publishes that tag's page; on `main` it only fills
   # in pages missing for earlier tags (seconds, and nothing to do once they exist).
+  # **One run at a time** (2026-10-24): a release pushes `main` and its tag together, and both runs
+  # reach this job; run side by side, each created the new tag's page, and the duplicate made every
+  # later run fail. Queued, the second finds the page and only checks it.
   release:
     if: github.event_name == 'push'
     needs: [ci, integration]
+    concurrency:
+      group: release-pages
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -721,6 +721,17 @@ and serves it (`clock`).
 read on the clock in force, which can put it hours off; formicaria 0.20 gives those headings their
 offset from Gmail.
 
+## 2026-10-24 (evening) — one release-pages run at a time, and one page per tag `#release`
+
+**What happened.** A release pushes `main` and its tag together (owner, 2026-10-24), and both runs
+reach the `release` job. For 0.9.0 the two ran side by side and each created the page: GitHub held
+two pages for one tag, every later run failed on that tag, and 0.10.0's page was never published,
+so formicaria's `myrme-bump` could not take it.
+
+**Decision.** The `release` job runs in one concurrency group (`release-pages`, never cancelled), so
+the second run finds the page; and `agents/release-pages.sh` first removes any second page of a tag,
+keeping the oldest. Tags are never touched. The release order itself is unchanged.
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading

@@ -11,6 +11,15 @@
 # Needs `gh` and GH_TOKEN (the CI token), and the tags fetched with `git fetch --tags`.
 set -eu
 REPO=https://github.com/formicaria-org/myrme
+# **One page per tag** (2026-10-24). Two runs creating the same page at once left two pages for
+# v0.9.0, and editing that tag's page then failed every later run, so v0.10.0 was never published.
+# The oldest page of a tag is kept; the others, identical copies, are removed. Tags are not touched.
+gh api --paginate "repos/formicaria-org/myrme/releases?per_page=100" --jq '.[] | "\(.tag_name) \(.id)"' \
+    | sort -k1,1 -k2,2n | awk 'seen[$1]++ { print $2 }' \
+    | while read -r id; do
+        gh api -X DELETE "repos/formicaria-org/myrme/releases/$id"
+        echo "release-pages: removed a second page for one tag (release $id)"
+    done
 tags=$(git tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V)
 newest=$(echo "$tags" | tail -1)
 missing=""
