@@ -1,9 +1,12 @@
 //! The meeting pass — the assistant reading email conversations on its own and proposing the meetings
 //! they fix (`decisions.md` 2026-10-09, *the assistant proposes meetings*).
 //!
-//! Runs from the resident watcher's loop, **one conversation per call**, so a question asked in a
+//! Runs from the resident watcher's loop, **one model step per call**, so a question asked in a
 //! discussion is never kept waiting behind a backlog of mail. A conversation is read again only when
-//! a new message has arrived in it (`mail_last` moved). Everything it produces is a proposal: the
+//! a new message has arrived in it (`mail_last` moved), and then **only what is new** (2026-10-24):
+//! the model reads a window of the emails since the last read and the ones still in play
+//! (`meetings::window`), while Rust checks every quote against the whole conversation. A
+//! conversation never read is read in steps, oldest first, over several calls. Everything it produces is a proposal: the
 //! conversation note gaining the first meeting's date, time and place, and each further meeting as a
 //! proposed note linked back to it. The person accepts or rejects each one; nothing here writes to
 //! `main`.
@@ -48,7 +51,9 @@ fn named(title: &str) -> bool {
 /// conversation's meeting no longer counts as already on the agenda (`mail_conversations`' `taken`).
 /// 7: a time written on another clock ("10am Berlin time") is moved onto the person's (2026-10-23) —
 /// so a meeting proposed at the clock it was written on is read again and proposed moving.
-const PASS_VERSION: u64 = 7;
+/// 8: the model reads only what is new, in a window, and a cut answer is no longer read as "nothing"
+/// (2026-10-24) — so a meeting lost to a cut answer in a long exchange is read again and proposed.
+const PASS_VERSION: u64 = 8;
 
 #[derive(Default)]
 struct Memory {
@@ -56,6 +61,9 @@ struct Memory {
     seen: HashMap<String, (String, HashSet<String>)>,
     /// Conversations already given a title — asked once, accepted or not (`fm_agent::titles`).
     titled: HashSet<String>,
+    /// What the model has read of each conversation (`meetings::Ledger`). Moves at every step; `seen`
+    /// moves only when a read reaches the newest email.
+    ledgers: HashMap<String, meetings::Ledger>,
 }
 
 impl Memory {
@@ -83,13 +91,18 @@ impl Memory {
             if e["titled"].as_bool() == Some(true) {
                 m.titled.insert(id.clone());
             }
+            // Read under older rules: read again from the start.
+            if current && e["ledger"].is_object() {
+                m.ledgers.insert(id.clone(), meetings::Ledger::from_json(&e["ledger"]));
+            }
         }
         m
     }
 
     fn save(&self, path: &Path) {
         let empty = (String::new(), HashSet::new());
-        let ids: HashSet<&String> = self.seen.keys().chain(self.titled.iter()).collect();
+        let ids: HashSet<&String> =
+            self.seen.keys().chain(self.titled.iter()).chain(self.ledgers.keys()).collect();
         let mut v: serde_json::Map<String, Value> = ids
             .into_iter()
             .map(|id| {
@@ -99,6 +112,9 @@ impl Memory {
                 let mut e = json!({ "last": last, "proposed": p });
                 if self.titled.contains(id) {
                     e["titled"] = json!(true);
+                }
+                if let Some(l) = self.ledgers.get(id) {
+                    e["ledger"] = l.to_json();
                 }
                 (id.clone(), e)
             })
@@ -301,23 +317,30 @@ impl<V: VaultAccess> Agent<V> {
             // first and gave it again over a later email that moved the meeting.
             let emails = meetings::without_box(&body);
 
-            // Held to the answer's schema: measured on 2026-10-18 (`methods/meetings/eval`), a free
-            // answer often left out the quote and lost the meeting — 8/14 against 14/14 on
-            // qwen3-4b-2507, 11/14 against 12/14 on qwen3-vl-4b, and faster.
-            // The layout is the model's (`shared_mail_prompt`): shared, the title call below reuses
-            // this call's cached emails.
-            let (system, user) = meetings::prompt(
+            // **One step of the reading** (2026-10-24): the model reads a window — the emails since
+            // its last read and the ones still in play — held to the answer's schema (measured on
+            // 2026-10-18, `methods/meetings/eval`: a free answer often left out the quote). The layout
+            // is the model's (`shared_mail_prompt`).
+            let ledger = mem.ledgers.get(id).cloned().unwrap_or_default();
+            let step = meetings::step(
+                llm,
                 self.shared_mail_prompt,
-                meetings::Question::Meetings,
                 title,
                 &emails,
                 me.unwrap_or(OWNER),
-            );
-            let answer = llm
-                .complete_constrained(&system, &user, &meetings::answer_schema())
-                .map_err(|e| format!("the model did not answer for \u{201c}{title}\u{201d}: {e}"))?
-                .content;
-            let found = meetings::parse(&answer);
+                today,
+                here.as_ref(),
+                &ledger,
+            )
+            .map_err(|e| format!("the model did not answer for \u{201c}{title}\u{201d}: {e}"))?;
+            mem.ledgers.insert(id.to_string(), step.ledger.clone());
+            if !step.done {
+                // Not at the newest email yet: nothing is planned from a part of the exchange.
+                mem.save(memory);
+                let to = step.ledger.read.as_deref().map(when).unwrap_or_default();
+                return Ok(Some(format!("reading \u{201c}{title}\u{201d}: read up to {to}")));
+            }
+            let found = step.found;
             let mut ok = Vec::new();
             let mut dropped = 0usize;
             for f in &found {
@@ -447,6 +470,9 @@ impl<V: VaultAccess> Agent<V> {
             } else {
                 verdict.join("; ")
             };
+            if step.skipped > 0 {
+                said.push_str(" (an email was too long to read for meetings)");
+            }
             if dropped > 0 {
                 said.push_str(&match dropped {
                     1 => " (one more possible meeting was not proposed: its words are not in the emails)".to_string(),
@@ -565,12 +591,27 @@ mod tests {
         start: Option<&'static str>,
         /// Other conversations in the mailbox, with their meetings.
         others: Option<Value>,
+        /// The conversation's emails, when a test sets them (else [`BODY`]); a test may add to them.
+        body: RefCell<Option<String>>,
+    }
+    impl MailVault {
+        fn text(&self) -> String {
+            self.body.borrow().clone().unwrap_or_else(|| BODY.to_string())
+        }
+        /// The newest email's stamp, as `mail_last` says it.
+        fn last(&self) -> String {
+            let t = self.text();
+            let head = t.lines().rfind(|l| l.starts_with("### ")).unwrap_or_default().to_string();
+            let when =
+                head.rsplit_once(" — ").map(|(_, w)| w.trim().to_string()).unwrap_or_default();
+            when.replacen(' ', "T", 1)
+        }
     }
     const BODY: &str = "### Maria — 2026-10-06 09:12\n\nCi vediamo giovedì alle 15 in aula 3.\n\n\
                         ### Luca — 2026-10-07 11:00\n\nE il 28 alle 10 facciamo il punto.\n";
     impl VaultAccess for MailVault {
         fn get(&self, _id: &str) -> Result<Value, String> {
-            Ok(json!({ "body": BODY, "title": "Revisione" }))
+            Ok(json!({ "body": self.text(), "title": "Revisione" }))
         }
         fn thread(&self, _: &str) -> Result<Value, String> {
             Ok(Value::Null)
@@ -605,7 +646,7 @@ mod tests {
         fn present(&self, _: &str, _: Option<&crate::ImageReader>) {}
         fn mail_conversations(&self) -> Result<Value, String> {
             let mut conversations = vec![
-                json!({ "id": "C1", "title": "Revisione", "last": "2026-10-07T11:00", "start": self.start }),
+                json!({ "id": "C1", "title": "Revisione", "last": self.last(), "start": self.start }),
             ];
             if let Some(Value::Array(o)) = &self.others {
                 conversations.extend(o.iter().cloned());
@@ -902,5 +943,98 @@ mod tests {
         // Asked once: nothing more, with or without new mail.
         assert_eq!(a.meeting_pass(&llm, &mem, date!(2026 - 10 - 06)).unwrap(), None);
         assert_eq!(a.fm.calls.borrow().len(), 1);
+    }
+
+    /// A model that reports every meeting sentence it is shown — the history too, as the real one
+    /// did — and whose answer is cut at the cap when shown more than four emails. Every name is
+    /// invented; the shape is the exchange that lost a meeting (2026-10-24).
+    struct Lister(RefCell<Vec<String>>);
+    const SAID: [(&str, &str, &str); 3] = [
+        ("Next meeting: Friday 10 October at 4pm, same room.", "Friday 10 October", "4pm"),
+        ("We meet again on Friday 17 October at 4pm.", "Friday 17 October", "4pm"),
+        (
+            "I suggest the next meeting on Monday 2nd of Nov 16:30, let me know.",
+            "Monday 2nd of Nov",
+            "16:30",
+        ),
+    ];
+    impl LlmStep for Lister {
+        fn complete(&self, _s: &str, u: &str) -> Result<LlmResponse, AgentError> {
+            self.0.borrow_mut().push(u.to_string());
+            let items: Vec<Value> = SAID
+                .iter()
+                .filter(|(q, _, _)| u.contains(q))
+                .map(|(q, d, t)| json!({"status": "fixed", "quote": q, "title": "Project", "date": d, "time": t, "end": "", "place": ""}))
+                .collect();
+            let all = Value::Array(items).to_string();
+            if u.lines().filter(|l| l.starts_with("### ")).count() > 4 {
+                let cut: String = all.chars().take(all.len() / 2).collect();
+                return Ok(LlmResponse {
+                    content: cut,
+                    finish_reason: Some("length".into()),
+                    usage: None,
+                });
+            }
+            Ok(LlmResponse::complete(all))
+        }
+    }
+
+    #[test]
+    fn a_long_exchange_gets_its_next_meeting_and_a_new_email_is_read_with_only_what_is_in_play() {
+        let filler = "We will go through the related work, the data and the method. ".repeat(80);
+        let mut text = String::new();
+        for (who, when, what) in [
+            (
+                "Tom Reyes",
+                "2026-10-03 09:00",
+                "Thanks. Next meeting: Friday 10 October at 4pm, same room.",
+            ),
+            ("Ana Ruiz", "2026-10-03 12:00", "Noted."),
+            ("Tom Reyes", "2026-10-10 17:00", "Good. We meet again on Friday 17 October at 4pm."),
+            ("Ana Ruiz", "2026-10-10 18:00", "Fine."),
+            ("Tom Reyes", "2026-10-17 18:00", "Thanks for today."),
+            ("Tom Reyes", "2026-10-23 09:28", filler.as_str()),
+            (
+                "Tom Reyes",
+                "2026-10-23 09:30",
+                "I suggest the next meeting on Monday 2nd of Nov 16:30, let me know.",
+            ),
+        ] {
+            text.push_str(&format!("### {who} — {when}\n\n{what}\n\n"));
+        }
+        let a = agent();
+        *a.fm.body.borrow_mut() = Some(text.clone());
+        let mem = scratch();
+        let llm = Lister(RefCell::new(Vec::new()));
+        let today = date!(2026 - 10 - 23);
+        let mut said = Vec::new();
+        for _ in 0..10 {
+            match a.meeting_pass(&llm, &mem, today).unwrap() {
+                Some(s) if s.starts_with("reading") => said.push(s),
+                Some(s) => {
+                    said.push(s);
+                    break;
+                }
+                None => break,
+            }
+        }
+        assert!(
+            said.len() > 1 && said[..said.len() - 1].iter().all(|s| s.starts_with("reading")),
+            "{said:?}"
+        );
+        let calls = a.fm.calls.borrow().clone();
+        assert_eq!(calls.len(), 1, "one proposal, made once the newest email is read: {calls:?}");
+        assert_eq!(calls[0].1["props"]["start"], "2026-11-02T16:30");
+        // The other side accepts: read with the proposal, not with the weeks before.
+        text.push_str("### Ana Ruiz — 2026-10-24 00:33\n\nOK, I'm free at that time.\n");
+        *a.fm.body.borrow_mut() = Some(text);
+        llm.0.borrow_mut().clear();
+        a.meeting_pass(&llm, &mem, date!(2026 - 10 - 24)).unwrap().unwrap();
+        let prompts = llm.0.borrow();
+        assert_eq!(prompts.len(), 1, "one call for one new email");
+        let p = &prompts[0];
+        assert!(p.contains("I suggest the next meeting") && p.contains("OK, I'm free"));
+        assert!(!p.contains("Friday 10 October") && !p.contains("related work"), "{p}");
+        assert_eq!(a.fm.calls.borrow().len(), 1, "the meeting already proposed is not asked again");
     }
 }

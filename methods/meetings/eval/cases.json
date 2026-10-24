@@ -568,6 +568,29 @@
         }
       ],
       "recorded": {}
+    },
+    {
+      "body": "### Tom Reyes — 2026-09-30 10:00\n\nDear Ana,\n\nlet us meet on Thursday 2 October at 2:30pm in room B12 to plan the project.\n\nTom\n\n### Ana Ruiz — 2026-09-30 18:00\n\nDear Tom,\n\nThursday at 2:30pm in B12 works for me.\n\nAna\n\n### Tom Reyes — 2026-10-03 09:00\n\nThanks for today. Next meeting: Friday 10 October at 4pm, same room.\n\n### Ana Ruiz — 2026-10-03 12:00\n\nNoted, see you on Friday.\n\n### Tom Reyes — 2026-10-10 17:00\n\nGood progress today. We meet again on Friday 17 October at 4pm online: https://meet.example.org/j/4821\n\n### Ana Ruiz — 2026-10-16 20:00\n\nDear Tom,\n\ncould we start at 4:30pm instead? I have a lab until 4.\n\nAna\n\n### Tom Reyes — 2026-10-17 08:00\n\nYes, Friday 17 October at 4:30pm is fine, same link.\n\n### Tom Reyes — 2026-10-23 09:28\n\nDear Ana,\n\nas discussed in person, for the next weeks:\n\n- a presentation for next time, close to the one you will give at the end of the term: the problem, what is known, what you built and what is still open. Keep it to twelve slides and leave time for questions.\n- a simple but realistic simulation of a person doing a task. For instance, a robot with several objects on a table that watches a person sitting in front of the computer and listens to what they say. The person may not know which objects are on the table, and may change their mind halfway through.\n- the robot should keep a belief over what the person wants and update it with every word and every glance, and it should say so when it is unsure rather than guess.\n- a short written section on the related work: the three groups we talked about, what each assumes about the person, and where your approach differs. Two pages are enough.\n- the data you already recorded, cleaned, with a note on what was thrown away and why. If some sessions are unusable, say how many and what went wrong, so that we can avoid it next time.\n- a first evaluation, even a rough one: how often the robot picks the right object, how early it is right, and how often it asks. Compare it with the simple baseline that always waits for the full sentence.\n- a list of the questions you could not answer on your own, so that we spend the meeting on those and not on what is already clear.\n\nOn the practical side, please put the code in the shared repository with a short README that says how to run the simulation from scratch on a fresh machine, which versions you used, and where the recorded data lives. Try it once yourself on another computer before the meeting, so that we do not lose time on installation problems.\n\nIf any of this is too much for one week, tell me which parts you would rather move to the week after, and we will plan around it. It is better to have two parts done well than five parts half done.\n\nBest,\nTom\n\n### Tom Reyes — 2026-10-23 09:30\n\nI suggest the next meeting on Monday 2nd of Nov 16:30 Tokyo time, let me know if it works for you.\n\nTom Reyes is inviting you to a scheduled meeting.\n\nTopic: Ana Ruiz\nTime: Nov 2, 2026 04:30 PM Tokyo\nJoin: https://meet.example.org/j/4821\n\n### Ana Ruiz — 2026-10-24 00:33\n\nOK, I'm free at that time.\n",
+      "expect": [
+        "fixed 2026-11-02T16:30"
+      ],
+      "here": "Asia/Tokyo",
+      "id": "weekly-long",
+      "note": "A meeting a week for a month, one moved, a long agenda email, then the next meeting proposed and accepted with a reply that names no time (2026-10-24). Read whole, qwen3-vl-4b's answer outgrew its cap on an exchange of this shape and, uncapped, repeated a past meeting; the reader now sees only what is new and what is still in play.",
+      "oracle": [
+        {
+          "date": "Monday 2nd of Nov",
+          "end": "",
+          "place": "https://meet.example.org/j/4821",
+          "quote": "I suggest the next meeting on Monday 2nd of Nov 16:30 Tokyo time, let me know if it works for you.",
+          "status": "fixed",
+          "time": "16:30",
+          "title": "Next meeting"
+        }
+      ],
+      "recorded": {},
+      "title": "Ana Ruiz — Student, project",
+      "today": "2026-10-24"
     }
   ]
 }

@@ -62,7 +62,7 @@ The order is the rough priority. "Today" means already shipped inside formicaria
 
 | # | Method | Today | Dedicated approach (from the per-task report) |
 |---|---|---|---|
-| M1 | **Meetings from mail** | ✅ the model points, Rust reads dates — and the zone written after a time (2026-10-23) | **ICS first.** A `text/calendar` part settles invites, moves and call-offs with no model. Then Rust dates, then the LLM pointing under a span grammar. Later, a GLiNER2-class encoder for intent and entities |
+| M1 | **Meetings from mail** | ✅ the model points, Rust reads dates — and the zone written after a time (2026-10-23); it reads only what is new, in a window (2026-10-24) | **ICS first.** A `text/calendar` part settles invites, moves and call-offs with no model. Then Rust dates, then the LLM pointing under a span grammar. Later, a GLiNER2-class encoder for intent and entities |
 | M2 | **Research** | ✅ `/search`, `/research` | **local-deep-researcher's fixed loop**, plus main-content extraction, BM25 plus a small embedder, and **a Rust check that every cited span exists in its source** |
 | M3 | **Image → text** | ✅ printed pages by an OCR (PP-OCRv6 small) first, not on Windows yet; the rest by the vision model, Qwen3.5-0.8B on the phone (Myrme 0.7.0) | **Route by content.** Printed text: PP-OCRv5 (ONNX, ~20 MB), escalating to the VLM only on low confidence. Math crops: PP-FormulaNet-S or Texo. Handwriting: VLM. Needs a 50-image eval from a user's notes first |
 | M4 | **Audio → text, dictation** | ✅ whisper, any language | Add **VAD** (Silero) in front. Try **Moonshine** for live English dictation; whisper stays for multilingual |
@@ -159,7 +159,7 @@ tested outside the repository. The four steps below are all in it.
 
 | Step | Status |
 |---|---|
-| Eval harness: `fm_agent::eval`; cases, oracle and recordings per method; replayed in the gate; `pixi run eval` | ✅ M1 (20 cases), M2 (8), M5 (6) |
+| Eval harness: `fm_agent::eval`; cases, oracle and recordings per method; replayed in the gate; `pixi run eval` | ✅ M1 (21 cases), M2 (8), M5 (6) |
 | Constrained calls: `LlmStep::complete_constrained`, `OpenAiStep` sends `response_format` | ✅ |
 | llguidance compared with the stock grammar engine | ✅ not adopted (`decisions.md`) |
 | M1 held to its schema; a question nobody answered fixes nothing | ✅ 17/17 qwen3-4b-2507, 15/17 qwen3-vl-4b |

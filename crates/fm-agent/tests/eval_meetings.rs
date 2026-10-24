@@ -15,6 +15,10 @@
 //! ```
 //!
 //! `FM_EVAL_RECORD=1` writes each answer back into the case file under `recorded["<model>/<mode>"]`.
+//!
+//! **Constrained, on production's layouts, the case is read as the pass reads it** (2026-10-24):
+//! `meetings::read_all`, a window at a time, oldest first, and the last window's answer is scored.
+//! `FM_EVAL_READER=whole` sends the whole conversation in one call instead, as before 2026-10-24.
 
 mod layout;
 
@@ -43,6 +47,18 @@ fn day(s: &str) -> Date {
 /// The case's reader's own clock, when it names one (`"here": "Asia/Tokyo"`).
 fn here(case: &Value) -> Option<Here> {
     case["here"].as_str().map(|z| Here::parse(z).expect("a zone name or offset"))
+}
+
+/// The items a stepped read ended with, as the answer the scoring reads.
+fn found_json(found: &[meetings::Found]) -> String {
+    let items: Vec<Value> = found
+        .iter()
+        .map(|f| {
+            serde_json::json!({"status": f.status, "quote": f.quote, "title": f.title, "date": f.date,
+                               "time": f.time, "end": f.end, "place": f.place})
+        })
+        .collect();
+    Value::Array(items).to_string()
 }
 
 fn strings(v: &Value) -> Vec<String> {
@@ -124,16 +140,37 @@ fn a_live_model_against_the_cases() {
                 "the mailbox's owner",
             );
             let t0 = std::time::Instant::now();
-            let reply = if *mode == "constrained" {
-                llm.complete_constrained(&system, &prompt, &schema)
+            let lay = layout::chosen();
+            let stepped = *mode == "constrained"
+                && (lay == "old" || lay == "b")
+                && std::env::var("FM_EVAL_READER").as_deref() != Ok("whole");
+            let answer = if stepped {
+                let title = case["title"].as_str().unwrap();
+                match meetings::read_all(
+                    &llm,
+                    lay == "b",
+                    title,
+                    &body,
+                    "the mailbox's owner",
+                    today,
+                    zone.as_ref(),
+                ) {
+                    Ok(found) => found_json(&found),
+                    Err(e) => format!("ERROR: {e}"),
+                }
             } else {
-                llm.complete(&system, &prompt)
+                let reply = if *mode == "constrained" {
+                    llm.complete_constrained(&system, &prompt, &schema)
+                } else {
+                    llm.complete(&system, &prompt)
+                };
+                match reply {
+                    Ok(r) if r.truncated() => format!("CUT: {}", r.content),
+                    Ok(r) => r.content,
+                    Err(e) => format!("ERROR: {e}"),
+                }
             };
             seconds += t0.elapsed().as_secs_f64();
-            let answer = match reply {
-                Ok(r) => r.content,
-                Err(e) => format!("ERROR: {e}"),
-            };
             let got = meeting_lines(&answer, &body, today, zone.as_ref());
             let exact = meetings_match(&expect, &got);
             let formed = well_formed_array(&answer);

@@ -2,8 +2,9 @@
 //!
 //! # Who decides what
 //!
-//! The model reads a conversation note (the whole exchange, `fm_core::mail`) and answers with the
-//! meetings it sees as *fixed*, each **pointing at the sentence that fixes it**, copied from the email.
+//! The model reads a conversation note (`fm_core::mail`) — since 2026-10-24 a [`window`] of it: what is
+//! new since its last read and what is still in play — and answers with the meetings it sees as
+//! *fixed*, each **pointing at the sentence that fixes it**, copied from the email.
 //! That is the one thing it is asked to get right. It does not supply the date: run against the real
 //! model (qwen3-vl-4b, 2026-10-09), it translated "the 16th of October" into "16 ottobre" and offered
 //! "domani" for a sentence that said no such thing. So everything after the pointing is this module:
@@ -120,12 +121,22 @@ pub enum Dropped {
     Unanswered,
 }
 
-/// Tokens the conversation text may take. The laptop model runs with an 8192-token window
-/// (`agents/models.toml`); the instructions take ~350 and the answer is capped at [`ANSWER_TOKENS`],
-/// so this leaves a margin for the estimate below being low.
-pub const TEXT_TOKENS: usize = 6500;
-/// The longest answer the meeting pass asks for — a list of a few short JSON objects.
-pub const ANSWER_TOKENS: u32 = 600;
+/// Tokens the text the model reads may take. The laptop model runs with an 8192-token window
+/// (`agents/models.toml`); the instructions take ~350 (~700 shared with the title question) and the
+/// answer is capped at [`ANSWER_TOKENS`], so this leaves a margin for the estimate below being low.
+/// Since 2026-10-24 the model reads a [`window`], which is far shorter; this is the last resort.
+pub const TEXT_TOKENS: usize = 6000;
+/// The longest answer the meeting pass asks for: [`MAX_ITEMS`] items. One quoting a sentence takes
+/// about 105 tokens (`weekly-long`, 2026-10-24) and one whose quote carries a meeting link more, so
+/// this leaves room for four of those.
+pub const ANSWER_TOKENS: u32 = 720;
+/// The most meetings one answer may list. A window holds the meetings still to come and the new
+/// emails, rarely more than two or three; the whole history once needed more, and the model filled
+/// the old limit of 8 with one past meeting repeated (2026-10-24).
+pub const MAX_ITEMS: usize = 4;
+/// The new emails one [`step`] reads at most, in tokens (at least one email, however long). A
+/// conversation never read before is read in steps of this size, oldest first.
+pub const CHUNK_TOKENS: usize = 1500;
 
 /// A cautious token estimate: a CJK character is about one token; other text about one per 3
 /// characters. Erring high only means a long exchange is cut a little earlier.
@@ -237,7 +248,7 @@ pub fn answer_schema() -> Value {
     let text = serde_json::json!({ "type": "string" });
     serde_json::json!({
         "type": "array",
-        "maxItems": 8,
+        "maxItems": MAX_ITEMS,
         "items": {
             "type": "object",
             "properties": {
@@ -287,6 +298,347 @@ pub fn parse(answer: &str) -> Vec<Found> {
             .collect();
     }
     Vec::new()
+}
+
+// ── Reading only what is new (2026-10-24) ───────────────────────────────────────────────────────
+//
+// `decisions.md` 2026-10-24, *the meeting pass reads what is new since its last read*. The model was
+// shown the whole exchange at every new email and listed every meeting it had ever fixed: on a
+// ten-email exchange with a meeting a week the answer outgrew its cap, and uncapped it repeated one
+// past meeting until the schema's limit. The model now reads a [`window`]; Rust still checks every
+// quote against the whole conversation ([`resolve`]), and [`plan`] is unchanged.
+
+/// What the meeting pass remembers of one conversation between reads. The emails' own headings
+/// (`### Sender — 2026-10-23 09:30`) are its version: a conversation note only gains emails at its end.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Ledger {
+    /// The newest email the model has read, by its heading's stamp (`2026-10-23T09:30`).
+    pub read: Option<String>,
+    /// Emails kept in view though already read: each fixes a meeting still to come (`start`), or asks
+    /// a question nobody has answered yet (`start` is `None`).
+    pub keep: Vec<Kept>,
+    /// A fingerprint of the emails up to `read`. When they change (an email rewritten, a re-import)
+    /// the ledger no longer describes the conversation, and it is read again from its start.
+    pub print: u64,
+}
+
+/// One email kept in view, by its heading's stamp.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Kept {
+    pub at: String,
+    pub start: Option<String>,
+}
+
+impl Ledger {
+    /// As stored in the pass's memory file: `{"read": …, "keep": [[at, start|null]], "print": "hex"}`.
+    pub fn to_json(&self) -> Value {
+        serde_json::json!({
+            "read": self.read,
+            "keep": self.keep.iter().map(|k| serde_json::json!([k.at, k.start])).collect::<Vec<_>>(),
+            "print": format!("{:016x}", self.print),
+        })
+    }
+
+    /// Read back what [`Ledger::to_json`] wrote; anything else is an empty ledger.
+    pub fn from_json(v: &Value) -> Self {
+        let keep = v["keep"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|k| {
+                let at = k[0].as_str()?.to_string();
+                Some(Kept { at, start: k[1].as_str().map(str::to_string) })
+            })
+            .collect();
+        Ledger {
+            read: v["read"].as_str().map(str::to_string),
+            keep,
+            print: v["print"].as_str().and_then(|h| u64::from_str_radix(h, 16).ok()).unwrap_or(0),
+        }
+    }
+
+    /// This ledger, if the emails it has read are still the ones in `mails`; else an empty one.
+    fn checked(&self, mails: &[Mail]) -> Ledger {
+        match &self.read {
+            Some(r) if fingerprint(mails, r) == self.print => self.clone(),
+            _ => Ledger::default(),
+        }
+    }
+}
+
+/// One email as written (its heading line and its text), for the window. `mails[0]` is whatever is
+/// above the first heading.
+struct Mail {
+    at: Option<String>,
+    text: String,
+}
+
+fn mails(body: &str) -> Vec<Mail> {
+    let mut out = vec![Mail { at: None, text: String::new() }];
+    for line in body.split_inclusive('\n') {
+        if let Some(head) = line.strip_prefix("### ") {
+            out.push(Mail { at: heading_at(head.trim_end()), text: String::new() });
+        }
+        if let Some(m) = out.last_mut() {
+            m.text.push_str(line);
+        }
+    }
+    out
+}
+
+/// FNV-1a over the emails sent up to `upto`, as [`loose`] reads them: stable across builds, so a
+/// ledger written by one release is understood by the next.
+fn fingerprint(mails: &[Mail], upto: &str) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for m in mails.iter().filter(|m| m.at.as_deref().is_some_and(|a| a <= upto)) {
+        for b in loose(&m.text).bytes().chain([0u8]) {
+            h = (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3);
+        }
+    }
+    h
+}
+
+/// What the model reads in one step.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Window {
+    /// The text: whatever is above the first email, one line for the emails left out, then the
+    /// emails shown, oldest first.
+    pub text: String,
+    /// The newest email in it — where the ledger's `read` moves to.
+    pub to: Option<String>,
+    /// It reaches the conversation's newest email: what the model answers is where things stand now.
+    pub done: bool,
+    /// How many unread emails it holds, and their tokens.
+    pub new: usize,
+    pub new_tokens: usize,
+    /// How many earlier emails the one line stands for.
+    pub omitted: usize,
+}
+
+/// **What the model reads**: the emails not yet read (at most `budget` tokens of them, and at least
+/// one), the email before the first of them (what it answers), and the earlier emails the ledger keeps
+/// (a meeting still to come, a question still open). The earlier emails left out are one line, written
+/// here: how many, when, and that none fixes a meeting still to come, which is what keeping the others
+/// means. It names no time and quotes nothing, so a model that echoes it points at no email.
+///
+/// With nothing unread, the newest email stands in for the new ones, so the answer still says where
+/// things stand.
+pub fn window(body: &str, ledger: &Ledger, budget: usize) -> Window {
+    let mails = mails(body);
+    let ledger = ledger.checked(&mails);
+    let n = mails.len();
+    let read =
+        |m: &Mail| matches!((&ledger.read, &m.at), (Some(r), Some(a)) if a.as_str() <= r.as_str());
+    let mut first = (1..n).find(|&i| !read(&mails[i])).unwrap_or(n);
+    if first == n && n > 1 {
+        first = n - 1;
+    }
+    let (mut end, mut new_tokens) = (first, 0);
+    while end < n {
+        let t = tokens_of(&mails[end].text);
+        if end > first && new_tokens + t > budget {
+            break;
+        }
+        new_tokens += t;
+        end += 1;
+    }
+    let kept: HashSet<&str> = ledger.keep.iter().map(|k| k.at.as_str()).collect();
+    let shown = |i: usize| {
+        i == 0
+            || i + 1 == first
+            || (first..end).contains(&i)
+            || mails[i].at.as_deref().is_some_and(|a| kept.contains(a))
+    };
+    let left: Vec<usize> = (1..first).filter(|&i| !shown(i)).collect();
+    let mut text = mails[0].text.clone();
+    if let (Some(&a), Some(&b)) = (left.first(), left.last()) {
+        let day =
+            |i: usize| mails[i].at.as_deref().and_then(|s| s.get(..10)).unwrap_or("?").to_string();
+        let line = if left.len() == 1 {
+            format!(
+                "(1 earlier email in this conversation, sent {}, is not shown: it fixes no meeting that is still to come.)",
+                day(a)
+            )
+        } else {
+            format!(
+                "({} earlier emails in this conversation, sent {} to {}, are not shown: none of them fixes a meeting that is still to come.)",
+                left.len(),
+                day(a),
+                day(b)
+            )
+        };
+        if !text.is_empty() && !text.ends_with("\n\n") {
+            text.push('\n');
+        }
+        text.push_str(&line);
+        text.push_str("\n\n");
+    }
+    for (i, m) in mails.iter().enumerate().skip(1) {
+        if shown(i) {
+            text.push_str(&m.text);
+        }
+    }
+    Window {
+        text,
+        to: mails.get(end.max(1) - 1).and_then(|m| m.at.clone()),
+        done: end == n,
+        new: end - first,
+        new_tokens,
+        omitted: left.len(),
+    }
+}
+
+/// The ledger after the model read `w` and answered `found`. Kept: each email whose sentence fixes a
+/// meeting still to come (Rust's dates, never the model's omission), or asks a question nobody has
+/// answered in what has been read. An email whose meeting is over leaves the view.
+pub fn advance(
+    ledger: &Ledger,
+    w: &Window,
+    found: &[Found],
+    body: &str,
+    today: Date,
+    here: Option<&Here>,
+) -> Ledger {
+    let ms = mails(body);
+    let ledger = ledger.checked(&ms);
+    let all = blocks(body);
+    let read = w.to.clone().or_else(|| ledger.read.clone());
+    let day = stamp(today, None);
+    let upcoming = |s: &str| s >= day.as_str();
+    let answered = |at: &str| {
+        let by = all.iter().find(|b| b.at.as_deref() == Some(at)).and_then(|b| b.by.clone());
+        all.iter().any(|b| {
+            b.at.as_deref()
+                .is_some_and(|x| x > at && read.as_deref().is_some_and(|r| x <= r) && b.by != by)
+        })
+    };
+    let mut keep: Vec<Kept> = Vec::new();
+    let mut add = |k: Kept| {
+        if !keep.contains(&k) {
+            keep.push(k);
+        }
+    };
+    for k in &ledger.keep {
+        let stays = match &k.start {
+            Some(s) => upcoming(s),
+            None => !answered(&k.at),
+        };
+        if stays {
+            add(k.clone());
+        }
+    }
+    for f in found {
+        match resolve(f, body, today, here) {
+            Ok(m) if !m.cancelled => {
+                if let Some(at) = m.sent_at.clone() {
+                    add(Kept { at, start: Some(m.start_stamp()) });
+                }
+            }
+            Err(Dropped::Unanswered) => {
+                if let Some(at) = source(f, &all) {
+                    add(Kept { at, start: None });
+                }
+            }
+            _ => {}
+        }
+    }
+    let print = read.as_deref().map(|r| fingerprint(&ms, r)).unwrap_or(0);
+    Ledger { read, keep, print }
+}
+
+/// The stamp of the email a quote is in — the same lookup [`resolve`] makes.
+fn source(f: &Found, all: &[Block]) -> Option<String> {
+    let copied = elided(&f.quote, all).unwrap_or_else(|| f.quote.clone());
+    let nquote = loose(&copied);
+    if nquote.is_empty() {
+        return None;
+    }
+    match all.iter().find(|b| b.text.contains(&nquote)) {
+        Some(b) => b.at.clone(),
+        None => near_sentence(&nquote, all).and_then(|(b, _)| b.at.clone()),
+    }
+}
+
+/// One step of reading a conversation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Step {
+    /// What the model answered for this window, each item once.
+    pub found: Vec<Found>,
+    /// The ledger to remember.
+    pub ledger: Ledger,
+    /// The window reached the newest email: `found` is where things stand now, to be planned.
+    pub done: bool,
+    /// Emails passed over because even alone their answer was cut at [`ANSWER_TOKENS`].
+    pub skipped: usize,
+}
+
+/// **Read one window and move the ledger** — one model call, or a few when an answer is cut.
+///
+/// A cut answer (`finish_reason: length`) is never read as "nothing": its JSON is incomplete, and
+/// reading it as `[]` once lost a meeting for good. The window is read again at once with half as many
+/// new emails; one email whose answer is still cut is passed over, and `skipped` says so.
+///
+/// **An answer that repeats an item is read again the same way.** On a long exchange the model once
+/// wrote one past meeting eight times and never the new one, and whether it did turned on a few
+/// tokens of the prompt (the conversation's title, the owner's name; 2026-10-24). A repeat is that
+/// loop's mark; inside the cap it would otherwise read as "nothing new". With one new email left the
+/// repeats are merged and the answer kept.
+#[allow(clippy::too_many_arguments)]
+pub fn step<L: crate::LlmStep>(
+    llm: &L,
+    shared: bool,
+    title: &str,
+    body: &str,
+    me: &str,
+    today: Date,
+    here: Option<&Here>,
+    ledger: &Ledger,
+) -> Result<Step, crate::AgentError> {
+    let mut budget = CHUNK_TOKENS;
+    loop {
+        let w = window(body, ledger, budget);
+        let (system, user) = prompt(shared, Question::Meetings, title, &w.text, me);
+        let reply = llm.complete_constrained(&system, &user, &answer_schema())?;
+        let said = parse(&reply.content);
+        let mut found: Vec<Found> = Vec::new();
+        for f in &said {
+            if !found.contains(f) {
+                found.push(f.clone());
+            }
+        }
+        let looped = found.len() < said.len();
+        if (reply.truncated() || looped) && w.new > 1 {
+            budget = w.new_tokens / 2;
+            continue;
+        }
+        if reply.truncated() {
+            let ledger = advance(ledger, &w, &[], body, today, here);
+            return Ok(Step { found: Vec::new(), ledger, done: w.done, skipped: 1 });
+        }
+        let ledger = advance(ledger, &w, &found, body, today, here);
+        return Ok(Step { found, ledger, done: w.done, skipped: 0 });
+    }
+}
+
+/// Every step at once, from an empty ledger: what the pass reads over several of its calls. For the
+/// eval, so it scores the reader that runs. Answers the last window's items.
+pub fn read_all<L: crate::LlmStep>(
+    llm: &L,
+    shared: bool,
+    title: &str,
+    body: &str,
+    me: &str,
+    today: Date,
+    here: Option<&Here>,
+) -> Result<Vec<Found>, crate::AgentError> {
+    let mut ledger = Ledger::default();
+    loop {
+        let s = step(llm, shared, title, body, me, today, here, &ledger)?;
+        if s.done || s.ledger.read == ledger.read {
+            return Ok(s.found);
+        }
+        ledger = s.ledger;
+    }
 }
 
 /// One email in the conversation note: the day it was sent, and its text, normalised.
@@ -986,6 +1338,23 @@ pub fn plan(
         |m: &Meeting| since.is_some_and(|since| m.sent_at.as_deref().is_some_and(|a| a > since));
     let (cancels, mut meetings): (Vec<Meeting>, Vec<Meeting>) =
         meetings.into_iter().partition(|m| m.cancelled);
+    // **Restated without its time, it is the same meeting** (2026-10-24): "see you on the 30th, same
+    // link", on a day that already holds one of this conversation's meetings, takes that meeting's
+    // time. Read as the whole day, it looked like a move and was proposed as one. Another
+    // conversation's meeting (`taken`) is not this one.
+    for m in meetings.iter_mut().filter(|m| m.start.is_none()) {
+        let day = stamp(m.day, None);
+        let ours = current.map(|c| c.start).into_iter().chain(linked.iter().map(String::as_str));
+        let at = ours
+            .chain(proposed.iter().map(String::as_str))
+            .filter(|s| s.len() >= 16 && s.starts_with(&day))
+            .min()
+            .and_then(|s| Some((s.get(11..13)?.parse().ok()?, s.get(14..16)?.parse().ok()?)))
+            .and_then(|(h, mi)| Time::from_hms(h, mi, 0).ok());
+        if at.is_some() {
+            m.start = at;
+        }
+    }
     // What the emails that arrived since the last read fix, by start — taken before the dedup below,
     // which keeps whichever copy sorts first and so may keep the older sentence. On a first read
     // (`since` unknown) nothing counts as new, and the rules are exactly those of the history.
@@ -1268,7 +1637,7 @@ mod tests {
     fn that_day_is_read_from_the_email_before_the_quote_and_a_room_is_not_a_date() {
         let body = "### Ana Ruiz — 2026-10-02 17:37\n\nWhen can we reschedule?\n\n\
                     ### Owner Name — 2026-10-02 17:51\nTo: ANA RUIZ\n\n\
-                    Sorry for the delay. I should be back in Singapore by the 16th of October. We can have\n\
+                    Sorry for the delay. I should be back at the office by the 16th of October. We can have\n\
                     a chat directly that day at 12pm in RM 01-02.\n";
         let f = Found {
             title: "Meeting with Ana".into(),
@@ -1692,5 +2061,294 @@ mod tests {
         );
         assert!(p.conversation.is_none(), "the note keeps the meeting that took place");
         assert_eq!(p.new.len(), 1, "the next one is its own note");
+    }
+
+    // ── reading only what is new (2026-10-24) ──────────────────────────────────────────────────
+
+    /// The shape that lost a meeting: weekly meetings, one moved, a long agenda email, then the next
+    /// meeting proposed and accepted with "OK, I'm free at that time". Every name is invented.
+    fn weekly(with_reply: bool) -> String {
+        let agenda = "Here is the plan for the next weeks, as discussed. ".to_string()
+            + &"We will go through the related work, the data, the method and the evaluation. "
+                .repeat(60);
+        let mut b = String::from(
+            "### Tom Reyes — 2026-09-30 10:00\n\nDear Ana, let us meet on Thursday 2 October at 2:30pm in room B12.\n\n\
+             ### Ana Ruiz — 2026-09-30 18:00\n\nThursday at 2:30pm in B12 works for me.\n\n\
+             ### Tom Reyes — 2026-10-03 09:00\n\nThanks for today. Next meeting: Friday 10 October at 4pm, same room.\n\n\
+             ### Ana Ruiz — 2026-10-03 12:00\n\nNoted, see you on Friday.\n\n\
+             ### Tom Reyes — 2026-10-10 17:00\n\nGood progress. We meet again on Friday 17 October at 4pm.\n\n\
+             ### Ana Ruiz — 2026-10-16 20:00\n\nCould we start at 4:30pm instead? I have a lab until 4.\n\n\
+             ### Tom Reyes — 2026-10-17 08:00\n\nYes, Friday 17 October at 4:30pm is fine.\n\n",
+        );
+        b.push_str(&format!("### Tom Reyes — 2026-10-23 09:28\n\n{agenda}\n\n"));
+        b.push_str(
+            "### Tom Reyes — 2026-10-23 09:30\n\nI suggest the next meeting on Monday 2nd of Nov 16:30, let me know if it works for you.\n\n",
+        );
+        if with_reply {
+            b.push_str("### Ana Ruiz — 2026-10-24 00:33\n\nOK, I'm free at that time.\n");
+        }
+        b
+    }
+
+    /// Every sentence of [`weekly`] that fixes a meeting, as a model that lists all it sees would
+    /// report it (the history too — `resolve` drops what is over).
+    const WEEKLY_SAID: [(&str, &str, &str); 5] = [
+        ("Dear Ana, let us meet on Thursday 2 October at 2:30pm in room B12.", "Thursday 2 October", "2:30pm"),
+        ("Thanks for today. Next meeting: Friday 10 October at 4pm, same room.", "Friday 10 October", "4pm"),
+        ("Good progress. We meet again on Friday 17 October at 4pm.", "Friday 17 October", "4pm"),
+        ("Yes, Friday 17 October at 4:30pm is fine.", "Friday 17 October", "4:30pm"),
+        ("I suggest the next meeting on Monday 2nd of Nov 16:30, let me know if it works for you.", "Monday 2nd of Nov", "16:30"),
+    ];
+
+    /// A model that reports every meeting sentence it is shown, and whose answer is cut at the token
+    /// cap when it is shown more than `cut_over` emails — what a long history did to the real one.
+    /// It keeps every prompt it was given.
+    struct Lister {
+        cut_over: usize,
+        prompts: std::cell::RefCell<Vec<String>>,
+    }
+    impl crate::LlmStep for Lister {
+        fn complete(&self, _s: &str, u: &str) -> Result<crate::LlmResponse, crate::AgentError> {
+            self.prompts.borrow_mut().push(u.to_string());
+            let items: Vec<Value> = WEEKLY_SAID
+                .iter()
+                .filter(|(q, _, _)| u.contains(q))
+                .map(|(q, date, time)| {
+                    serde_json::json!({"status": "fixed", "quote": q, "title": "Meeting", "date": date,
+                                       "time": time, "end": "", "place": ""})
+                })
+                .collect();
+            let answer = Value::Array(items).to_string();
+            if u.matches("\n### ").count() + usize::from(u.contains("\n\n### ")) > self.cut_over {
+                let cut: String = answer.chars().take(answer.len() / 2).collect();
+                return Ok(crate::LlmResponse {
+                    content: cut,
+                    finish_reason: Some("length".into()),
+                    usage: None,
+                });
+            }
+            Ok(crate::LlmResponse::complete(answer))
+        }
+    }
+
+    fn lister(cut_over: usize) -> Lister {
+        Lister { cut_over, prompts: Default::default() }
+    }
+
+    fn emails_in(prompt: &str) -> usize {
+        prompt.lines().filter(|l| l.starts_with("### ")).count()
+    }
+
+    fn starts(found: &[Found], body: &str, today: Date) -> Vec<String> {
+        found
+            .iter()
+            .filter_map(|f| resolve(f, body, today, None).ok())
+            .map(|m| m.start_stamp())
+            .collect()
+    }
+
+    #[test]
+    fn a_long_exchange_is_read_in_steps_and_a_cut_answer_is_read_again_smaller() {
+        let body = weekly(true);
+        let llm = lister(4);
+        let found =
+            read_all(&llm, false, "Project", &body, "Tom Reyes", date!(2026 - 10 - 24), None)
+                .unwrap();
+        assert_eq!(starts(&found, &body, date!(2026 - 10 - 24)), ["2026-11-02T16:30"]);
+        let prompts = llm.prompts.borrow();
+        assert!(prompts.len() > 2, "read in steps: {}", prompts.len());
+        // Every answer that was kept came from at most four emails; the cut ones were read again.
+        let read: Vec<usize> = prompts.iter().map(|p| emails_in(p)).filter(|&n| n <= 4).collect();
+        assert!(!read.is_empty());
+        // The last window is the proposal and its reply, with the history as one line.
+        let last = prompts.last().unwrap();
+        assert!(last.contains("I suggest the next meeting") && last.contains("OK, I'm free"));
+        assert!(
+            !last.contains("Friday 10 October"),
+            "a meeting that took place is not shown again"
+        );
+        assert!(last.contains("earlier emails in this conversation"), "{last}");
+    }
+
+    #[test]
+    fn a_new_email_is_read_with_only_what_is_still_in_play() {
+        let today = date!(2026 - 10 - 23);
+        let before = weekly(false);
+        let llm = lister(99);
+        let mut ledger = Ledger::default();
+        loop {
+            let s =
+                step(&llm, false, "Project", &before, "Tom Reyes", today, None, &ledger).unwrap();
+            ledger = s.ledger;
+            if s.done {
+                break;
+            }
+        }
+        assert_eq!(ledger.read.as_deref(), Some("2026-10-23T09:30"));
+        // The question is not answered yet, but the sentence ends with "." — it fixes a time, and that
+        // email is kept for the reply that will come.
+        assert!(ledger.keep.iter().any(|k| k.at == "2026-10-23T09:30"), "{:?}", ledger.keep);
+
+        let after = weekly(true);
+        let w = window(&after, &ledger, CHUNK_TOKENS);
+        assert!(w.done && w.new == 1);
+        assert!(w.text.contains("I suggest the next meeting") && w.text.contains("OK, I'm free"));
+        assert!(!w.text.contains("Friday 10 October") && !w.text.contains("We will go through"));
+        assert_eq!(emails_in(&w.text), 2, "{}", w.text);
+        assert_eq!(w.omitted, 8);
+        assert!(w
+            .text
+            .contains("8 earlier emails in this conversation, sent 2026-09-30 to 2026-10-23"));
+        // The line is Rust's: quoting it points at no email.
+        let echo = Found {
+            quote: w.text.lines().find(|l| l.starts_with("(8 earlier")).unwrap().into(),
+            ..Found::default()
+        };
+        assert_eq!(resolve(&echo, &after, today, None), Err(Dropped::NotInEmail));
+    }
+
+    #[test]
+    fn an_email_already_read_that_changed_means_reading_again_from_the_start() {
+        let llm = lister(99);
+        let today = date!(2026 - 10 - 23);
+        let before = weekly(false);
+        let found = step(&llm, false, "P", &before, "T", today, None, &Ledger::default()).unwrap();
+        let ledger = found.ledger;
+        assert!(ledger.read.is_some());
+        let edited = before.replace("works for me", "works for me, thanks");
+        let w = window(&edited, &ledger, CHUNK_TOKENS);
+        assert_eq!(w.omitted, 0);
+        assert!(w.text.contains("Dear Ana"), "read from the first email again");
+        // Unchanged, the same ledger reads on from where it stopped; the first meeting is over.
+        assert!(!window(&before, &ledger, CHUNK_TOKENS).text.contains("Dear Ana"));
+    }
+
+    #[test]
+    fn a_question_stays_in_view_until_someone_else_answers() {
+        let today = date!(2026 - 10 - 20);
+        let asked = "### Tom Reyes — 2026-10-20 09:00\n\nWould Monday 26 October at 3pm work?\n\n";
+        let f = Found {
+            status: "fixed".into(),
+            quote: "Would Monday 26 October at 3pm work?".into(),
+            date: "Monday 26 October".into(),
+            time: "3pm".into(),
+            ..Found::default()
+        };
+        let w = window(asked, &Ledger::default(), CHUNK_TOKENS);
+        let l = advance(&Ledger::default(), &w, std::slice::from_ref(&f), asked, today, None);
+        assert_eq!(l.keep, [Kept { at: "2026-10-20T09:00".into(), start: None }]);
+        // Tom writes again: still unanswered, still in view.
+        let more = format!("{asked}### Tom Reyes — 2026-10-20 10:00\n\nAlso, bring the draft.\n\n");
+        let w = window(&more, &l, CHUNK_TOKENS);
+        assert!(w.text.contains("Would Monday 26 October"));
+        let l = advance(&l, &w, &[], &more, today, None);
+        assert_eq!(l.keep.len(), 1);
+        // Ana answers: the reply is read with the question; after that read it leaves the view.
+        let reply = format!("{more}### Ana Ruiz — 2026-10-21 08:00\n\nYes, that works.\n\n");
+        let w = window(&reply, &l, CHUNK_TOKENS);
+        assert!(w.text.contains("Would Monday 26 October") && w.text.contains("Yes, that works."));
+        let l = advance(&l, &w, &[], &reply, today, None);
+        assert!(l.keep.is_empty(), "{:?}", l.keep);
+    }
+
+    /// A model that writes one item over and over when shown many emails — the loop's mark.
+    struct Repeater(std::cell::RefCell<Vec<usize>>);
+    impl crate::LlmStep for Repeater {
+        fn complete(&self, _s: &str, u: &str) -> Result<crate::LlmResponse, crate::AgentError> {
+            let n = emails_in(u);
+            self.0.borrow_mut().push(n);
+            let (q, date, time) = if u.contains(WEEKLY_SAID[4].0) && n <= 3 {
+                WEEKLY_SAID[4]
+            } else {
+                WEEKLY_SAID[2]
+            };
+            let item = serde_json::json!({"status": "fixed", "quote": q, "title": "M", "date": date,
+                                          "time": time, "end": "", "place": ""});
+            let times = if n > 3 { 4 } else { 1 };
+            Ok(crate::LlmResponse::complete(Value::Array(vec![item; times]).to_string()))
+        }
+    }
+
+    #[test]
+    fn an_answer_that_repeats_an_item_is_read_again_with_fewer_emails() {
+        let body = weekly(true);
+        let llm = Repeater(Default::default());
+        let found = read_all(&llm, false, "P", &body, "T", date!(2026 - 10 - 24), None).unwrap();
+        assert_eq!(starts(&found, &body, date!(2026 - 10 - 24)), ["2026-11-02T16:30"]);
+        assert!(llm.0.borrow().iter().any(|&n| n > 3), "a window of many emails looped first");
+    }
+
+    #[test]
+    fn a_meeting_restated_without_its_time_is_the_meeting_already_on_that_day() {
+        let said = |q: &str| Meeting {
+            title: "Call".into(),
+            day: date!(2026 - 10 - 30),
+            start: None,
+            end: None,
+            place: None,
+            quote: q.into(),
+            sent_at: Some("2026-10-22T16:10".into()),
+            said_by: None,
+            cancelled: false,
+            dated: true,
+            written: None,
+        };
+        let current = Current {
+            start: "2026-10-30T16:30",
+            upcoming: true,
+            place: None,
+            latest: Some("2026-10-22T16:10"),
+        };
+        let none = HashSet::new();
+        let p = plan(
+            vec![said("See you on the 30th, same link.")],
+            Some(current),
+            None,
+            &none,
+            &none,
+            &none,
+        );
+        assert_eq!(p, Plan::default(), "the 16:30 meeting, said again: nothing to propose");
+        // Another conversation's meeting that day is not this one: the day stays a day of its own.
+        let taken: HashSet<String> = ["2026-10-30T09:00".to_string()].into();
+        let p = plan(vec![said("See you on the 30th.")], None, None, &taken, &none, &none);
+        assert_eq!(p.conversation.map(|m| m.start_stamp()).as_deref(), Some("2026-10-30"));
+    }
+
+    #[test]
+    fn a_ledger_survives_the_memory_file() {
+        let l = Ledger {
+            read: Some("2026-10-23T09:30".into()),
+            keep: vec![
+                Kept { at: "2026-10-23T09:30".into(), start: Some("2026-11-02T16:30".into()) },
+                Kept { at: "2026-10-20T09:00".into(), start: None },
+            ],
+            print: 0xdead_beef_0123_4567,
+        };
+        assert_eq!(Ledger::from_json(&l.to_json()), l);
+        assert_eq!(Ledger::from_json(&Value::Null), Ledger::default());
+    }
+
+    #[test]
+    fn one_email_whose_answer_is_still_cut_is_passed_over_and_said() {
+        let body = "### Tom Reyes — 2026-10-23 09:30\n\nI suggest the next meeting on Monday 2nd of Nov 16:30, let me know if it works for you.\n";
+        let s = step(
+            &lister(0),
+            false,
+            "P",
+            body,
+            "T",
+            date!(2026 - 10 - 23),
+            None,
+            &Ledger::default(),
+        )
+        .unwrap();
+        assert!(s.done && s.found.is_empty());
+        assert_eq!(s.skipped, 1);
+        assert_eq!(
+            s.ledger.read.as_deref(),
+            Some("2026-10-23T09:30"),
+            "not read again at every check"
+        );
     }
 }

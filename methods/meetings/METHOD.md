@@ -13,23 +13,32 @@ it).
 ## Pipeline
 
 1. **The conversation note**, without Myrme's own box (`meetings::without_box`).
-2. **One model call, held to `meetings::answer_schema()`**:
+2. **A window of it, not the whole exchange** (since 2026-10-24, `meetings::window`): the emails
+   since the last read, the email before them, and the emails whose sentences fix a meeting still to
+   come or ask a question still open (`meetings::Ledger`). The emails left out are one line written by
+   Rust. A conversation never read is read in steps of `CHUNK_TOKENS`, oldest first, one step per call
+   of the pass (`meetings::step`); only the last step is planned. The emails' headings are the
+   version: when the emails already read change, the conversation is read from its start.
+3. **One model call per step, held to `meetings::answer_schema()`** (at most `MAX_ITEMS` items):
    - the instruction is `prompts::MEETINGS_INSTRUCTION`;
-   - the conversation, cut from the front to fit the window, is `meetings::user_prompt`;
+   - the window, cut from the front if it is still too long, is `meetings::user_prompt`;
+   - an answer cut at the cap, or one that repeats an item, is read again with half as many new
+     emails; one email that is still cut is passed over, and the verdict says so;
    - the layout is the model's (`meetings::prompt`): a model with `shared_mail_prompt` in the
      catalogue (today `qwen3-vl-4b`) gets one system prompt shared with the title call, so that
      call reuses the cached emails; the others get the instruction alone;
    - the answer is a list of `{status, quote, title, date, time, end, place}`.
-3. **Rust checks and dates each item** (`meetings::resolve`):
+4. **Rust checks and dates each item** against the whole conversation (`meetings::resolve`):
    - the quote must be in the emails;
    - the date is read in that sentence, or earlier in the same email, counted from the day that
      email was sent;
    - the time is read only in that sentence;
    - a meeting that is already past is dropped, and so is one that began before the newest email
      was sent (since Myrme 0.7.0).
-4. **The plan** (`meetings::plan`) decides what to propose. The person accepts or rejects each
-   proposal.
-5. **The verdict in words** (`fm-agent-run`'s `meetings.rs`, since Myrme 0.7.1): the mail panel's
+5. **The plan** (`meetings::plan`) decides what to propose. A meeting restated without its time on a
+   day that already holds one of the conversation's meetings is that meeting (2026-10-24). The person
+   accepts or rejects each proposal.
+6. **The verdict in words** (`fm-agent-run`'s `meetings.rs`, since Myrme 0.7.1): the mail panel's
    sentence names the day and time ("the meeting is still on Fri 23 Oct at 16:00", "has taken
    place"). A meeting kept or proposed that starts less than an hour from another meeting in the
    calendar says it clashes, in the verdict and in the note proposed (`meetings::clash`).
@@ -39,7 +48,7 @@ the authority on what runs.
 
 ## Eval
 
-`eval/cases.json`: 17 invented conversations, in English and Italian. They cover:
+`eval/cases.json`: 21 invented conversations, in English and Italian. They cover:
 - moves and call-offs, including a call-off followed by a new time;
 - "that day";
 - two meetings in one email;
@@ -47,7 +56,29 @@ the authority on what runs.
 - an end time;
 - a meeting already past;
 - a question accepted, a question declined, a question unanswered;
-- three cases whose right answer is *nothing*.
+- three cases whose right answer is *nothing*;
+- a long exchange with a meeting a week, a long email, and the next meeting accepted with "OK"
+  (`weekly-long`, 2026-10-24).
+
+In the live run (`--ignored`), constrained on production's layouts, each case is read as the pass
+reads it: `meetings::read_all`, window by window. `FM_EVAL_READER=whole` sends the whole
+conversation in one call, as before 2026-10-24.
+
+| qwen3-vl-4b, 2026-10-24, RTX 3050, 21 cases, held to the schema | Score | Time |
+|---|---|---|
+| whole conversation, one call | 20/21 | 40.0 s |
+| window by window (what ships) | 20/21 | 44.1 s |
+
+The invented cases are short, so reading them window by window costs a few seconds more (a long one
+is read in steps on its first read). The saving is on every later read of a long exchange: one new
+email is read with the emails still in play, not the whole history again.
+
+Both miss `question-declined` (below). The case that prompted the window is a real exchange that
+cannot be in this repository: read whole, with its own title and owner's name, the answer was cut at
+600 tokens, and uncapped it repeated a past meeting eight times; with either replaced by a
+placeholder it was read correctly. Read window by window it was right every time, in a few steps on a
+first read and one step for each new email. That is why the window ships though the invented cases
+score the same: whole, the answer depends on a few tokens of the prompt.
 
 Run them with `pixi run eval -- meetings <gguf> <name>`; `crates/fm-agent/tests/eval_meetings.rs`
 explains the scoring.

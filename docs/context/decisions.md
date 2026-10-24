@@ -603,6 +603,71 @@ started with `--device none` and the note in the log.
 **Contract:** none. `contract.md` does not name the `gpu` key; its values and the `models.toml` format are
 unchanged, and the new module is private. Whisper (`whisper-server`) is not covered: it was not measured.
 
+## 2026-10-24 — the meeting pass reads what is new since its last read, not the whole exchange again `#method`
+
+**What prompted it.** A meeting fixed in a long exchange was never proposed: a conversation with a
+meeting a week, where the newest emails set the next one and the other side accepted. The owner: *"there should not be a re-read of the full conversation at each check, only
+of the new information from the last check … plus conversation and context compacting, we can have
+a faster system"*, and *"one can compact the conversation up to the last meeting in a few lines"*.
+
+**What was measured** (on the user's mail, locally, never copied here; qwen3-vl-4b held to the
+schema, with the pass's own prompt and settings):
+- **The answer, not the input, broke.** The prompt was well inside the window. The answer hit the
+  600-token cap (`finish_reason: length`), so its JSON was cut, `parse` read it as `[]`, and the pass
+  said "no change" and recorded the conversation as read. No later check would look at it again until
+  another email arrived.
+- **A larger cap does not fix it.** Uncapped, the model wrote the same meeting, a past one, eight
+  times, the schema's `maxItems`, and never the new one: a repetition loop over the history. The
+  other conversations answered with one item each.
+- **The same model, shown only the emails since the last meeting,** answered the new meeting
+  correctly, in a fraction of the answer and about half the prompt.
+- **Why the history is the cost:** the model is asked where the meetings stand *now*, but it is
+  shown every email, and lists what every email fixed. `resolve` then drops each past meeting and
+  `plan` only weighs the ones to come, so the history costs answer tokens and adds nothing.
+  The answer grows with the number of meetings ever arranged, and so does each read's prompt.
+
+**Decision.**
+1. **The model reads a window, not the conversation** (`meetings::window`): the emails that arrived
+   since the last read, the email before the first of them (what it answers), and the emails whose
+   sentences fix a meeting still to come or ask a question still unanswered (`Ledger::keep`, by the
+   email's sent stamp). Emails in between are compacted to one line written by Rust, saying how many
+   there were and that none fixes a meeting still to come, which the ledger makes true. The line holds
+   no time and no sentence, so it cannot be quoted: an echo of it is not in the emails and is dropped.
+2. **Rust still checks against the whole conversation.** `resolve` dates each quote from its own
+   email, checks whether a question was answered, and finds a place in any email. Only what the model
+   sees has changed. `plan` is unchanged.
+3. **What the pass remembers is a ledger per conversation** (`meetings::Ledger`, in
+   `mail-meetings.json`): the newest email the model has read, the emails kept in view with the start
+   each fixes, and a fingerprint of the emails read. **The email headings are the version and the
+   diff**: a conversation note only gains emails at its end, each under `### Sender — sent`. When the
+   emails already read no longer match the fingerprint (an email rewritten, a re-import), the ledger
+   is dropped and the conversation is read from its start. git would also show what changed, but it
+   would need a new formicaria route (a contract change) and is not on the phone, for no more than the
+   headings already say.
+4. **A conversation never read is read in steps, oldest first** (`meetings::step`), each step at most
+   `CHUNK_TOKENS` of new emails, with the ledger carried between steps. **One step per call of the
+   pass**, so a question in a discussion never waits behind a long first read. Only the last step plans
+   and proposes; the ones before only move the ledger.
+5. **A cut answer is a failure, never "nothing"** (`LlmResponse::truncated`). The step is retried at
+   once with half as many new emails; a single email whose answer is still cut is passed over, and the
+   mail panel's verdict says so. **So is an answer that repeats an item**: the loop above is chaotic
+   (with the conversation's real title and owner's name it looped; with either replaced by a
+   placeholder it answered correctly), and four copies of a past meeting fit inside the cap, where
+   they would read as "nothing new".
+6. **The answer is sized for a window:** `maxItems` 4 (an item quoting one sentence takes about 105
+   tokens on `weekly-long`, more when the quote carries a meeting link) and
+   `ANSWER_TOKENS` 720; `TEXT_TOKENS` 6000, so the prompt and the answer still fit an 8192 window.
+7. **`PASS_VERSION` 8.** Every conversation is read once more, in steps, under the new reading.
+   What was already proposed is kept, so nothing is asked twice.
+8. **The eval runs the same reader** (`meetings::read_all`, every step at once) and gains a long
+   exchange of the same shape, with invented people.
+
+**What it costs, said.** A meeting the model missed in an earlier read is not looked for again in
+an email that has left the window, where a full read gave it another chance at each new email. A
+place sent once in an email that has left the window cannot be copied by the model, so a later
+meeting at the same link is proposed without it. A first read of a long conversation takes several
+calls of the pass.
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading
