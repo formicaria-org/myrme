@@ -125,6 +125,52 @@ impl LlmStep for OpenAiStep {
         ]))
     }
 
+    /// The same request with `"stream": true`: the server sends the answer as server-sent events,
+    /// one `data: {…}` line per piece, and `on_text` sees the text so far after each piece. The
+    /// whole answer is returned at the end, exactly as [`LlmStep::complete`] would.
+    fn complete_streaming(
+        &self,
+        system: &str,
+        user: &str,
+        on_text: &dyn Fn(&str),
+    ) -> Result<LlmResponse, AgentError> {
+        let body = serde_json::json!({
+            "model": self.model,
+            "temperature": self.temperature,
+            "seed": self.seed,
+            "max_tokens": self.max_tokens,
+            "stream": true,
+            "messages": [
+                { "role": "system", "content": system },
+                { "role": "user", "content": user },
+            ],
+        })
+        .to_string();
+        let mut content = String::new();
+        let mut finish_reason = None;
+        http::post_lines(
+            &self.host,
+            self.port,
+            "/v1/chat/completions",
+            "application/json",
+            body.as_bytes(),
+            self.timeout,
+            &mut |line| {
+                let Some(data) = line.strip_prefix("data:").map(str::trim) else { return };
+                let Ok(v) = serde_json::from_str::<serde_json::Value>(data) else { return };
+                let choice = &v["choices"][0];
+                if let Some(piece) = choice["delta"]["content"].as_str().filter(|p| !p.is_empty()) {
+                    content.push_str(piece);
+                    on_text(&content);
+                }
+                if let Some(f) = choice["finish_reason"].as_str() {
+                    finish_reason = Some(f.to_string());
+                }
+            },
+        )?;
+        Ok(LlmResponse { content, finish_reason, usage: None })
+    }
+
     fn complete_constrained(
         &self,
         system: &str,
@@ -246,6 +292,42 @@ mod tests {
     #[test]
     fn a_response_without_content_is_an_error() {
         assert!(parse_completion("{\"choices\":[]}").unwrap_err().to_string().contains("content"));
+    }
+
+    /// A streamed answer over a real loopback socket, written in pieces the way llama-server sends
+    /// them: the step asks for a stream, shows the text so far after each piece, and returns the
+    /// whole answer with its finish reason.
+    #[test]
+    fn a_streamed_answer_is_shown_as_it_grows_and_returned_whole() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || {
+            let (mut sock, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 4096];
+            let n = sock.read(&mut buf).unwrap();
+            let req = String::from_utf8_lossy(&buf[..n]).to_string();
+            sock.write_all(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n").unwrap();
+            for event in [
+                r#"data: {"choices":[{"delta":{"role":"assistant"}}]}"#,
+                r#"data: {"choices":[{"delta":{"content":"Hel"}}]}"#,
+                r#"data: {"choices":[{"delta":{"content":"lo"},"finish_reason":"stop"}]}"#,
+                "data: [DONE]",
+            ] {
+                let line = format!("{event}\n\n");
+                sock.write_all(format!("{:x}\r\n{line}\r\n", line.len()).as_bytes()).unwrap();
+                sock.flush().unwrap();
+            }
+            sock.write_all(b"0\r\n\r\n").unwrap();
+            req
+        });
+        let seen = std::cell::RefCell::new(Vec::new());
+        let r = OpenAiStep::local(port, "m")
+            .complete_streaming("sys", "hi", &|t| seen.borrow_mut().push(t.to_string()))
+            .unwrap();
+        assert_eq!(r.content, "Hello");
+        assert_eq!(r.finish_reason.as_deref(), Some("stop"));
+        assert_eq!(*seen.borrow(), ["Hel", "Hello"]);
+        assert!(server.join().unwrap().contains("\"stream\":true"));
     }
 
     /// End to end over a real loopback socket: a fake server returns a canned completion, and the

@@ -39,7 +39,6 @@ fn it_transcribes_through_the_real_fmserve_and_whisper() {
     };
     let intent = Intent {
         ask: String::new(),
-        search: false,
         propose: false,
         research: false,
         transcribe: Some(asset),

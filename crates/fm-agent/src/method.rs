@@ -103,8 +103,8 @@ impl Method {
     /// the runner knows, so it maps to neither here.
     pub fn of(command: &Command) -> Option<Method> {
         match command {
-            Command::Chat { .. } => Some(Method::Chat),
-            Command::Propose { .. } => Some(Method::Edits),
+            Command::Chat => Some(Method::Chat),
+            Command::Propose => Some(Method::Edits),
             Command::Research => Some(Method::Research),
             Command::Recipe => Some(Method::Recipe),
             Command::Read(_) => None,
@@ -146,7 +146,7 @@ mod tests {
 
     #[test]
     fn every_command_but_reading_maps_to_one_method() {
-        assert_eq!(Method::of(&Command::Propose { search: true }), Some(Method::Edits));
+        assert_eq!(Method::of(&Command::Propose), Some(Method::Edits));
         assert_eq!(Method::of(&Command::Research), Some(Method::Research));
         assert_eq!(Method::of(&Command::Read(String::new())), None);
     }

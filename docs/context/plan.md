@@ -329,6 +329,88 @@ From then on:
 4. Real recordings and photographs of your own, when convenient. They are the realistic eval sets
    still missing.
 
+## The speed bar (proposed 2026-10-25) — status: **built and measured on the laptop, not committed**
+
+**Status 2026-10-25:**
+- The owner: the laptop is enough for now, and they check the phone at release.
+- S1, S2 and S3 are built in both repos, with contract 1.9 (`decisions.md` 2026-10-25).
+- The commands were cut to four at the same time.
+- **Left for the release:**
+  - Myrme 0.11.0 (contract 1.9);
+  - then formicaria's `pixi run myrme-bump`, which replaces the temporary `[patch]` in
+    `mobile/src-tauri/Cargo.toml`;
+  - the owner's look at the draft under the wheel;
+  - a phone check of S2 at release.
+
+**Evidence:** `../research/2026-10-25-minimum-speed.md`. §1 sets the bars, and §5 is what was tried
+on the laptop the same day. **Aim:** a minimum speed per kind of wait, and the cheapest change that
+meets it. A faster model is the last resort. Three parts. Only S3 touches formicaria, and it is a
+contract minor (1.9), safe in either order.
+
+### S1 — the bar, written down and measured (Myrme only)
+
+1. Each `methods/<name>/METHOD.md` gets one line, `**Wait:**`, giving the class and its bar
+   (research §1): chat A; image-text and audio-text B; research, recipe and edits C; meetings and
+   titles D.
+2. `agents/eval-speed.sh` prints the bar beside each method's s/request.
+3. Chat has no eval, so it gets a timing probe, `agents/chat-speed.py`: three turns on a public
+   note, printing tokens reread and the first-token time per turn (the research §5.1 probe).
+   - It is not in `pixi run ci`: a speed depends on the machine.
+4. **Done when:** both scripts have run on the laptop and the phone, and their tables are in the
+   research doc.
+
+### S2 — reread less (Myrme only; one catalogue key)
+
+**Measured on the laptop:** `-ub 128` cuts a later chat turn's reread from 705–967 tokens to ~320,
+and its first token from 1.7–2.4 s to 0.9 s. Turn 1 costs +3%, and images read identically.
+1. A per-model catalogue key, **`ubatch`**, passed as `-ub` by both server commands: desktop
+   (`agent_serve.rs`) and phone (`host::phone_server`).
+   - Set only on **qwen3.5-0.8b** (`ubatch = 128`). The key only matters for hybrid models; the
+     4B laptop model is a plain transformer, and its reuse is already token-exact.
+   - It is a new `models.toml` key, so it gets a `contract.md` line, like `image_max_tokens`
+     (an addition, minor).
+2. **Gate: the phone first.**
+   - `pixi run eval-speed` over USB at `-ub 512` and `128`, all methods plus the S1 chat probe.
+   - Adopt only if the phone's prefill does not lose more than the reread saves.
+   - Record the result in `decisions.md`.
+
+### S3 — stream the chat reply into the activity formicaria already polls (both repos, contract 1.9)
+
+The reply is still posted as one note, exactly as now (cap, math delimiters). The draft is for
+display only and never reaches the vault.
+
+**Why this channel:**
+- formicaria already polls `agent_activity_poll` every 1.5 s while a turn is in flight, and the
+  turning wheel shows its `stage`.
+- A `draft` beside it needs no new route.
+- An old formicaria ignores the field (serde defaults); a new one with an old Myrme sees none.
+
+**The gap it fixes:** the phone shell keeps no activity at all. Its `VaultAccess::activity` is a
+no-op, and it answers the poll `{"active": false}`. So the phone, where chat is slowest, shows only
+the UI's own guess. Recipe and research need that bookkeeping too, to meet class C by showing
+progress (research §5.2).
+
+| Step | Repo | Change |
+|---|---|---|
+| 1 | Myrme | `http::post_streaming`: SSE over the existing hand-rolled client, chunked bodies included. `OpenAiStep::complete_streaming(system, user, on_text)`. `LlmStep::complete_streaming` as a **provided** method that calls `complete`, so fakes and other backends are unchanged |
+| 2 | Myrme | Chat uses it. The runner throttles drafts to one a second, through **`VaultAccess::activity_draft(disc, text)`**, a provided no-op (the pattern of `VaultAccess::clock`, 1.8). `FmServe` sends `{"discussion", "draft"}` to `agent_activity`. Contract 1.9, `fm_contract.rs`, release |
+| 3 | formicaria | `fm-serve`: `ActivityReq.draft` kept with the stage and returned by the poll. Can land before step 2: until then nothing sends it |
+| 4 | formicaria | Phone shell, after `myrme-bump` to the release in step 2: the same small in-memory activity (stage, question, draft, start time). Its `activity`, `activity_done` and `activity_draft` write it, and its `agent_activity_poll` reads it instead of answering `{"active": false}`. One shape on both platforms, so `NotePanel` needs no phone branch |
+| 5 | formicaria | UI: while a `draft` is present, show it where the wheel's stage text is; the posted reply replaces it. **The owner looks at it on the phone and the desktop before it ships** (the UI rule, `decisions.md` 2026-10-12) |
+
+**Gate:**
+- the S1 chat probe on the phone: the first visible words of a later turn ≤ 2 s;
+- `pixi run integration` against a formicaria with steps 3–4;
+- a live phone check that a long reply appears as it is written and is replaced by the posted note.
+
+### Tried and dropped (research §5.2)
+
+- **Recipe by pointing** (sentence numbers for steps): 14/30 against 17/30, 18 fewer ingredients,
+  21% faster.
+- **n-gram drafting** for recipes: no gain (24% acceptance).
+- **Still open, behind an offer:** MTP drafting for the 0.8B. The runtime has `--spec-type
+  draft-mtp`, but the MTP GGUF is a separate download, and no gain is published at 0.8B.
+
 ## Questions for the owner
 
 Answered 2026-10-18 (*"commit and push the scaffold, keep the defaults"*); recorded in

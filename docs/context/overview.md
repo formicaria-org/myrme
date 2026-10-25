@@ -15,6 +15,7 @@ This is the short map of Myrme's repo. When it disagrees with the code, the code
 | Scouting a new optional model for the phone (shortlist from a leaderboard, then our evals) | `../research/2026-10-19-scouting-phone-models.md` (the method in §2) |
 | What was measured for the phone model and Myrme light, how, and the results in one place | `../research/2026-10-20-small-model-benchmark-summary.md` |
 | **Myrme light** — dedicated tools (OCR, extraction, embeddings on ONNX Runtime) and a very small LLM | `../research/2026-10-19-myrme-light.md` (the plan, phases L0–L7; the laptop phases are done, and its one tool, the OCR, shipped in Myrme 0.7.0) |
+| **The speed bar**: the minimum speed per kind of wait, what meets it per method, and what was tried (prompt reuse with `-ub`, streaming, recipe pointing) | `../research/2026-10-25-minimum-speed.md` · `plan.md` (*The speed bar*) |
 | Making the small model faster: runtime settings, kernels, quantisation, other engines | `../research/2026-10-19-speed.md` · `../research/2026-10-21-low-bit.md` (below Q4_0: answered, none faster) · `../research/2026-10-23-integrated-gpu-fallback.md` (`gpu = "auto"` on an integrated GPU: slower than the CPU; fixed 2026-10-23) · `plan.md` (*Faster engines*) |
 | Running the assistant by hand, benchmarks | `../../agents/README.md` · `../../agents/bench/` |
 

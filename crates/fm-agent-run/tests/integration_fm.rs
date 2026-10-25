@@ -106,6 +106,35 @@ fn fake_model(answer: &'static str) -> (u16, std::sync::Arc<std::sync::atomic::A
     (port, calls)
 }
 
+/// Stands in for a model that **streams**: answers one chat completion as server-sent events, one
+/// piece every `gap`, the way llama-server writes a reply token by token.
+fn streaming_model(pieces: &'static [&'static str], gap: Duration) -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        let Some(Ok(mut sock)) = listener.incoming().next() else { return };
+        let mut req = Vec::new();
+        let mut buf = [0u8; 4096];
+        while !String::from_utf8_lossy(&req).contains("\"stream\":true") {
+            let n = sock.read(&mut buf).unwrap_or(0);
+            if n == 0 {
+                return;
+            }
+            req.extend_from_slice(&buf[..n]);
+        }
+        let _ = write!(sock, "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\r\n");
+        for piece in pieces {
+            let event = json!({ "choices": [{ "delta": { "content": piece } }] });
+            let _ = write!(sock, "data: {event}\n\n");
+            let _ = sock.flush();
+            std::thread::sleep(gap);
+        }
+        let done = json!({ "choices": [{ "delta": {}, "finish_reason": "stop" }] });
+        let _ = write!(sock, "data: {done}\n\ndata: [DONE]\n\n");
+    });
+    port
+}
+
 fn agent(fm_port: u16, model_port: u16) -> Agent<FmServe> {
     Agent {
         fm: FmServe::local(fm_port),
@@ -215,6 +244,56 @@ fn a_proposed_edit_goes_through_formicaria_and_comes_back_whole() {
 
     // The note itself is unchanged until a person accepts.
     assert_eq!(fm.get(&id).unwrap()["body"].as_str().unwrap(), before);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// **The reply as it is written** (contract 1.9): while a slow model streams a chat reply, formicaria's
+/// activity poll shows the reply so far, and the reply itself is then posted whole. A formicaria
+/// before drafts answers the poll without a `draft` field; it is still asked, and ignores it.
+#[test]
+#[ignore = "needs a built fm-serve; run `pixi run integration`"]
+fn a_chat_reply_shows_in_formicaria_while_it_is_written() {
+    let root = temp_root("draft");
+    let (_server, port) = start(&root);
+    let made = api(port, "capture", json!({ "body": "Field notes on the survey.", "vault": "" }));
+    let id = made["id"].as_str().unwrap().to_string();
+
+    const PIECES: &[&str] = &["The notes ", "describe ", "one survey, ", "done in ", "one day."];
+    let model_port = streaming_model(PIECES, Duration::from_millis(500));
+    let turn = {
+        let id = id.clone();
+        std::thread::spawn(move || {
+            let intent = convo::parse("@Myrme what are these notes about?");
+            agent(port, model_port).handle(&id, &intent, &|_| {}).unwrap()
+        })
+    };
+    let mut drafts = Vec::new();
+    let mut knows_drafts = false;
+    while !turn.is_finished() {
+        let a = api(port, "agent_activity_poll", json!({ "discussion": id }));
+        if let Some(d) = a.get("draft").and_then(Value::as_str) {
+            knows_drafts = true;
+            if !d.is_empty() && drafts.last().map(String::as_str) != Some(d) {
+                drafts.push(d.to_string());
+            }
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let (reply, _) = turn.join().unwrap();
+    assert_eq!(reply, PIECES.concat());
+    assert!(FmServe::local(port).thread(&id).unwrap().to_string().contains(&reply));
+    if knows_drafts {
+        assert!(!drafts.is_empty(), "no reply so far was ever shown");
+        assert!(drafts.iter().all(|d| reply.starts_with(d.as_str())), "{drafts:?}");
+        assert!(
+            drafts.first().unwrap().len() < reply.len(),
+            "it showed before the end: {drafts:?}"
+        );
+    } else {
+        eprintln!(
+            "this formicaria predates drafts: the poll has no `draft`; the reply still lands"
+        );
+    }
     let _ = std::fs::remove_dir_all(&root);
 }
 

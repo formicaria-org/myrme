@@ -44,12 +44,12 @@ use fm_agent_run::host::{
 #[cfg(feature = "download")]
 use fm_agent_run::host::BUNDLED_ONNXRUNTIME;
 
-/// The contract this file checks is 1.8 (`CONTRACT_MAJOR`/`CONTRACT_MINOR`). Changing what it names
+/// The contract this file checks is 1.9 (`CONTRACT_MAJOR`/`CONTRACT_MINOR`). Changing what it names
 /// means changing the contract version too — a removal or rename is a new major, an addition a new
 /// minor — and the two are compared here so one cannot move without the other.
 #[test]
-fn this_list_is_contract_1_8() {
-    assert_eq!((fm_agent_run::CONTRACT_MAJOR, fm_agent_run::CONTRACT_MINOR), (1, 8));
+fn this_list_is_contract_1_9() {
+    assert_eq!((fm_agent_run::CONTRACT_MAJOR, fm_agent_run::CONTRACT_MINOR), (1, 9));
     assert!(
         fm_agent_run::VERSION.split('.').count() == 3,
         "a release version is MAJOR.MINOR.PATCH"
@@ -161,4 +161,18 @@ fn a_vault_gives_the_assistant_formicaria_s_clock() {
         v.clock()
     }
     let _ = clock::<fm_agent_run::fmserve::FmServe>;
+}
+
+/// Contract 1.9: the reply so far, while it is written (2026-10-25). A vault may show it where the
+/// app's wheel is; the default shows nothing, so a vault written for 1.8 is unchanged. The catalogue
+/// gains the per-model key `ubatch`, read by `Manifest::add_template_flags`.
+#[test]
+fn a_vault_may_show_the_reply_as_it_is_written() {
+    use fm_agent_run::fmserve::VaultAccess;
+    fn draft<V: VaultAccess>(v: &V) {
+        v.activity_draft("discussion", "the reply so far");
+    }
+    let _ = draft::<fm_agent_run::fmserve::FmServe>;
+    let m = fm_agent_run::manifest::Manifest::parse(CATALOGUE);
+    assert!(m.model("qwen3.5-0.8b").is_some_and(|q| q.ubatch.is_some()));
 }

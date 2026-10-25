@@ -42,7 +42,6 @@ fn strings(v: &Value) -> Vec<String> {
 fn run<L: LlmStep>(llm: L, case: &Value) -> Result<(String, bool, String), AgentError> {
     let intent = Intent {
         ask: case["ask"].as_str().unwrap().into(),
-        search: false,
         propose: true,
         research: false,
         transcribe: None,

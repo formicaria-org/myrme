@@ -7,6 +7,7 @@ description: Answer a question from numbered sources as a list of claims, each c
 
 **Trigger:** the `/research` command. **Capabilities:** `llm` and `web`. The web runs only because
 the person asked for it.
+**Wait:** class C, a job a person started — 10 s or less, or progress and a way to stop.
 
 ## Pipeline (`StudyAssistant::research`)
 

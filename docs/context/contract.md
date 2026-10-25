@@ -13,7 +13,7 @@ _Taken from formicaria at tag v0.9.2 (commit e670190) on 2026-10-18; the Rust it
 Two numbers, kept apart:
 - **The release version** (`fm_agent_run::VERSION`, `Cargo.toml`, the `v…` tag) changes with
   every release.
-- **The contract version** (`fm_agent_run::CONTRACT_MAJOR`.`CONTRACT_MINOR`, now **1.8**) changes
+- **The contract version** (`fm_agent_run::CONTRACT_MAJOR`.`CONTRACT_MINOR`, now **1.9**) changes
   only when this document does.
   - **Major:** anything listed below is renamed, removed or changes meaning. formicaria checks the
     major at compile time, so an app written for another major refuses to build and says why. It
@@ -24,7 +24,7 @@ So formicaria can take any newer Myrme release of the same contract major by cha
 nothing else. That is how methods, prompts, evals, models and the runtime reach users without a
 formicaria code change. `docs/context/releases.md` lists every release with its contract version.
 
-The list in part 1 is compile-checked as contract 1.8 (`tests/fm_contract.rs`). Changing it means
+The list in part 1 is compile-checked as contract 1.9 (`tests/fm_contract.rs`). Changing it means
 changing the contract version in the same commit.
 
 ## 1. Rust items formicaria names
@@ -49,10 +49,18 @@ git grep -hoE "fm_agent(_run)?::[A-Za-z_]+(::[A-Za-z_]+)*(::\{[^}]*\})?" <tag> -
 | `fm_agent_run::label::{read, ready_json}` | Settings: the model's label |
 | `fm_agent_run::label::{read_with, ready_json_with}`, `fm_agent_run::ocr::{shared, ReadPage}` (1.7) | desktop + phone: a label read by the OCR first |
 | `VaultAccess::clock` (1.8) | phone: formicaria's clock, given to the assistant in process |
+| `VaultAccess::activity_draft` (1.9) | phone: the reply so far, shown while it is written |
 | `fm_agent_run::manifest::{Manifest, Manifest::read, Manifest::platform_key, whisper_language}` | the catalogue |
 | `Manifest::phone_choices`, `Model::{phone_label, bytes, mmproj_bytes}` (1.5) | phone: the model chooser (shown only with two or more choices; one since 2026-10-20) |
 | `fm_agent_run::nativelib::native_lib_dir` (Android only) | phone: where the bundled runtime lives |
 | `fm_agent_run::watch::{serve_loop, wait_ready}` | phone: the watch loop |
+
+**Contract 1.9 adds the reply as it is written** (`decisions.md` 2026-10-25):
+- `VaultAccess::activity_draft(disc, text)`, a provided method that does nothing: the chat reply so
+  far, at most once a second while it is written, for the app to show where its wheel is until the
+  reply lands. Display only; the reply is still posted whole. The desktop's `FmServe` sends it to
+  `/api/agent_activity` as `draft` (part 2); the phone's vault keeps it in process.
+- The catalogue key `ubatch` (per model), passed as `-ub` by `Manifest::add_template_flags`.
 
 **Contract 1.8 adds formicaria's clock** (Myrme 0.10.0, `decisions.md` 2026-10-24 later):
 - `VaultAccess::clock() -> Option<Value>`, a provided method answering `None`: formicaria's `clock`
@@ -128,7 +136,9 @@ watchdog ignores the agent's polling. The commands are whatever `fmserve.rs` pos
 `post(`/`"/api/` there for the current list. formicaria's `dispatch.rs` match is the truth on its
 side. The host-side routes (`/api/agent_status`, `agent_models`, `agent_activity`,
 `agent_activity_poll`, `agent_present`, `agents`) belong to formicaria; Myrme's runner reports to
-some of them.
+some of them. **`/api/agent_activity`** takes `{discussion, stage, question}`, `{discussion, done}`,
+and since contract 1.9 `{discussion, stage, draft}`: the reply so far. A formicaria that does not
+know `draft` reads the stage alone.
 
 **`/api/clock`** (contract 1.8, formicaria 0.19) is **read** for the person's clock — the zone
 every time is on and the day it is: `{"v": 1, "zone", "today", "instants", …}`. Myrme reads `zone`
@@ -147,7 +157,7 @@ desktop archive (`.github/workflows/desktop.yml:141`, `packaging/formicaria.sh:4
 Android runtime from it (`ci/android-stage-runtime.sh`). **Its keys are a format formicaria reads.**
 Adding a key is safe; renaming or removing one is a contract change. Added since the
 extraction: `image_max_tokens` (per model, 2026-10-18); `phone_label`, `thinking` and
-`shared_mail_prompt` (per model, 2026-10-19), read through `Manifest::phone_choices`,
+`shared_mail_prompt` (per model, 2026-10-19), and `ubatch` (per model, 2026-10-25, contract 1.9), read through `Manifest::phone_choices`,
 `Manifest::add_template_flags` and `Manifest::shared_mail_prompt`. `Agent` gained the field
 `shared_mail_prompt` (2026-10-19), an addition. **Contract 1.4** (Myrme 0.5.0) adds the
 phone's runtimes, which formicaria's packaging reads from here instead of keeping its own copy:

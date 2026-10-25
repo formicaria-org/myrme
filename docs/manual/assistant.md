@@ -213,15 +213,14 @@ with a line saying what it does — which is the easier route on a phone.
 
 | Command | What it does | Where |
 |---|---|---|
-| `/search` | Look the web up first, then answer from what it found. | Anywhere |
-| `/research` | The thorough version: search, write with quotes, and check every claim against its source. Drops the ones it cannot support. | **A note's discussion** |
+| `/research` | Look the web up, write with quotes, and check every claim against its source; it drops the ones it cannot support. On a note it is a proposal; in a first-class discussion it answers from the web there. `/search` means the same. | Anywhere |
 | `/propose` | Draft an **edit to that note** for you to review. | **A note's discussion** |
 | `/transcribe` | Turn this note's **recordings and images into text** — see below. | **A note's discussion** |
 | `/recipe` (or `/ricetta`) | Make a **recipe** of this note — a recording of you saying it, or its text — proposed as a new recipe note. | **A note's discussion** |
 
-All but `/search` need a note to work on, so in a *first-class* discussion — one that belongs to no
-particular note — only `/search` applies; the rest quietly become an ordinary question. A command
-can go anywhere in the sentence, beginning or end.
+The same four commands are offered on every device. All but `/research` need a note to work on, so
+in a *first-class* discussion — one that belongs to no particular note — the others become an
+ordinary question. A command can go anywhere in the sentence, beginning or end.
 
 Nothing the assistant writes lands in a note by itself. `/propose`, `/research`, `/transcribe` and `/recipe`
 each produce a **proposal**: it appears on the note it belongs to, and in the **Collaboration**
@@ -231,7 +230,7 @@ See [Collaboration](./collaboration.md).
 Example:
 
 ```
-@Myrme summarize the key idea of Bayesian model selection in 3 bullet points /search
+@Myrme summarize the key idea of Bayesian model selection in 3 bullet points /research
 ```
 
 ### A recipe from a recording
@@ -389,7 +388,7 @@ To discard it entirely, use **Remove the model** — see "Getting the space back
 ## Privacy and control
 
 - **Off by default.** Nothing runs, downloads, or watches until you enable it.
-- **Your notes stay local.** The model runs on your device; notes are never uploaded. Only `/search`
+- **Your notes stay local.** The model runs on your device; notes are never uploaded. Only `/research`
   touches the internet — and only the search terms, never your notes.
 - **You are always in control.** The assistant can only **reply** in a discussion or **propose** a
   change on a branch you review. It never writes to `main` on its own. Turn it off in Settings (or,

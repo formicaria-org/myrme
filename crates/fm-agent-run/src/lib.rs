@@ -29,7 +29,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// models — and an app moves to them by changing a tag and nothing else.
 pub const CONTRACT_MAJOR: u32 = 1;
 /// See [`CONTRACT_MAJOR`].
-pub const CONTRACT_MINOR: u32 = 8;
+pub const CONTRACT_MINOR: u32 = 9;
 
 /// **The model catalogue** — models, their pins and licences, and the runtime archives per platform
 /// (`models.toml`, beside this crate). Embedded so that whoever links Myrme has it without knowing
@@ -205,14 +205,19 @@ impl<V: VaultAccess> Agent<V> {
         // short-circuit the conversational turn. Which reader runs is decided inside
         // `transcribe_turn` by each file's type.
         match intent.command() {
+            // A first-class discussion has no note to research into, so there the web answers in
+            // the discussion — what `/search` did before it became `/research` (2026-10-25).
+            convo::Command::Research if self.is_discussion(note) => {
+                return self.conversation_turn(self.llm(), note, intent, Web::Search, on_stage)
+            }
             convo::Command::Research => return self.research_turn(note, intent, on_stage),
             convo::Command::Read(reference) => {
                 return self.transcribe_turn(note, &reference, on_stage)
             }
             convo::Command::Recipe => return self.recipe_turn(&self.llm(), note, on_stage),
-            convo::Command::Chat { .. } | convo::Command::Propose { .. } => {}
+            convo::Command::Chat | convo::Command::Propose => {}
         }
-        self.conversation_turn(self.llm(), note, intent, on_stage)
+        self.conversation_turn(self.llm(), note, intent, Web::None, on_stage)
     }
 
     /// A chat or `/propose` turn, with the model passed in — the seam a test fills with a fake, as
@@ -222,13 +227,14 @@ impl<V: VaultAccess> Agent<V> {
         llm: L,
         note: &str,
         intent: &convo::Intent,
+        web: Web,
         on_stage: &dyn Fn(&str),
     ) -> Result<(String, Option<String>), String> {
         on_stage("reading the conversation");
         let history = self.history(note)?;
         // The note being discussed, plus the notes it explicitly **links** to (text only) — bounded,
         // relevant context the user chose by linking, not a vault-wide search (that fed a tiny model a
-        // pile of unrelated fragments it parroted back). `/search` still adds the web.
+        // pile of unrelated fragments it parroted back). `/research` in a discussion adds the web.
         on_stage("reading this note");
         // A chat turn is told the day; an edit is not — it points at the note's words, and a small
         // model given more to point at points wrong more often (2026-10-18).
@@ -240,7 +246,7 @@ impl<V: VaultAccess> Agent<V> {
         // from notes/memory and *tell the user* the answer isn't web-grounded (a wrong answer that
         // looks researched is worse than a flagged one).
         let mut web_unavailable = false;
-        if intent.search {
+        if web == Web::Search {
             on_stage("searching the web");
             match self.web(&intent.ask) {
                 Ok(docs) => context.extend(docs),
@@ -254,8 +260,17 @@ impl<V: VaultAccess> Agent<V> {
 
         on_stage("thinking");
         let agent = StudyAssistant::new(llm, NoWeb);
+        // The reply as it is written, to the app's activity, at most once a second
+        // (`docs/research/2026-10-25-minimum-speed.md`: the phone writes faster than people read).
+        let shown = std::cell::Cell::new(None::<std::time::Instant>);
+        let draft = |text: &str| {
+            if shown.get().is_none_or(|t| t.elapsed() >= DRAFT_EVERY) {
+                shown.set(Some(std::time::Instant::now()));
+                self.fm.activity_draft(note, text);
+            }
+        };
         let turn = agent
-            .turn(&history, intent, &context, Some(self.max_reply_chars))
+            .turn_streaming(&history, intent, &context, Some(self.max_reply_chars), &draft)
             .map_err(|e| e.to_string())?;
 
         on_stage("writing the reply");
@@ -759,6 +774,15 @@ impl<V: VaultAccess> Agent<V> {
         })
     }
 
+    /// Is this a **first-class discussion** — a note whose `thread_of` points at itself
+    /// (formicaria's `thread::is_discussion_root`)? It belongs to no other note, so there is no
+    /// note for `/research` to propose into. A note that cannot be read is not one.
+    fn is_discussion(&self, note: &str) -> bool {
+        self.fm.get(note).is_ok_and(|v| {
+            v["props"]["thread_of"].as_str() == Some(format!("note:{note}").as_str())
+        })
+    }
+
     /// The host note itself — what the discussion is about, so always included.
     fn host_note(&self, note: &str) -> Result<Vec<InputDoc>, String> {
         let v = self.fm.get(note)?;
@@ -835,6 +859,18 @@ impl<V: VaultAccess> Agent<V> {
 /// The note ids linked in a body — every `note:<ULID>` (from `[..](note:id)` or a bare ref). A ULID is
 /// exactly 26 Crockford-base32 chars, so take the 26 after each `note:` and keep only alphanumeric
 /// runs; a shorter/malformed match is skipped. Order-preserving; duplicates handled by the caller.
+/// How often the reply so far goes to the app while it is written: its poll runs every 1.5 s, so
+/// a draft a second keeps it current without a call per token.
+const DRAFT_EVERY: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// Whether a conversational turn also searches the web — only `/research` in a first-class
+/// discussion does (2026-10-25).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Web {
+    None,
+    Search,
+}
+
 /// The outcome of scanning a note for audio to transcribe.
 enum AudioWork {
     /// Un-transcribed clips to do, each `(reference, bytes, mime)`.
@@ -910,10 +946,11 @@ mod tests {
     struct FakeVault {
         thread: Value,
         alive: bool,
+        note: Value,
     }
     impl VaultAccess for FakeVault {
         fn get(&self, _: &str) -> Result<Value, String> {
-            Ok(Value::Null)
+            Ok(self.note.clone())
         }
         fn thread(&self, _: &str) -> Result<Value, String> {
             Ok(self.thread.clone())
@@ -969,6 +1006,19 @@ mod tests {
         }
     }
 
+    /// `/research` answers in the discussion only where there is no note to propose into: a
+    /// first-class discussion, which formicaria marks by `thread_of` pointing at itself.
+    #[test]
+    fn only_a_self_anchored_thread_is_a_first_class_discussion() {
+        let own = agent(FakeVault {
+            note: json!({"props": {"thread_of": "note:D1"}}),
+            ..Default::default()
+        });
+        assert!(own.is_discussion("D1"));
+        assert!(!own.is_discussion("N1"), "a comment thread on another note");
+        assert!(!agent(FakeVault::default()).is_discussion("D1"), "no thread_of, no discussion");
+    }
+
     /// The owner's rule for reading an image (2026-10-10): a dedicated reader if there is one, the
     /// main model if it can see, otherwise nobody. Each step is a fact about what is running, so
     /// the same three cases hold on a laptop and a phone.
@@ -1005,6 +1055,7 @@ mod tests {
         let fm = FakeVault {
             thread: json!({ "messages": [{ "body": "hi" }, { "body": "there" }] }),
             alive: true,
+            ..Default::default()
         };
         let history = agent(fm).history("note").unwrap();
         assert!(history.contains("hi") && history.contains("there"), "got: {history:?}");
@@ -1017,7 +1068,8 @@ mod tests {
         // The common case: under budget, nothing is dropped and the order is oldest-first.
         let thread =
             json!({ "messages": [{ "body": "one" }, { "body": "two" }, { "body": "three" }] });
-        let h = agent(FakeVault { thread, alive: true }).history("note").unwrap();
+        let h =
+            agent(FakeVault { thread, alive: true, ..Default::default() }).history("note").unwrap();
         assert_eq!(h, "- one\n- two\n- three");
     }
 
@@ -1033,7 +1085,7 @@ mod tests {
             { "body": "third turn — more middle padding here" },
             { "body": "LATEST: and fix the title" },
         ]});
-        let mut a = agent(FakeVault { thread, alive: true });
+        let mut a = agent(FakeVault { thread, alive: true, ..Default::default() });
         a.history_budget = 120; // room for both ends + the gap marker, but not every middle turn
         let h = a.history("note").unwrap();
         assert!(
@@ -1055,7 +1107,7 @@ mod tests {
         // Two turns are both ends, so even under an absurdly tight budget both survive, in order, with
         // no gap marker and no duplicated opener.
         let thread = json!({ "messages": [{ "body": "the ask" }, { "body": "the answer" }] });
-        let mut a = agent(FakeVault { thread, alive: true });
+        let mut a = agent(FakeVault { thread, alive: true, ..Default::default() });
         a.history_budget = 5;
         let h = a.history("note").unwrap();
         assert_eq!(h, "- the ask\n- the answer");
@@ -1067,7 +1119,7 @@ mod tests {
         // the empty string the old tail-only loop could return.
         let thread =
             json!({ "messages": [{ "body": "a single very long turn that exceeds the budget" }] });
-        let mut a = agent(FakeVault { thread, alive: true });
+        let mut a = agent(FakeVault { thread, alive: true, ..Default::default() });
         a.history_budget = 5;
         let h = a.history("note").unwrap();
         assert!(
@@ -1104,7 +1156,6 @@ mod tests {
     fn transcribe_reports_a_missing_runtime_and_a_missing_clip() {
         let intent = |src: &str| convo::Intent {
             ask: String::new(),
-            search: false,
             propose: false,
             research: false,
             transcribe: Some(src.to_string()),
@@ -1213,7 +1264,6 @@ mod tests {
         };
         let intent = convo::Intent {
             ask: String::new(),
-            search: false,
             propose: false,
             research: false,
             transcribe: Some("asset:sha256-abc123".into()),
@@ -1325,7 +1375,6 @@ mod tests {
             };
             let intent = convo::Intent {
                 ask: String::new(),
-                search: false,
                 propose: false,
                 research: false,
                 transcribe: Some(String::new()),
@@ -1442,7 +1491,6 @@ mod tests {
         };
         let intent = convo::Intent {
             ask: String::new(),
-            search: false,
             propose: false,
             research: false,
             transcribe: Some(String::new()), // bare /transcribe,
@@ -1465,7 +1513,6 @@ mod tests {
         let a = agent(FakeVault { alive: true, ..Default::default() });
         let intent = convo::Intent {
             ask: "how do mRNA vaccines work".into(),
-            search: false,
             propose: false,
             research: true,
             transcribe: None,
@@ -1546,7 +1593,6 @@ mod tests {
         };
         let intent = convo::Intent {
             ask: String::new(),
-            search: false,
             propose: false,
             research: false,
             transcribe: Some(String::new()),
@@ -1634,17 +1680,19 @@ mod tests {
         let ask = convo::parse("when is next Monday?");
 
         let shown = Shown(Default::default());
-        agent(Some(clock.clone())).conversation_turn(&shown, "N1", &ask, &|_| {}).unwrap();
+        agent(Some(clock.clone()))
+            .conversation_turn(&shown, "N1", &ask, Web::None, &|_| {})
+            .unwrap();
         let first = shown.0.borrow()[0].clone();
         assert!(first.starts_with("Today is Saturday, 24 October 2026 (Asia/Tokyo)."), "{first}");
 
         let shown = Shown(Default::default());
-        agent(None).conversation_turn(&shown, "N1", &ask, &|_| {}).unwrap();
+        agent(None).conversation_turn(&shown, "N1", &ask, Web::None, &|_| {}).unwrap();
         assert!(!shown.0.borrow()[0].contains("Today is"), "no clock, no day said");
 
         let shown = Shown(Default::default());
         let edit = convo::parse("add a line: Lunch on Monday /propose");
-        let _ = agent(Some(clock)).conversation_turn(&shown, "N1", &edit, &|_| {});
+        let _ = agent(Some(clock)).conversation_turn(&shown, "N1", &edit, Web::None, &|_| {});
         assert!(shown.0.borrow().iter().all(|p| !p.contains("Today is")), "an edit is not told");
     }
 
@@ -1738,7 +1786,7 @@ mod tests {
                 device: "laptop".into(),
             };
             let intent = convo::parse("add a line: Next survey: 14 November /propose");
-            a.conversation_turn(Says(answer), "N1", &intent, &|_| {}).unwrap();
+            a.conversation_turn(Says(answer), "N1", &intent, Web::None, &|_| {}).unwrap();
             a
         };
 

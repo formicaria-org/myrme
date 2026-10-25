@@ -252,6 +252,10 @@ ctx = 4096
 # 2.3% WER, handwriting 43.4%; uncapped 7.0% and 49.3%).
 image_max_tokens = 1024
 thinking = false
+# A hybrid model (attention + recurrent layers): a stored prompt is reused only back to its last
+# checkpoint, one micro-batch before the prompt's end. At 128, a later chat turn rereads ~320 tokens
+# instead of 705-967 and answers 2-2.7x sooner (laptop CPU, 2026-10-25; images read the same).
+ubatch = 128
 note = "PHONE model since 2026-10-20 (a choice from 2026-10-19) — right far more often than the 450M: meetings 13/17 against 5/17, edits 3/7 against 0/7, recipes 245 of 257 ingredients against 102 (2 invented against 18). Slower on text on the Dimensity 7300: recipe 30.9 s a request against 14.0, edits 2.8 s against 0.9; meetings 3.7 s against 4.3. Q8_0 rejected: it answered [] to every meeting. Thinks by default, hence thinking = false."
 
 [[models]]

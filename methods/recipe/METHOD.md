@@ -7,6 +7,7 @@ description: Make a recipe of a note — its recording transcribed, or its text 
 
 **Trigger:** the `/recipe` command. **Capabilities:** `llm`, plus `speech` when the note holds a
 recording.
+**Wait:** class C, a job a person started — 10 s or less, or progress and a way to stop (it shows progress: §5.2 of the speed research).
 
 ## Pipeline (`recipe.rs`)
 

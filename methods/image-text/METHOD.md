@@ -9,6 +9,7 @@ description: Turn an image in a note — handwriting, a board, a photographed pa
 that has not been read yet. **Capabilities:** `vision`, meaning a dedicated reader if one runs, else
 the main model if it can see, else nobody (`Agent::image_reader`, formicaria `decisions.md`
 2026-10-10).
+**Wait:** class B, at the point of action — 2 s a page or less; a page the vision model reads takes longer, so it shows its progress.
 
 ## Pipeline
 

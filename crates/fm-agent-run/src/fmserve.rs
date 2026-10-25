@@ -75,6 +75,13 @@ pub trait VaultAccess {
     fn activity(&self, disc: &str, stage: &str, question: &str);
     /// Clear a discussion's status — the reply landed, or the turn errored/timed out. Best-effort.
     fn activity_done(&self, disc: &str);
+    /// **The reply so far** while it is being written (contract 1.9, 2026-10-25), for the app to
+    /// show where its wheel is until the reply itself lands. It is for display only and is never
+    /// written to the vault; the reply is still posted whole by [`Self::reply_as`]. Sent at most
+    /// once a second. Best-effort; the default shows nothing, as before.
+    fn activity_draft(&self, disc: &str, text: &str) {
+        let _ = (disc, text);
+    }
     /// Heartbeat: "this agent is alive right now," by name — and, when something here can read a
     /// picture, which model server that is, so the app can hand it a label (`crate::label`).
     /// Best-effort.
@@ -392,6 +399,15 @@ impl VaultAccess for FmServe {
 
     fn activity_done(&self, disc: &str) {
         let _ = self.call("agent_activity", json!({ "discussion": disc, "done": true }));
+    }
+
+    /// The stage goes with the draft: a formicaria before 0.20 reads only the stage, so it keeps
+    /// showing "writing the reply" instead of falling back to "working".
+    fn activity_draft(&self, disc: &str, text: &str) {
+        let _ = self.call(
+            "agent_activity",
+            json!({ "discussion": disc, "stage": "writing the reply", "draft": text }),
+        );
     }
 
     fn present(&self, name: &str, reader: Option<&crate::ImageReader>) {

@@ -43,6 +43,18 @@ pub fn post(
     body: &[u8],
     timeout: Duration,
 ) -> Result<Vec<u8>, AgentError> {
+    send(host, port, &request(host, port, path, content_type, extra, body), timeout)
+}
+
+/// A `POST` request's bytes: the request line, its framing headers and the body.
+fn request(
+    host: &str,
+    port: u16,
+    path: &str,
+    content_type: &str,
+    extra: &str,
+    body: &[u8],
+) -> Vec<u8> {
     let mut request = format!(
         "POST {path} HTTP/1.1\r\n\
          Host: {host}:{port}\r\n\
@@ -53,7 +65,122 @@ pub fn post(
     )
     .into_bytes();
     request.extend_from_slice(body);
-    send(host, port, &request, timeout)
+    request
+}
+
+/// [`post`], with the response body handed to `on_line` **one line at a time as it arrives** — how
+/// a streamed answer (server-sent events) is read while it is still being written (2026-10-25).
+/// `timeout` bounds each read, not the whole answer. A non-200 is an error naming the status line.
+pub fn post_lines(
+    host: &str,
+    port: u16,
+    path: &str,
+    content_type: &str,
+    body: &[u8],
+    timeout: Duration,
+    on_line: &mut dyn FnMut(&str),
+) -> Result<(), AgentError> {
+    let mut stream = TcpStream::connect((host, port)).map_err(|e| {
+        AgentError::new(format!("cannot reach {host}:{port} — is it running? ({e})"))
+    })?;
+    let net = |e: std::io::Error| AgentError::new(format!("{host}:{port} I/O failed: {e}"));
+    stream.set_read_timeout(Some(timeout)).map_err(net)?;
+    stream.set_write_timeout(Some(timeout)).map_err(net)?;
+    stream.write_all(&request(host, port, path, content_type, "", body)).map_err(net)?;
+    let mut lines = Lines::default();
+    let mut buf = [0u8; 4096];
+    loop {
+        let n = stream.read(&mut buf).map_err(net)?;
+        if n == 0 {
+            break;
+        }
+        lines.feed(&buf[..n], on_line)?;
+    }
+    lines.finish(on_line)
+}
+
+/// An HTTP response read **as it arrives**: the head first (a `200` is required), then the body,
+/// unchunked if it is chunked, cut into lines. Pure, so how a response split anywhere across
+/// reads still comes out whole is tested without a socket.
+#[derive(Default)]
+struct Lines {
+    raw: Vec<u8>,
+    head: Option<bool>,
+    left: usize,
+    crlf: bool,
+    text: Vec<u8>,
+}
+
+impl Lines {
+    fn feed(&mut self, data: &[u8], on_line: &mut dyn FnMut(&str)) -> Result<(), AgentError> {
+        self.raw.extend_from_slice(data);
+        if self.head.is_none() {
+            let Some(end) = self.raw.windows(4).position(|w| w == b"\r\n\r\n") else {
+                return Ok(());
+            };
+            let head = String::from_utf8_lossy(&self.raw[..end]).into_owned();
+            let status = head.lines().next().unwrap_or("");
+            if !status.contains(" 200") {
+                return Err(AgentError::new(format!("server returned: {}", status.trim())));
+            }
+            self.head = Some(head.to_ascii_lowercase().contains("transfer-encoding: chunked"));
+            self.raw.drain(..end + 4);
+        }
+        if self.head == Some(true) {
+            self.dechunk();
+        } else {
+            self.text.append(&mut self.raw);
+        }
+        while let Some(i) = self.text.iter().position(|&b| b == b'\n') {
+            let line: Vec<u8> = self.text.drain(..=i).collect();
+            on_line(String::from_utf8_lossy(&line).trim_end_matches(['\r', '\n']));
+        }
+        Ok(())
+    }
+
+    /// Move whole chunk data from `raw` to `text`, keeping a partial size line or chunk for later.
+    fn dechunk(&mut self) {
+        loop {
+            if self.left > 0 {
+                let n = self.left.min(self.raw.len());
+                self.text.extend(self.raw.drain(..n));
+                self.left -= n;
+                self.crlf = self.left == 0;
+                if self.raw.is_empty() {
+                    return;
+                }
+            } else if self.crlf {
+                if self.raw.len() < 2 {
+                    return;
+                }
+                self.raw.drain(..2);
+                self.crlf = false;
+            } else {
+                let Some(i) = self.raw.windows(2).position(|w| w == b"\r\n") else { return };
+                let size = String::from_utf8_lossy(&self.raw[..i]);
+                let size = usize::from_str_radix(size.split(';').next().unwrap_or("").trim(), 16);
+                self.raw.drain(..i + 2);
+                match size {
+                    Ok(0) | Err(_) => {
+                        self.raw.clear();
+                        return;
+                    }
+                    Ok(n) => self.left = n,
+                }
+            }
+        }
+    }
+
+    /// The end of the response: the last line, if it had no newline. No head at all is an error.
+    fn finish(mut self, on_line: &mut dyn FnMut(&str)) -> Result<(), AgentError> {
+        if self.head.is_none() {
+            return Err(AgentError::new("malformed HTTP response"));
+        }
+        if !self.text.is_empty() {
+            on_line(String::from_utf8_lossy(&std::mem::take(&mut self.text)).trim_end());
+        }
+        Ok(())
+    }
 }
 
 /// Split an HTTP response into head/body, require a `200`, decode a chunked body if present, and
@@ -130,6 +257,34 @@ mod tests {
         let raw = b"HTTP/1.1 503 Service Unavailable\r\n\r\n";
         let err = body(raw).unwrap_err();
         assert!(format!("{err}").contains("503"), "got: {err}");
+    }
+
+    /// A response cut anywhere across reads — inside the head, a chunk's size, its data or its
+    /// closing CRLF — gives the same lines as one read.
+    #[test]
+    fn lines_come_out_whole_however_the_response_is_split() {
+        let raw: &[u8] = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n\
+            e\r\ndata: {\"a\":1}\n\r\nf\r\n\ndata: [DONE]\n\n\r\n0\r\n\r\n";
+        let want = vec!["data: {\"a\":1}", "", "data: [DONE]", ""];
+        for cut in 1..raw.len() {
+            let mut got = Vec::new();
+            let mut l = Lines::default();
+            for part in [&raw[..cut], &raw[cut..]] {
+                l.feed(part, &mut |s| got.push(s.to_string())).unwrap();
+            }
+            l.finish(&mut |s| got.push(s.to_string())).unwrap();
+            assert_eq!(got, want, "cut at {cut}");
+        }
+        // Not chunked: the body as it comes, the last line without its newline too.
+        let mut got = Vec::new();
+        let mut l = Lines::default();
+        l.feed(b"HTTP/1.1 200 OK\r\n\r\none\ntw", &mut |s| got.push(s.to_string())).unwrap();
+        l.feed(b"o", &mut |s| got.push(s.to_string())).unwrap();
+        l.finish(&mut |s| got.push(s.to_string())).unwrap();
+        assert_eq!(got, ["one", "two"]);
+        // A refusal is an error naming it.
+        let err = Lines::default().feed(b"HTTP/1.1 503 Busy\r\n\r\n", &mut |_| {}).unwrap_err();
+        assert!(format!("{err}").contains("503"), "{err}");
     }
 
     #[test]

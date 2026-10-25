@@ -11,23 +11,27 @@
 #
 # Columns, per method: requests; mean prompt tokens processed (after any cache reuse); prefill
 # tok/s; mean prefill ms (time to first token, near enough); mean generated tokens; decode tok/s;
-# mean seconds per request; and the eval's wall-clock seconds, which includes Rust-side work.
+# mean seconds per request; and the eval's wall-clock seconds, which includes Rust-side work. Last,
+# the method's bar (its `**Wait:**` class, `docs/research/2026-10-25-minimum-speed.md` §1) and whether
+# s/request meets it. A class C job over its bar can still pass by showing progress; this says so.
+# Chat has no eval: `agents/chat-speed.py` times it.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GGUF="${1:?gguf path}"; NAME="${2:?model name}"; NGL="${3:-99}"; shift $(( $# < 3 ? $# : 3 ))
 METHODS=("$@"); [ ${#METHODS[@]} -gt 0 ] || METHODS=(meetings research edits recipe image)
 OUT="$(mktemp -d)"
-echo "| method | requests | prompt tok | prefill tok/s | prefill ms | gen tok | decode tok/s | s/request | wall s |"
-echo "|---|---|---|---|---|---|---|---|---|"
+declare -A BAR=([image]=2 [research]=10 [edits]=10 [recipe]=10 [meetings]=)
+echo "| method | requests | prompt tok | prefill tok/s | prefill ms | gen tok | decode tok/s | s/request | wall s | bar s | meets |"
+echo "|---|---|---|---|---|---|---|---|---|---|---|"
 for m in "${METHODS[@]}"; do
   if [ "$m" = image ] && [ -z "${EVAL_MMPROJ:-}" ]; then echo "| image | — (no \$EVAL_MMPROJ) |||||||| "; continue; fi
   start=$(date +%s)
   EVAL_NO_RECORD=1 EVAL_SERVER_LOG="$OUT/$m.log" bash "$HERE/eval.sh" "$m" "$GGUF" "$NAME" "$NGL" \
     >"$OUT/$m.out" 2>&1 || echo "eval-speed: $m failed, see $OUT/$m.out" >&2
   wall=$(( $(date +%s) - start ))
-  python3 -I - "$OUT/$m.log" "$m" "$wall" <<'PY'
+  python3 -I - "$OUT/$m.log" "$m" "$wall" "${BAR[$m]:-}" <<'PY'
 import re, sys
-log, method, wall = sys.argv[1], sys.argv[2], sys.argv[3]
+log, method, wall, bar = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 pp, tg = [], []
 for line in open(log, errors="replace"):
     m = re.search(r"(prompt eval|\beval) time =\s*([\d.]+) ms /\s*(\d+) tokens", line)
@@ -35,12 +39,14 @@ for line in open(log, errors="replace"):
         (pp if m.group(1) == "prompt eval" else tg).append((float(m.group(2)), int(m.group(3))))
 n = len(pp)
 if not n:
-    print(f"| {method} | 0 |||||||{wall} |"); sys.exit()
+    print(f"| {method} | 0 |||||||{wall} |||"); sys.exit()
 ppms = sum(a for a, _ in pp); ppt = sum(b for _, b in pp)
 tgms = sum(a for a, _ in tg); tgt = sum(b for _, b in tg)
 rate = lambda t, ms: f"{t / ms * 1000:.0f}" if ms else "—"
+per = (ppms + tgms) / n / 1000
+meets = "— (background)" if not bar else ("yes" if per <= float(bar) else ("with progress" if float(bar) >= 10 else "no"))
 print(f"| {method} | {n} | {ppt / n:.0f} | {rate(ppt, ppms)} | {ppms / n:.0f} | {tgt / max(len(tg), 1):.0f} "
-      f"| {rate(tgt, tgms)} | {(ppms + tgms) / n / 1000:.1f} | {wall} |")
+      f"| {rate(tgt, tgms)} | {per:.1f} | {wall} | {bar or '—'} | {meets} |")
 PY
 done
 rm -rf "$OUT"

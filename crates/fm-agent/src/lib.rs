@@ -142,6 +142,19 @@ pub trait LlmStep {
         let _ = schema;
         self.complete(system, user)
     }
+
+    /// [`LlmStep::complete`], with `on_text` shown **the answer so far** each time it grows, so a
+    /// person can start reading before it is finished (2026-10-25, the speed bar). The default
+    /// calls `complete` and shows nothing until the end, so a step that cannot stream still answers.
+    fn complete_streaming(
+        &self,
+        system: &str,
+        user: &str,
+        on_text: &dyn Fn(&str),
+    ) -> Result<LlmResponse, AgentError> {
+        let _ = on_text;
+        self.complete(system, user)
+    }
 }
 
 /// The web seam: a **text-only** search+fetch the *orchestrator* runs — the model never calls it.
@@ -337,6 +350,20 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
         context: &[InputDoc],
         max_reply_chars: Option<usize>,
     ) -> Result<Turn, AgentError> {
+        self.turn_streaming(history, intent, context, max_reply_chars, &|_| {})
+    }
+
+    /// [`Self::turn`], with a chat reply shown to `on_draft` as it is written — the text so far,
+    /// already in the note's math delimiters and under the cap, as the posted reply will be. Only a
+    /// chat reply streams; an edit is a structured answer nobody reads half of.
+    pub fn turn_streaming(
+        &self,
+        history: &str,
+        intent: &crate::convo::Intent,
+        context: &[InputDoc],
+        max_reply_chars: Option<usize>,
+        on_draft: &dyn Fn(&str),
+    ) -> Result<Turn, AgentError> {
         let ctx = assemble_turn_context(history, context);
 
         // The edits to propose, when asked: what to change, pointing at the note's own words, held
@@ -402,7 +429,8 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
                 user.push('\n');
             }
             user.push_str(intent.ask.trim());
-            let resp = self.llm.complete(prompts::CHAT_INSTRUCTION, &user)?;
+            let draft = |so_far: &str| on_draft(&normalize_answer(so_far, max_reply_chars));
+            let resp = self.llm.complete_streaming(prompts::CHAT_INSTRUCTION, &user, &draft)?;
             normalize_answer(&resp.content, max_reply_chars)
         };
 
@@ -520,7 +548,6 @@ mod tests {
     fn propose(ask: &str) -> crate::convo::Intent {
         crate::convo::Intent {
             ask: ask.into(),
-            search: false,
             propose: true,
             research: false,
             transcribe: None,
@@ -563,7 +590,6 @@ mod tests {
         let agent = StudyAssistant::new(FakeLlm::new(&["Here is the answer."]), web);
         let intent = Intent {
             ask: "what does the note say?".into(),
-            search: false,
             propose: false,
             research: false,
             transcribe: None,
@@ -588,7 +614,6 @@ mod tests {
         let agent = StudyAssistant::new(FakeLlm::new(&[r#"{"kind":"append"}"#, answer]), web);
         let intent = Intent {
             ask: "tidy this".into(),
-            search: false,
             propose: true,
             research: false,
             transcribe: None,
@@ -615,7 +640,6 @@ mod tests {
         );
         let intent = Intent {
             ask: "hi".into(),
-            search: false,
             propose: false,
             research: false,
             transcribe: None,

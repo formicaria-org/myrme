@@ -49,6 +49,13 @@ pub struct Model {
     pub image_max_tokens: Option<u32>,
     /// Per-model thread-count override; falls back to the manifest's `threads` when unset.
     pub threads: Option<u32>,
+    /// The micro-batch (`-ub`). A model with recurrent layers (Qwen3.5) reuses a stored prompt only
+    /// back to its last checkpoint, which falls one micro-batch before the prompt's end; measured
+    /// 2026-10-25 on the laptop CPU, 128 instead of the default 512 cut what a later chat turn
+    /// reread from 705–967 tokens to ~320, and its first token from 1.7–2.4 s to 0.9 s, for +3% on
+    /// the first turn (`docs/research/2026-10-25-minimum-speed.md` §5.1). `None` = the runtime's
+    /// default.
+    pub ubatch: Option<u32>,
     /// The weights' licence, e.g. `Apache-2.0` — shown before anything is downloaded, because the
     /// terms someone is accepting should not be discoverable only by reading a TOML comment.
     pub license: Option<String>,
@@ -210,6 +217,7 @@ impl Manifest {
                     image_max_tokens: None,
                     ctx: None,
                     threads: None,
+                    ubatch: None,
                     license: None,
                     bytes: None,
                     mmproj_bytes: None,
@@ -239,6 +247,7 @@ impl Manifest {
                     "mmproj_offload" => m.mmproj_offload = val.parse().ok(),
                     "image_max_tokens" => m.image_max_tokens = val.parse().ok(),
                     "threads" => m.threads = val.parse().ok(),
+                    "ubatch" => m.ubatch = val.parse().ok(),
                     "license" => m.license = Some(val.to_string()),
                     "bytes" => m.bytes = val.parse().ok(),
                     "mmproj_bytes" => m.mmproj_bytes = val.parse().ok(),
@@ -507,13 +516,18 @@ impl Manifest {
         Some(proj)
     }
 
-    /// Give a launch command this model's chat-template settings from the catalogue — today, only
-    /// thinking off ([`Model::thinking`]). The **one** place they reach a command line, for the
-    /// desktop supervisor and the phone alike, as [`add_projector`](Self::add_projector) is for the
-    /// projector.
+    /// Give a launch command this model's own server settings from the catalogue — thinking off
+    /// ([`Model::thinking`]) and its micro-batch ([`Model::ubatch`]). The **one** place they reach a
+    /// command line, for the desktop supervisor and the phone alike, as
+    /// [`add_projector`](Self::add_projector) is for the projector. (The name is older than the
+    /// micro-batch; it is in formicaria's contract, so it stays.)
     pub fn add_template_flags(&self, cmd: &mut std::process::Command, name: &str) {
-        if self.model(name).and_then(|m| m.thinking) == Some(false) {
+        let Some(m) = self.model(name) else { return };
+        if m.thinking == Some(false) {
             cmd.arg("--chat-template-kwargs").arg(r#"{"enable_thinking":false}"#);
+        }
+        if let Some(n) = m.ubatch {
+            cmd.arg("-ub").arg(n.to_string());
         }
     }
 
@@ -804,6 +818,26 @@ mod tests {
         assert_eq!(args("quiet"), ["--chat-template-kwargs", r#"{"enable_thinking":false}"#]);
         assert!(args("plain").is_empty(), "the template's own default");
         assert!(args("nobody").is_empty());
+    }
+
+    #[test]
+    fn a_micro_batch_reaches_the_command_only_for_a_model_that_asks() {
+        let m = Manifest::parse(
+            "[[models]]\nname = \"hybrid\"\nfile = \"h.gguf\"\nubatch = 128\n\
+             [[models]]\nname = \"plain\"\nfile = \"p.gguf\"\n",
+        );
+        let args = |name: &str| {
+            let mut c = std::process::Command::new("x");
+            m.add_template_flags(&mut c, name);
+            c.get_args().map(|a| a.to_string_lossy().into_owned()).collect::<Vec<_>>()
+        };
+        assert_eq!(args("hybrid"), ["-ub", "128"]);
+        assert!(args("plain").is_empty(), "the runtime's own default");
+        // The phone's model asks for it: its chat turns stop rereading what they already read.
+        assert_eq!(
+            Manifest::parse(crate::CATALOGUE).model("qwen3.5-0.8b").unwrap().ubatch,
+            Some(128)
+        );
     }
 
     /// The phone's one model (2026-10-20): Qwen3.5-0.8B, thinking off and its photos capped so a

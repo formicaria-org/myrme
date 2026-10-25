@@ -1,10 +1,13 @@
 //! The conversational layer: what a user's discussion message asks the agent to do.
 //!
-//! The agent lives in a note's discussion and talks back and forth. A message may carry slash
-//! commands — `/search` (do a web search) and `/propose` (produce a proposal edit to the host note)
-//! — placed **anywhere**; their textual order does not matter, because the orchestrator always runs
-//! **search before propose** so a proposal is built with fresh results. A message with no command is
-//! a plain chat turn. This module is the pure parse; the model-driven turn builds on it.
+//! The agent lives in a note's discussion and talks back and forth. A message may carry one of four
+//! slash commands — `/research`, `/propose`, `/transcribe`, `/recipe` — placed **anywhere**. A
+//! message with no command is a plain chat turn. This module is the pure parse; the model-driven turn
+//! builds on it.
+//!
+//! **Four commands on every device** (2026-10-25): `/search` and `/research` were two ways to the
+//! web, and a person could not tell which to pick. `/search` is still read, as `/research`, so a
+//! habit or an old message keeps working.
 
 use crate::adjunct::asset_ref;
 
@@ -13,12 +16,10 @@ use crate::adjunct::asset_ref;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Intent {
     pub ask: String,
-    /// `/search` was present — run a web search (before any proposal).
-    pub search: bool,
     /// `/propose` was present — produce a proposal edit to the host note.
     pub propose: bool,
-    /// `/research` was present — run the **grounded research** pipeline (search → quote-first write →
-    /// substring-verify) and propose the cited note. Implies search; the whole point is web grounding.
+    /// `/research` (or `/search`) was present — run the **grounded research** pipeline (search →
+    /// quote-first write → substring-verify) and propose the cited note.
     pub research: bool,
     /// `/transcribe` was present — run the **audio→transcript** specialist on the referenced audio
     /// asset and propose the transcript into the host note. `Some(reference)` carries the asset to
@@ -39,10 +40,10 @@ pub struct Intent {
 /// and never share a turn.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
-    /// Answer in the discussion; `search` adds web results to what the model is given.
-    Chat { search: bool },
-    /// Write a proposed edit to the host note; `search` as for chat.
-    Propose { search: bool },
+    /// Answer in the discussion.
+    Chat,
+    /// Write a proposed edit to the host note.
+    Propose,
     /// Grounded web research, proposed as a cited note.
     Research,
     /// Turn the note's media into text. The reference names one file, or is empty for "everything
@@ -63,23 +64,22 @@ impl Intent {
         } else if let Some(reference) = &self.transcribe {
             Command::Read(reference.clone())
         } else if self.propose {
-            Command::Propose { search: self.search }
+            Command::Propose
         } else {
-            Command::Chat { search: self.search }
+            Command::Chat
         }
     }
 
     /// A plain conversation turn — no command, just talk.
     pub fn is_chat(&self) -> bool {
-        !self.search && !self.propose && !self.research && self.transcribe.is_none() && !self.recipe
+        !self.propose && !self.research && self.transcribe.is_none() && !self.recipe
     }
 }
 
-/// Parse a discussion message. `/search`, `/propose`, and `/research` are recognised only as
+/// Parse a discussion message. The commands are recognised only as
 /// **standalone** whitespace-separated tokens (so `/searching` or `path/proposed` are ordinary words);
 /// everything else joins the ask. Duplicate commands are idempotent.
 pub fn parse(message: &str) -> Intent {
-    let mut search = false;
     let mut propose = false;
     let mut research = false;
     let mut want_transcribe = false;
@@ -87,9 +87,8 @@ pub fn parse(message: &str) -> Intent {
     let mut rest = Vec::new();
     for tok in message.split_whitespace() {
         match tok {
-            "/search" => search = true,
             "/propose" => propose = true,
-            "/research" => research = true,
+            "/research" | "/search" => research = true,
             "/transcribe" => want_transcribe = true,
             "/recipe" | "/ricetta" => recipe = true,
             other => rest.push(other),
@@ -106,7 +105,7 @@ pub fn parse(message: &str) -> Intent {
             String::new()
         }
     });
-    Intent { ask: rest.join(" "), search, propose, research, transcribe, recipe }
+    Intent { ask: rest.join(" "), propose, research, transcribe, recipe }
 }
 
 /// A discussion message as history for a model: without the words that were instructions to Myrme —
@@ -247,9 +246,11 @@ mod tests {
 
     #[test]
     fn every_message_is_exactly_one_command_and_the_specific_pipeline_wins() {
-        assert_eq!(parse("hello").command(), Command::Chat { search: false });
-        assert_eq!(parse("/search x").command(), Command::Chat { search: true });
-        assert_eq!(parse("/propose /search x").command(), Command::Propose { search: true });
+        assert_eq!(parse("hello").command(), Command::Chat);
+        assert_eq!(parse("/propose x").command(), Command::Propose);
+        // `/search` is read as `/research` (2026-10-25), and research wins over a proposal.
+        assert_eq!(parse("/search x").command(), Command::Research);
+        assert_eq!(parse("/propose /search x").command(), Command::Research);
         assert_eq!(parse("/transcribe").command(), Command::Read(String::new()));
         assert_eq!(
             parse("/transcribe asset:sha256-abc").command(),
@@ -268,23 +269,23 @@ mod tests {
     }
 
     #[test]
-    fn search_and_propose_are_recognised_in_any_order_and_stripped_from_the_ask() {
-        let a = parse("/propose tidy this note /search mRNA vaccine facts");
-        let b = parse("/search mRNA vaccine facts tidy this note /propose");
-        assert!(a.search && a.propose && b.search && b.propose);
+    fn commands_are_recognised_in_any_order_and_stripped_from_the_ask() {
+        let a = parse("/propose tidy this note /research mRNA vaccine facts");
+        let b = parse("/research mRNA vaccine facts tidy this note /propose");
+        assert!(a.research && a.propose && b.research && b.propose);
         // The ask is the content minus the command tokens (order preserved from the message).
         assert_eq!(a.ask, "tidy this note mRNA vaccine facts");
         assert!(!a.is_chat());
     }
 
     #[test]
-    fn search_only_and_propose_only() {
+    fn search_is_research_and_propose_is_alone() {
         let s = parse("/search best sources on X");
-        assert!(s.search && !s.propose);
+        assert!(s.research && !s.propose);
         assert_eq!(s.ask, "best sources on X");
 
         let p = parse("/propose rewrite the intro");
-        assert!(p.propose && !p.search);
+        assert!(p.propose && !p.research);
         assert_eq!(p.ask, "rewrite the intro");
     }
 
@@ -297,8 +298,8 @@ mod tests {
 
     #[test]
     fn duplicate_commands_are_idempotent() {
-        let i = parse("/search /search a query /propose /propose");
-        assert!(i.search && i.propose);
+        let i = parse("/search /research a query /propose /propose");
+        assert!(i.research && i.propose);
         assert_eq!(i.ask, "a query");
     }
 
@@ -351,7 +352,7 @@ mod tests {
         let (who, intent) =
             addressed("Hey @Math-Helper how much is 1 + 1? /search", &agents).unwrap();
         assert_eq!(who, "math-helper");
-        assert!(intent.search && !intent.propose);
+        assert!(intent.research && !intent.propose);
         assert_eq!(intent.ask, "Hey how much is 1 + 1?");
         // Not addressed to any known agent → ignored (the agent stays quiet).
         assert!(addressed("just chatting with people @someone-else", &agents).is_none());

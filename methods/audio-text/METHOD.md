@@ -7,6 +7,7 @@ description: Turn a recording in a note into a transcript in any language, inser
 
 **Trigger:** a file's type (`/transcribe` on audio), and the dictation control in the editor.
 **Capabilities:** `speech` (whisper.cpp).
+**Wait:** class B, at the point of action — 2 s a recording or less, live for dictation.
 
 ## Pipeline
 

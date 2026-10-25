@@ -7,6 +7,7 @@ description: Read an email conversation and say which meetings are fixed or call
 
 **Trigger:** a schedule. The meeting pass runs when new mail arrives (formicaria's mail reader wakes
 it).
+**Wait:** class D, background — nobody waits; the cost is battery and heat.
 
 **Capabilities:** `llm`.
 

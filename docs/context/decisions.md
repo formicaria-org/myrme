@@ -732,6 +732,39 @@ so formicaria's `myrme-bump` could not take it.
 the second run finds the page; and `agents/release-pages.sh` first removes any second page of a tag,
 keeping the oldest. Tags are never touched. The release order itself is unchanged.
 
+## 2026-10-25 — four commands on every device; a speed bar per method; the reply as it is written `#method` `#contract` `#model`
+
+**Asked.** The owner: *"we have so many cmds for myrme and the user might be confused, can we
+shorten the list to the minimal set in all devices?"* They chose four. And on speed: *"improving on
+the laptop is sufficient for now, I will check the phone results myself when we ship the new
+release."* Evidence: `../research/2026-10-25-minimum-speed.md`.
+
+**Decision — commands.**
+- **Four: `/research`, `/propose`, `/transcribe`, `/recipe`**, the same on every device.
+  - `/search` was a second way to the web that a person could not tell from `/research`.
+  - It is still read, as `/research`, so a habit or an old message keeps working.
+- **In a first-class discussion** (no note to research into), `/research` answers there from the
+  web, as `/search` did. Nothing else changes.
+- `Command::Chat` and `Command::Propose` lose their `search` field. This is not in the contract.
+
+**Decision — the speed bar.**
+- Each method names its wait class in `METHOD.md` (*Wait*), and `agents/eval-speed.sh` prints the
+  bar beside the method's time. Chat is timed by `agents/chat-speed.py`.
+- **qwen3.5-0.8b runs with `-ub 128`** (catalogue key `ubatch`). It is a hybrid model, so a stored
+  prompt is reused only back to its last checkpoint. Measured on the laptop CPU:
+  - a later chat turn rereads ~320 tokens instead of 705–967;
+  - its first token comes in 0.9 s instead of 1.7–2.4 s;
+  - the first turn costs +3%, and images read the same.
+  - The phone is checked by the owner at release.
+- **The chat reply streams** to `VaultAccess::activity_draft` at most once a second (contract 1.9).
+  - It is display only; the reply is still posted whole.
+  - The desktop sends it to `/api/agent_activity` as `draft`, with the stage "writing the reply",
+    so an older formicaria keeps showing that stage.
+- **Not adopted:**
+  - recipe by pointing (14/30 against 17/30);
+  - n-gram drafting (no gain).
+  - MTP waits on an offer of its download.
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading

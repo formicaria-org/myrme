@@ -5,7 +5,8 @@ description: Propose an edit to the note a discussion is about, as the person as
 
 # M5 — note edits
 
-**Trigger:** the `/propose` command. **Capabilities:** `llm`, plus `web` with `/search`.
+**Trigger:** the `/propose` command. **Capabilities:** `llm`.
+**Wait:** class C, a job a person started — 10 s or less, or progress and a way to stop.
 
 ## Pipeline
 
