@@ -228,6 +228,65 @@ how many listed steps the kept steps cover. The prototype test is not committed.
 - **So recipe meets its bar (class C) by showing progress, not by speed.** On the phone that needs
   the phone shell to report activity at all; see the plan.
 
+### 5.3 MTP drafting (Qwen3.5-0.8B's own multi-token head), laptop CPU
+
+**Setup:**
+- `unsloth/Qwen3.5-0.8B-MTP-GGUF` at revision `cf8a611`, file Q4_0: 521 MB, 14 MB more than the
+  shipped file, which is the head. Apache-2.0.
+- Release b10076, with the app's flags for this model (thinking off, `-ub 128`, window 4096).
+- The same file with drafting off, and with `--spec-type draft-mtp` at 3 and at 2 draft tokens.
+
+| | Chat writing tok/s | Reading tok/s (chat · meetings) | Meetings s/req | Edits s/req | Recipe writing tok/s | Recipe s/req | Draft acceptance |
+|---|---|---|---|---|---|---|---|
+| off | 48.7 | 408 · 430 | 0.96 | 0.76 | 54.0 | 7.9 | — |
+| 3 drafted | 49.2 | 373 · 368 | 0.99 | 0.85 | 62.3 | 6.1 | 64–79% |
+| 2 drafted | 51.9 | 376 · 381 | 0.94 | 0.79 | 61.1 | 6.2 | 71–87% |
+
+- **Not adopted.** Writing is no faster for chat, meetings or edits, and reading is 7–15% slower,
+  because the head works on every prompt token.
+- **Only long answers gain.** Recipe writes ~15% faster, and the eval took 21% less time.
+- **The answers change a little**, so on this runtime drafting is not exactly the same output.
+- **The phone is where it could pay, untested.** There, writing is limited by memory bandwidth, so
+  checking three drafted tokens costs about what one does. The laptop's CPU is less bandwidth-bound.
+
+**How far the scores move between settings.** The same model under settings that should not change
+answers (micro-batch, drafting, the shipped file against Unsloth's MTP file), each run once at
+temperature 0, read:
+
+| Eval | Range across runs |
+|---|---|
+| Recipe, free | 15–19 /30 exact, 236–245 /257 ingredients |
+| Recipe, held to the schema | 13–18 /30 |
+| Meetings, held to the schema | 14–16 /23 |
+| Edits | 3–4 /7 |
+
+- The MTP file at the default micro-batch (512) read 19/30 and 236 ingredients for recipes, 15/23
+  meetings and 4/7 edits. At `-ub 128` it read 15/30 and 239, 14/23 and 3/7.
+- **So `-ub 128` was the lower of the two on three of four counts**, and the higher on ingredients.
+  All of it is inside the range above.
+- One run per setting cannot separate the two. Repeated runs, or more cases, would be needed to
+  call a difference.
+- **Kept: `-ub 128`** (the owner, 2026-10-25). Its chat gain is measured and large (§5.1); its
+  accuracy difference is inside the spread. Any one-run difference of 2–4 cases on these evals
+  needs repeated runs before it is believed.
+
+**To rerun.** The MTP file is `Qwen3.5-0.8B-MTP-Q4_0.gguf` from `unsloth/Qwen3.5-0.8B-MTP-GGUF` at
+`cf8a611` (deleted here after the runs). With the shipped runtime as `$LLAMA_SERVER`:
+
+```sh
+M=path/to/Qwen3.5-0.8B-MTP-Q4_0.gguf
+BASE='--device none -t 8 -ub 128 --chat-template-kwargs {"enable_thinking":false}'
+MTP='--spec-type draft-mtp --spec-draft-n-max 3'      # empty for drafting off; 2 for two drafted
+# speed, per method
+EVAL_CTX=4096 EVAL_EXTRA="$BASE $MTP" pixi run eval-speed -- "$M" qwen3.5-0.8b 0 meetings edits recipe
+# scores, per method (answers not recorded)
+EVAL_CTX=4096 EVAL_NO_RECORD=1 EVAL_EXTRA="$BASE $MTP" pixi run eval -- recipe "$M" qwen3.5-0.8b 0
+# chat: start the server with the same flags, then
+python3 -I agents/chat-speed.py <port>
+```
+
+Draft acceptance is the server log's `draft acceptance` line (`EVAL_SERVER_LOG=<path>` keeps the log).
+
 ## Sources
 
 - Miller (1968) / Nielsen, response-time limits: https://www.nngroup.com/videos/3-response-time-limits-interaction-design/

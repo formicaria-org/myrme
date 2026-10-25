@@ -756,6 +756,11 @@ release."* Evidence: `../research/2026-10-25-minimum-speed.md`.
   - its first token comes in 0.9 s instead of 1.7–2.4 s;
   - the first turn costs +3%, and images read the same.
   - The phone is checked by the owner at release.
+  - **Kept after a second look** (the owner, 2026-10-25): at `-ub 512` the same model scored 1–4
+    cases higher on three of four evals, inside the 15–19 /30 recipe, 14–16 /23 meetings and
+    3–4 /7 edits spread of runs that should not differ (research §5.3).
+- **MTP drafting is not adopted** (research §5.3): on the laptop CPU it writes chat, meetings and
+  edits no faster and reads 7–15% slower; only recipe writes ~15% faster. The phone is untested.
 - **The chat reply streams** to `VaultAccess::activity_draft` at most once a second (contract 1.9).
   - It is display only; the reply is still posted whole.
   - The desktop sends it to `/api/agent_activity` as `draft`, with the stage "writing the reply",
