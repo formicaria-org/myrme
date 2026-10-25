@@ -329,18 +329,15 @@ From then on:
 4. Real recordings and photographs of your own, when convenient. They are the realistic eval sets
    still missing.
 
-## The speed bar (proposed 2026-10-25) — status: **built and measured on the laptop, not committed**
+## The speed bar (proposed 2026-10-25) — status: **released in Myrme 0.11.0, linked by formicaria 0.20.0**
 
 **Status 2026-10-25:**
-- The owner: the laptop is enough for now, and they check the phone at release.
-- S1, S2 and S3 are built in both repos, with contract 1.9 (`decisions.md` 2026-10-25).
-- The commands were cut to four at the same time.
-- **Left for the release:**
-  - Myrme 0.11.0 (contract 1.9);
-  - then formicaria's `pixi run myrme-bump`, which replaces the temporary `[patch]` in
-    `mobile/src-tauri/Cargo.toml`;
-  - the owner's look at the draft under the wheel;
-  - a phone check of S2 at release.
+- S1, S2 and S3 shipped with contract 1.9, and the commands were cut to four
+  (`decisions.md` 2026-10-25).
+- Measured on the laptop, as the owner asked. The phone (S2's `-ub 128`, and the draft under the
+  wheel) is checked by the owner on this release.
+- Still open: reading the note while the person types (the first turn still reads the whole note,
+  4.7 s to its first token on the laptop CPU), and MTP behind an offer.
 
 **Evidence:** `../research/2026-10-25-minimum-speed.md`. §1 sets the bars, and §5 is what was tried
 on the laptop the same day. **Aim:** a minimum speed per kind of wait, and the cheapest change that
