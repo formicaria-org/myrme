@@ -13,6 +13,7 @@ This is the short map of Myrme's repo. When it disagrees with the code, the code
 | Choosing a pattern, a framework, a runtime or a protocol | `../research/2026-10-18-small-model-agent-patterns.md` · `../research/2026-10-18-open-standards-frameworks-runtimes.md` |
 | Choosing a model or a non-LLM method for one task | `../research/2026-10-18-dedicated-methods-per-task.md` |
 | Scouting a new optional model for the phone (shortlist from a leaderboard, then our evals) | `../research/2026-10-19-scouting-phone-models.md` (the method in §2) |
+| A bigger model for the laptop (K2-Horizon-7B against qwen3-vl-4b, reasoning off and low) | `../research/2026-10-25-k2-horizon-7b-laptop.md` (not adopted: fewer exact, half the speed) |
 | What was measured for the phone model and Myrme light, how, and the results in one place | `../research/2026-10-20-small-model-benchmark-summary.md` |
 | **Myrme light** — dedicated tools (OCR, extraction, embeddings on ONNX Runtime) and a very small LLM | `../research/2026-10-19-myrme-light.md` (the plan, phases L0–L7; the laptop phases are done, and its one tool, the OCR, shipped in Myrme 0.7.0) |
 | **The speed bar**: the minimum speed per kind of wait, what meets it per method, and what was tried (prompt reuse with `-ub`, streaming, recipe pointing) | `../research/2026-10-25-minimum-speed.md` · `plan.md` (*The speed bar*) |
