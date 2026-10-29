@@ -1,0 +1,22 @@
+{
+ "status": "ok",
+ "message": {
+  "DOI": "10.1038/nature14539",
+  "title": [
+   "Deep learning"
+  ],
+  "container-title": [
+   "Nature"
+  ],
+  "URL": "https://doi.org/10.1038/nature14539",
+  "issued": {
+   "date-parts": [
+    [
+     2015,
+     5,
+     27
+    ]
+   ]
+  }
+ }
+}

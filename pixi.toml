@@ -38,6 +38,8 @@ agent-chat = "cargo run -q -p fm-agent-run --bin agent-chat --"
 eval = "bash agents/eval.sh"
 integration = "bash agents/integration.sh"
 eval-data = "python -I agents/eval-data.py"
+# The sources pack for /research (agents/pack-sources.py): an hour the first time, answers cached.
+pack-sources = "python -I agents/pack-sources.py"
 eval-speech = "bash agents/eval-speech.sh"
 eval-speed = "bash agents/eval-speed.sh"  # per-method prefill/decode timings from the method evals
 check-pins = "cargo test -p fm-agent-run --features download -- --ignored --nocapture every_pinned_runtime"

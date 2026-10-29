@@ -98,7 +98,20 @@ pub fn as_shown(sources: &[Source], per_source_chars: usize) -> Vec<Source> {
 }
 
 fn shown_text(text: &str, per_source_chars: usize) -> String {
-    text.trim().chars().take(per_source_chars).collect()
+    text.chars()
+        .filter(|c| !hidden(*c))
+        .collect::<String>()
+        .trim()
+        .chars()
+        .take(per_source_chars)
+        .collect()
+}
+
+/// **Characters a page can hide words with**: zero-width ones and the bidirectional controls. A page
+/// can write an instruction the reader never sees, or show text in another order than the model reads
+/// it; neither reaches the model (2026-10-29, `docs/research/2026-10-29-reputable-sources.md`).
+fn hidden(c: char) -> bool {
+    matches!(c as u32, 0x200B..=0x200F | 0x202A..=0x202E | 0x2060..=0x2064 | 0x2066..=0x2069 | 0xFEFF)
 }
 
 /// The shape [`crate::prompts::GROUNDED_JSON_INSTRUCTION`] asks for. `answerable` comes first (keys
@@ -827,5 +840,16 @@ mod tests {
             claim_line.starts_with("- Vitamin K helps clotting, see \\<a href=x\\>here\\</a\\> ")
         );
         assert!(g.body.contains("- [1] evil/repo \\<img src=x\\> — https://github.com/evil/repo"));
+    }
+
+    #[test]
+    fn a_source_is_shown_without_the_characters_that_hide_words() {
+        let s = Source {
+            id: 1,
+            title: "t".into(),
+            url: String::new(),
+            text: "Iron\u{200B} helps\u{202E} blood\u{FEFF}.".into(),
+        };
+        assert_eq!(as_shown(&[s], 100)[0].text, "Iron helps blood.");
     }
 }

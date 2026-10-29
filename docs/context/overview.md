@@ -20,6 +20,7 @@ This is the short map of Myrme's repo. When it disagrees with the code, the code
 | Making the small model faster: runtime settings, kernels, quantisation, other engines | `../research/2026-10-19-speed.md` · `../research/2026-10-21-low-bit.md` (below Q4_0: answered, none faster) · `../research/2026-10-23-integrated-gpu-fallback.md` (`gpu = "auto"` on an integrated GPU: slower than the CPU; fixed 2026-10-23) · `plan.md` (*Faster engines*) |
 | **Search and retrieval across every view** — foods by nutrient, exercises, papers, notes; embedders, rerankers, fusion, the eval to build first | `../research/2026-10-29-search-and-retrieval.md` (research, fact-checked; the order S0–S7 and three open decisions for the owner) |
 | **Research on the internet** — which sources an app may query, reading pages safely, the fixed research loop, four defects in today's `/research` | `../research/2026-10-29-web-research.md` (research, fact-checked; the order W0–W6 and four open decisions for the owner) |
+| **Reputable sources only** — the allowlist by need (health, food, papers, code), a sources pack of public-body topic indexes, a guarded fetch for listed hosts, DuckDuckGo left out | `../research/2026-10-29-reputable-sources.md` (plan, checked live; **built the same day**, §9; the code is `sources.rs`, `guarded.rs`, `apis.rs`, `websearch.rs`; `decisions.md` 2026-10-29 evening) |
 | Running the assistant by hand, benchmarks | `../../agents/README.md` · `../../agents/bench/` |
 
 ## What is here

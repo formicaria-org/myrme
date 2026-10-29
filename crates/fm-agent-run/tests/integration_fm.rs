@@ -345,6 +345,28 @@ fn the_assistant_reads_formicaria_s_clock() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// **The app's food list through the real door** (contract 1.10): `/research` asks formicaria's
+/// `food_search` and `food_get` for the food a "how much" question names, and reads its values per
+/// 100 g. The list is carried in the app, so any vault answers.
+#[test]
+#[ignore = "needs a built fm-serve; run `pixi run integration`"]
+fn the_assistant_reads_formicaria_s_food_list() {
+    let root = temp_root("food");
+    let (_server, port) = start(&root);
+    let food = FmServe::local(port).food("egg").expect("formicaria offers a food for \"egg\"");
+    assert!(food["name"].as_str().is_some_and(|n| !n.is_empty()), "{food}");
+    let per100 = food["per100"].as_object().expect("values per 100 g");
+    assert!(per100.get("protein_mg").and_then(Value::as_i64).is_some_and(|p| p > 5_000), "{food}");
+    #[cfg(feature = "download")]
+    {
+        let (label, text) =
+            fm_agent_run::sources::food_facts("how much protein in eggs", &food).expect("a source");
+        assert!(label.starts_with("The app's food list: "), "{label}");
+        assert!(text.contains("protein: ") && text.contains(" g per 100 g"), "{text}");
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 /// formicaria's half of the recipe-heading contract: its recipe template names every heading a
 /// recipe note from Myrme has (`fm_agent::recipe::TEMPLATE_HEADINGS`; Myrme's half is a unit test
 /// there). Reads the pinned checkout `pixi run integration` builds from (`FM_SRC`).

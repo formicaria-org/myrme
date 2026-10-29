@@ -12,16 +12,17 @@
 use crate::{http, AgentError, SearchHit, WebSearch};
 use std::time::Duration;
 
-/// The conservative **default source engines** the research profile queries. Knowledge is not only text
-/// on the general web, so the default spans a reference encyclopedia (`wikipedia`), the general web
-/// (`duckduckgo`), code + its failures/successes (`github`), and papers (`arxiv`).
+/// The conservative **default source engines** the research profile queries: a reference encyclopedia
+/// (`wikipedia`), code and its failures and successes (`github`), and papers (`arxiv`). No general web
+/// engine: research reads only the sources on Myrme's list, and DuckDuckGo's robots.txt disallows its
+/// result pages (`docs/context/decisions.md`, 2026-10-29 evening).
 ///
 /// **Kept in sync by hand with `agents/search-proxy.py`'s `ENGINES` map** — the bundled proxy is a small
-/// hand-rolled multiplexer that implements *exactly these four* (each via its own API), not a full
+/// hand-rolled multiplexer that implements *exactly these three* (each via its own API), not a full
 /// SearXNG. An engine name the proxy does not know is silently dropped, and if none is recognised it
 /// falls back to its own defaults — so pointing the profile at a real SearXNG with more engines needs a
 /// real SearXNG behind the loopback, not just a new name here. Change one, change the other.
-pub const DEFAULT_ENGINES: &[&str] = &["wikipedia", "duckduckgo", "github", "arxiv"];
+pub const DEFAULT_ENGINES: &[&str] = &["wikipedia", "github", "arxiv"];
 
 /// A single-shot search against a local SearXNG's JSON API (`/search?format=json`).
 pub struct SearxngSearch {

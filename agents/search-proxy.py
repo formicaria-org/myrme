@@ -10,7 +10,6 @@ stdlib only.
 It fans out across the agent's DEFAULT sources so each is genuinely accessible and searchable, and
 NORMALIZES their different formats into one uniform shape the model can synthesize from:
   - wikipedia   → the MediaWiki search API (clean title + snippet)
-  - duckduckgo  → DuckDuckGo's keyless HTML endpoint (the general web)
   - github      → the GitHub repository search API (repo full-name + description)
   - arxiv       → the arXiv Atom API (paper title + abstract)
 Results are interleaved round-robin so the top-k spans every requested source, deduped by URL. A source
@@ -33,13 +32,14 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 # Who is asking and where to reach the project -- never a browser's name (Wikimedia's User-Agent
-# policy; D2 of docs/research/2026-10-29-web-research.md). The DuckDuckGo engine scrapes HTML and may
-# now be refused; it is fail-soft like every engine here.
+# policy; D2 of docs/research/2026-10-29-web-research.md). No general search engine: DuckDuckGo's
+# robots.txt disallows its result pages, and research reads only the sources on Myrme's list
+# (docs/context/decisions.md, 2026-10-29 evening).
 UA = "formicaria-myrme-search-proxy (+https://github.com/formicaria-org/myrme)"
 # Kept in sync BY HAND with `DEFAULT_ENGINES` in crates/fm-agent/src/search.rs (and the `ENGINES` map
-# below). This proxy implements exactly these four; an unknown engine name is dropped. Change one place,
+# below). This proxy implements exactly these three; an unknown engine name is dropped. Change one place,
 # change the others.
-DEFAULT_ENGINES = ["wikipedia", "duckduckgo", "github", "arxiv"]
+DEFAULT_ENGINES = ["wikipedia", "github", "arxiv"]
 TIMEOUT = 12
 
 
@@ -53,26 +53,6 @@ def _text(s: str) -> str:
 
 
 # --- per-source engines: each returns a list of {title,url,content,engine}, normalizing its format ---
-
-def eng_duckduckgo(query, k):
-    data = urllib.parse.urlencode({"q": query}).encode()
-    html = _fetch("https://html.duckduckgo.com/html/", data=data).decode("utf-8", "replace")
-    rows = re.findall(
-        r'<a[^>]*class="result__a"[^>]*href="([^"]+)".*?>(.*?)</a>.*?class="result__snippet"[^>]*>(.*?)</a>',
-        html,
-        re.S,
-    )
-    out = []
-    for href, title, snippet in rows:
-        m = re.search(r"uddg=([^&]+)", href)
-        url = urllib.parse.unquote(m.group(1)) if m else H.unescape(href)
-        if "y.js" in url or "ad_domain" in url:  # drop sponsored
-            continue
-        out.append({"title": _text(title), "url": url, "content": _text(snippet), "engine": "duckduckgo"})
-        if len(out) >= k:
-            break
-    return out
-
 
 def eng_wikipedia(query, k):
     api = "https://en.wikipedia.org/w/api.php?" + urllib.parse.urlencode(
@@ -144,7 +124,6 @@ def eng_github(query, k):
 
 
 ENGINES = {
-    "duckduckgo": eng_duckduckgo,
     "wikipedia": eng_wikipedia,
     "arxiv": eng_arxiv,
     "github": eng_github,
@@ -213,5 +192,5 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8888
-    print(f"multi-source web-search proxy on 127.0.0.1:{port} (wikipedia+duckduckgo+github+arxiv, SearXNG JSON shape)")
+    print(f"multi-source web-search proxy on 127.0.0.1:{port} (wikipedia+github+arxiv, SearXNG JSON shape)")
     ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()

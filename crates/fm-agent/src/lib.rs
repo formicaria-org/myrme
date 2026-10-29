@@ -161,6 +161,15 @@ pub trait LlmStep {
 /// Real implementations point at a private SearXNG / a hosted API; tests use a fake.
 pub trait WebSearch {
     fn search(&self, query: &str) -> Result<Vec<SearchHit>, AgentError>;
+
+    /// Search for what the person `asked`, in their own words, with `query` — the model's tidied
+    /// version — beside it. A backend that chooses its sources from the question (the in-process one,
+    /// 2026-10-29) reads the person's words, which the model may have shortened or translated; the
+    /// default searches the query alone, as before.
+    fn search_asked(&self, asked: &str, query: &str) -> Result<Vec<SearchHit>, AgentError> {
+        let _ = asked;
+        self.search(query)
+    }
 }
 
 /// So a caller can pick the backend at runtime (the desktop's SearXNG proxy vs. the phone's
@@ -169,6 +178,10 @@ pub trait WebSearch {
 impl WebSearch for Box<dyn WebSearch> {
     fn search(&self, query: &str) -> Result<Vec<SearchHit>, AgentError> {
         (**self).search(query)
+    }
+
+    fn search_asked(&self, asked: &str, query: &str) -> Result<Vec<SearchHit>, AgentError> {
+        (**self).search_asked(asked, query)
     }
 }
 
@@ -249,7 +262,7 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
         let hits = match req.search.as_deref().map(str::trim) {
             Some(seed) if !seed.is_empty() => {
                 let query = self.refine_query(seed)?;
-                self.web.search(&query)?
+                self.web.search_asked(seed, &query)?
             }
             _ => Vec::new(),
         };

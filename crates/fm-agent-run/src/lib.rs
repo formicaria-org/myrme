@@ -29,7 +29,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// models — and an app moves to them by changing a tag and nothing else.
 pub const CONTRACT_MAJOR: u32 = 1;
 /// See [`CONTRACT_MAJOR`].
-pub const CONTRACT_MINOR: u32 = 9;
+pub const CONTRACT_MINOR: u32 = 10;
 
 /// **The model catalogue** — models, their pins and licences, and the runtime archives per platform
 /// (`models.toml`, beside this crate). Embedded so that whoever links Myrme has it without knowing
@@ -40,6 +40,8 @@ pub const CATALOGUE: &str = include_str!("../models.toml");
 
 /// `agent-serve`'s code: the model under the watchdog, answering `@name` mentions.
 pub mod agent_serve;
+#[cfg(feature = "download")]
+pub mod apis;
 /// In-app model downloader (resumable + checksum). Agent-only — behind the `download` feature so a
 /// build that runs an already-provisioned model links no HTTPS/TLS stack. **This** is the item that
 /// gate was always for; without it `fetch.rs` compiled unconditionally while `ureq`/`sha2` did not,
@@ -51,6 +53,8 @@ pub mod fmserve;
 /// Where the laptop model runs under `gpu = "auto"`: a discrete GPU, else the CPU — never an
 /// integrated GPU it would be slower on.
 mod gpu;
+#[cfg(feature = "download")]
+pub mod guarded;
 /// What an app needs to host Myrme on a desktop: one folder, a few questions (contract 1.1). With
 /// `download`, which a desktop host has: provisioning is most of what it does.
 #[cfg(feature = "download")]
@@ -66,6 +70,8 @@ pub mod nativelib;
 /// The OCR tool of Myrme light: PP-OCRv6 small on ONNX Runtime, for typed pages.
 pub mod ocr;
 pub mod replies;
+#[cfg(feature = "download")]
+pub mod sources;
 pub mod watch;
 /// In-process HTTPS web search for the phone (no local SearXNG proxy). Needs the TLS client the
 /// `download` feature carries.
@@ -341,6 +347,7 @@ impl<V: VaultAccess> Agent<V> {
         // model can ground in the user's own material too — not only the web.
         let mut inputs = self.host_note(note)?;
         inputs.extend(self.linked_notes(note)?);
+        inputs.extend(self.food_list(&intent.ask));
         let req = ResearchRequest {
             host_note: note.to_string(),
             ask: intent.ask.clone(),
@@ -826,16 +833,39 @@ impl<V: VaultAccess> Agent<V> {
         Ok(docs)
     }
 
+    /// **The app's own food list** for a "how much of a nutrient in a food" question (2026-10-29,
+    /// `docs/research/2026-10-29-reputable-sources.md`): the food it would offer, with the values of
+    /// the nutrients asked about, as one more numbered source beside the web's. Nothing for any other
+    /// question, or where the app cannot be asked.
+    fn food_list(&self, ask: &str) -> Vec<InputDoc> {
+        #[cfg(feature = "download")]
+        {
+            let Some(name) = crate::sources::food_asked(ask) else { return Vec::new() };
+            let Some(food) = self.fm.food(&name) else { return Vec::new() };
+            crate::sources::food_facts(ask, &food)
+                .map(|(label, text)| InputDoc { label, text })
+                .into_iter()
+                .collect()
+        }
+        #[cfg(not(feature = "download"))]
+        {
+            let _ = ask;
+            Vec::new()
+        }
+    }
+
     /// Web search (text-only), as context. No backend ⇒ no web.
     fn web(&self, ask: &str) -> Result<Vec<InputDoc>, String> {
         let Some(web) = self.web_backend() else {
             return Ok(Vec::new());
         };
         let hits = web.search(ask).map_err(|e| e.to_string())?;
-        Ok(hits
-            .into_iter()
-            .map(|h| InputDoc { label: format!("web: {} ({})", h.title, h.url), text: h.text })
-            .collect())
+        let mut docs = self.food_list(ask);
+        docs.extend(
+            hits.into_iter()
+                .map(|h| InputDoc { label: format!("web: {} ({})", h.title, h.url), text: h.text }),
+        );
+        Ok(docs)
     }
 
     /// The web-search backend for this agent: an explicit **local SearXNG proxy** (desktop) wins;

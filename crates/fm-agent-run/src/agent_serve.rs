@@ -51,8 +51,8 @@ struct Args {
     /// What the phone has always done, and what a desktop without `python3` needs — the proxy is a
     /// Python script, so a released build that spawns no shell has no way to run it. Ignored when
     /// `--searxng-port` is given: an explicit proxy wins, because someone who started one meant it.
-    /// Costs the DuckDuckGo engine, which needs HTML scraping the in-process client does not do;
-    /// wikipedia, GitHub and arXiv remain.
+    /// The in-process search is the fuller one: it reads every source on Myrme's list, chosen from the
+    /// question (`websearch.rs`).
     #[arg(long, default_value_t = false)]
     web_direct: bool,
     /// The local `whisper.cpp` server port (enables **/transcribe** audio→transcript). Omit to run

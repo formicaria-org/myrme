@@ -845,6 +845,52 @@ moves it.
   that answered 429 or 503 alone for its `Retry-After` (60 s when it names none, an hour at most) —
   never a retry loop. Nothing is written to disk.
 
+## 2026-10-29 (evening) — `/research` reads only the list; pages of listed bodies are fetched; the food list is a source; no general search engine `#method` `#contract`
+
+**What prompted it.** The owner: *"I want to make sure we have a good set of research websites and
+that we can use only reputable sources, to avoid security issues"*, then, on the plan
+(`../research/2026-10-29-reputable-sources.md`): *"Follow your recommendations but no need to ask for
+permissions in my opinion, it's public data that needs dissemination often."*
+
+**Decision.**
+- **The list is the safety mechanism.** `sources::LISTED` names every host `/research` may reach,
+  exactly (no suffixes): Wikipedia in six languages; MedlinePlus, WHO, NHS, CDC, EFSA, gesund.bund.de,
+  BfR, DGE, BLV, Santé publique France, ANSES, ISS EpiCentro; Europe PMC, arXiv, Crossref; GitHub,
+  Stack Overflow. Every hit, fetch and redirect is checked against it; a hit off it is dropped. Adding a
+  host is a new entry here. salute.gov.it was on the plan's list and is not on this one: it answers
+  non-browsers with a challenge page.
+- **Code chooses the sources from the question** (`Need::of`: health, food, papers, code, general — by
+  paper identifiers and word lists in en, fr, de, it, zh). The model never chooses.
+- **Health is strict by default**: MedlinePlus and the bodies' pages; Wikipedia comes last and is
+  named *encyclopedia, not medical guidance*; papers only when papers are asked for. Every hit's title
+  begins with its body's name, so each claim's source says whose it is.
+- **Pages of listed bodies are fetched** (`guarded::fetch`). This **extends** the in-process search,
+  which until now read only APIs and fetched no page. The rules that keep it narrow, each a test: the
+  list, `https` on the default port, no IP or user information in the URL, public addresses only at
+  resolution, redirects by hand (three at most, each checked), HTML only, 2 MB, 15 s, nothing on the
+  page followed or loaded, robots.txt honoured for the token `formicaria-myrme` (a missing one allows,
+  an unreadable one forbids). The text is made by a small extractor written here (`page_text`), not a
+  new dependency: a missed paragraph costs a passage, not safety.
+- **The sources pack** (`sources.tsv`, built by `agents/pack-sources.py`): the bodies' topic pages,
+  each fetched once at build as the app would and kept only if it loads, its own `<h1>` as its title.
+  A plain file in the repository, so a reviewer reads its diff; no hash pin is needed for a source file.
+- **No permission is asked of the bodies.** Their pages are public information meant to be spread;
+  they are read at a person's request, one page at a time, cached, named and linked, under an honest
+  User-Agent and their robots.txt.
+- **No general search engine.** DuckDuckGo's robots.txt disallows its `/html` and `/lite` result pages
+  and it has no API; it stays out, not even as an option. A person's own key (Brave, Mojeek, Kagi,
+  SearXNG) remains a later step, its results held to the same list.
+- **The app's own food list is a source** for "how much of a nutrient in a food" (contract 1.10,
+  `VaultAccess::food`, a provided method answering `None`): the food it would offer first, with the
+  asked nutrients per 100 g and whose values were borrowed, as one more numbered source.
+- **Characters that hide words** (zero-width, bidirectional controls) are taken out of every source
+  before the model is shown it.
+- The person's own words are searched, and the model's tidied query only when they find nothing (the
+  last item of W0).
+
+**Consequence.** Contract 1.10. formicaria's privacy page already names "the assistant's web search";
+its manual's list of three sources is out of date once a formicaria links this release.
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading

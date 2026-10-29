@@ -44,12 +44,12 @@ use fm_agent_run::host::{
 #[cfg(feature = "download")]
 use fm_agent_run::host::BUNDLED_ONNXRUNTIME;
 
-/// The contract this file checks is 1.9 (`CONTRACT_MAJOR`/`CONTRACT_MINOR`). Changing what it names
+/// The contract this file checks is 1.10 (`CONTRACT_MAJOR`/`CONTRACT_MINOR`). Changing what it names
 /// means changing the contract version too — a removal or rename is a new major, an addition a new
 /// minor — and the two are compared here so one cannot move without the other.
 #[test]
-fn this_list_is_contract_1_9() {
-    assert_eq!((fm_agent_run::CONTRACT_MAJOR, fm_agent_run::CONTRACT_MINOR), (1, 9));
+fn this_list_is_contract_1_10() {
+    assert_eq!((fm_agent_run::CONTRACT_MAJOR, fm_agent_run::CONTRACT_MINOR), (1, 10));
     assert!(
         fm_agent_run::VERSION.split('.').count() == 3,
         "a release version is MAJOR.MINOR.PATCH"
@@ -175,4 +175,15 @@ fn a_vault_may_show_the_reply_as_it_is_written() {
     let _ = draft::<fm_agent_run::fmserve::FmServe>;
     let m = fm_agent_run::manifest::Manifest::parse(CATALOGUE);
     assert!(m.model("qwen3.5-0.8b").is_some_and(|q| q.ubatch.is_some()));
+}
+
+/// Contract 1.10: the app's food list, for `/research` (2026-10-29). A vault may answer with its
+/// `food_get` for a name; the default answers nothing, so a vault written for 1.9 is unchanged.
+#[test]
+fn a_vault_may_offer_its_food_list() {
+    use fm_agent_run::fmserve::VaultAccess;
+    fn food<V: VaultAccess>(v: &V) -> Option<serde_json::Value> {
+        v.food("spinach")
+    }
+    let _ = food::<fm_agent_run::fmserve::FmServe>;
 }

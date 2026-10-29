@@ -113,6 +113,13 @@ pub trait VaultAccess {
     fn clock(&self) -> Option<Value> {
         None
     }
+    /// **The app's food list** (contract 1.10, 2026-10-29): the food it would offer first for `name`,
+    /// as its `food_get` answer — `name`, `src` (the table), `per100` (each value per 100 g, keyed like a
+    /// logged entry: `vitamin_k1_ug`) and `borrowed`. `/research` reads it for "how much vitamin K in
+    /// spinach"; `None` where it cannot be asked, and the web answers alone, as before.
+    fn food(&self, _name: &str) -> Option<Value> {
+        None
+    }
     /// A proposal that also sets the allowlisted properties (`start`/`due`/`location`, added tags).
     fn propose_with(
         &self,
@@ -171,6 +178,22 @@ pub struct FmServe {
 /// another app: no instance expected (a dev run), or none reported (an older build), is ours. An
 /// assistant left behind by an app that has gone used to live on with the next one, answering in
 /// the old build's name and holding the model's port (2026-10-18).
+/// **The food a name means, of the list's hits**: the first whose name before its first comma is the
+/// name asked (*Egg, whole, raw* for "eggs" — a plural's last *s* aside), else the first whose name
+/// begins with it, else the list's first. formicaria ranks *Egg nog* first for "egg"; a question about
+/// eggs is not about egg nog.
+pub fn best_food(name: &str, hits: &[Value]) -> Option<String> {
+    let fold = |s: &str| fm_agent::textmatch::loose(s).trim().trim_end_matches('s').to_string();
+    let want = fold(name);
+    let named = |h: &&Value, f: &dyn Fn(&str) -> bool| h["name"].as_str().is_some_and(f);
+    let head = |n: &str| fold(n.split(',').next().unwrap_or(n));
+    hits.iter()
+        .find(|h| named(h, &|n| head(n) == want))
+        .or_else(|| hits.iter().find(|h| named(h, &|n| fold(n).starts_with(&format!("{want},")))))
+        .or_else(|| hits.first())
+        .and_then(|h| h["id"].as_str().map(String::from))
+}
+
 pub fn same_app(expected: Option<&str>, answering: Option<&str>) -> bool {
     match (expected, answering) {
         (Some(e), Some(a)) => e == a,
@@ -292,6 +315,14 @@ impl VaultAccess for FmServe {
     /// formicaria's `clock` (0.19 and later).
     fn clock(&self) -> Option<Value> {
         self.call("clock", json!({})).ok().filter(|v| v.is_object())
+    }
+
+    /// formicaria's food list: the food it offers for `name` that is that food (see [`best_food`]),
+    /// then its values.
+    fn food(&self, name: &str) -> Option<Value> {
+        let hits = self.call("food_search", json!({ "q": name, "limit": 10 })).ok()?;
+        let id = best_food(name, hits.as_array()?)?;
+        self.call("food_get", json!({ "id": id })).ok().filter(|v| v["per100"].is_object())
     }
 
     /// `/api/calendars` answers the setting: `zone` since formicaria 0.15 (the setting, or the
@@ -427,5 +458,26 @@ mod tests {
         assert!(!same_app(Some("a1"), Some("b2")), "another app on the port");
         assert!(same_app(None, Some("b2")), "a dev run follows whatever answers");
         assert!(same_app(Some("a1"), None), "an older build says nothing — still ours");
+    }
+
+    #[test]
+    fn the_food_a_name_means_is_the_one_named_so() {
+        let hits = vec![
+            json!({"id": "bls:1", "name": "Egg nog"}),
+            json!({"id": "usda:2", "name": "Egg, whole, raw"}),
+            json!({"id": "ciqual:3", "name": "Egg white"}),
+        ];
+        assert_eq!(best_food("eggs", &hits).as_deref(), Some("usda:2"));
+        assert_eq!(best_food("Egg", &hits).as_deref(), Some("usda:2"));
+        let spinach = vec![
+            json!({"id": "c:1", "name": "Épinards, crus"}),
+            json!({"id": "c:2", "name": "Soupe aux épinards"}),
+        ];
+        assert_eq!(best_food("épinards", &spinach).as_deref(), Some("c:1"));
+        assert_eq!(
+            best_food("lentils", &[json!({"id": "x", "name": "Dal"})]).as_deref(),
+            Some("x")
+        );
+        assert_eq!(best_food("lentils", &[]), None);
     }
 }

@@ -1,0 +1,20 @@
+{
+ "items": [
+  {
+   "question_id": 63856055,
+   "title": "Borrow checker complains for closure inside loop if type not provided explicitly",
+   "link": "https://stackoverflow.com/questions/63856055/borrow-checker-complains-for-closure-inside-loop-if-type-not-provided-explicitly",
+   "body": "<p>I have this code, for which borrow checker shows error:</p>\n<p><a href=\"https://play.rust-lang.org/?version=stable&amp;mode=debug&amp;edition=2018&amp;gist=55d050b6f25410ce0e17ef9e844b048d\" rel=\"noreferrer\">https://play.rust-lang.org/?version=stable&amp;mode=debug&amp;edition=2018&amp;gist=55d050b6f25410ce0e17ef9e844b048d</a></p>\n<pre><code>fn f1(v: &amp;str) {\n}\n\nfn main() {\n    let c = |v| f1(v);\n    for _ in 0..1 {\n        let s = String::new();\n        c(&amp;s);\n    }\n}\n</code></pre>\n<pre><code>   |\n10 |         c(&amp;s);\n   |         - ^^ borrowed value does not live long enough\n   |",
+   "accepted_answer_id": null,
+   "score": 15
+  },
+  {
+   "question_id": 36379242,
+   "title": "Mutably borrow one struct field while borrowing another in a closure",
+   "link": "https://stackoverflow.com/questions/36379242/mutably-borrow-one-struct-field-while-borrowing-another-in-a-closure",
+   "body": "<p>I have a struct containing two fields and I want to modify one field (mutable borrow) using another field (immutable borrow), but I get an error from the borrow checker.</p>\n\n<p>For instance, the following code:</p>\n\n<pre><code>struct Struct {\n    field1: Vec&lt;i32&gt;,\n    field2: Vec&lt;i32&gt;,\n}\n\nfn main() {\n    let mut strct = Struct {\n        field1: vec![1, 2, 3],\n        field2: vec![2, 3, 4],\n    };\n\n    strct.field1.retain(|v| !strct.field2.contains(v));\n\n    println!(\"{:?}\", strct.field1);\n}\n</code></pre>\n\n<p>gives the following error:</p>\n\n<pre class=\"lang-none prettyprint-over",
+   "accepted_answer_id": 36379279,
+   "score": 23
+  }
+ ]
+}
