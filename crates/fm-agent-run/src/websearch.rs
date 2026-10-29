@@ -20,7 +20,9 @@
 //! reaches these public APIs.
 
 use fm_agent::{AgentError, SearchHit, WebSearch};
-use std::time::Duration;
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 /// **Who is asking, and where to reach the project** — never a browser's name. Wikimedia's policy
 /// says a bot must not copy a browser's user agent and must give a contact, and its 2026 limits give
@@ -57,12 +59,30 @@ impl WebSearch for DirectSearch {
         let q = enc(query);
         let n = self.per_source;
         let get = |url: String, accept: Option<&str>| -> Option<String> {
+            let now = Instant::now();
+            if let Some(body) = polite().fresh(&url, now) {
+                return Some(body);
+            }
+            if polite().resting(host(&url), now) {
+                return None;
+            }
             let mut r = agent.get(&url).set("User-Agent", UA);
             if let Some(a) = accept {
                 r = r.set("Accept", a);
             }
             // Fail-soft: a source that errors contributes nothing (matches search-proxy.py).
-            r.call().ok()?.into_string().ok()
+            match r.call() {
+                Ok(resp) => {
+                    let body = resp.into_string().ok()?;
+                    polite().keep(url, body.clone(), now);
+                    Some(body)
+                }
+                Err(ureq::Error::Status(429 | 503, resp)) => {
+                    polite().rest(host(&url), now + retry_after(resp.header("retry-after")));
+                    None
+                }
+                Err(_) => None,
+            }
         };
 
         let wiki = get(
@@ -199,6 +219,71 @@ pub const ARXIV_FILLERS: &[&str] = &[
     "when", "where", "which", "while", "who", "whom", "whose", "why", "will", "with", "would",
     "you", "your",
 ];
+
+/// **Asked once, kept a while; a busy source is left alone** (2026-10-29, W2 of
+/// `docs/research/2026-10-29-web-research.md`). Wikipedia's limit for an identified client is one
+/// bucket shared by every install, and the other sources count per address, so the same question
+/// asked again is answered from memory, and a source that says *too many requests* (429) or
+/// *unavailable* (503) is not asked again until its `Retry-After` has passed — never retried in a loop.
+/// In memory only, for the life of the process: nothing about a search is written to disk.
+#[derive(Default)]
+struct Polite {
+    kept: HashMap<String, (Instant, String)>,
+    resting: HashMap<String, Instant>,
+}
+
+/// How long an answer is reused: MedlinePlus asks for 12–24 h; search results change slowly.
+const KEEP: Duration = Duration::from_secs(12 * 60 * 60);
+/// How many answers are kept; the oldest goes first.
+const KEPT_MAX: usize = 256;
+
+impl Polite {
+    fn fresh(&self, url: &str, now: Instant) -> Option<String> {
+        self.kept
+            .get(url)
+            .filter(|(at, _)| now.saturating_duration_since(*at) < KEEP)
+            .map(|(_, body)| body.clone())
+    }
+
+    fn keep(&mut self, url: String, body: String, now: Instant) {
+        self.kept.retain(|_, (at, _)| now.saturating_duration_since(*at) < KEEP);
+        if self.kept.len() >= KEPT_MAX {
+            if let Some(oldest) =
+                self.kept.iter().min_by_key(|(_, (at, _))| *at).map(|(k, _)| k.clone())
+            {
+                self.kept.remove(&oldest);
+            }
+        }
+        self.kept.insert(url, (now, body));
+    }
+
+    fn rest(&mut self, host: &str, until: Instant) {
+        self.resting.insert(host.to_string(), until);
+    }
+
+    fn resting(&self, host: &str, now: Instant) -> bool {
+        self.resting.get(host).is_some_and(|until| now < *until)
+    }
+}
+
+fn polite() -> std::sync::MutexGuard<'static, Polite> {
+    static POLITE: OnceLock<Mutex<Polite>> = OnceLock::new();
+    // A poisoned lock still holds a usable cache; losing it is worse than a stale entry.
+    POLITE.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// How long to leave a source alone after it said 429 or 503: its `Retry-After` in seconds, at most an
+/// hour; a minute when it gives none, or gives a date.
+fn retry_after(header: Option<&str>) -> Duration {
+    let secs = header.and_then(|h| h.trim().parse::<u64>().ok()).unwrap_or(60);
+    Duration::from_secs(secs.min(60 * 60))
+}
+
+/// The host of a URL, for resting a source as a whole.
+fn host(url: &str) -> &str {
+    let rest = url.split_once("://").map_or(url, |(_, r)| r);
+    rest.split(['/', '?']).next().unwrap_or(rest)
+}
 
 /// Round-robin over the sources in order, dedupe by URL, cap at `max`.
 fn interleave_dedup(sources: &[Vec<SearchHit>], max: usize) -> Vec<SearchHit> {
@@ -356,6 +441,38 @@ mod tests {
         for w in ARXIV_FILLERS {
             assert_eq!(*w, w.to_lowercase(), "the list is compared lower-case");
         }
+    }
+
+    /// An answer is reused for twelve hours and then asked again; the oldest goes when full.
+    #[test]
+    fn an_answer_is_kept_twelve_hours_and_the_oldest_goes_first() {
+        let t0 = Instant::now();
+        let mut p = Polite::default();
+        p.keep("u".into(), "body".into(), t0);
+        assert_eq!(p.fresh("u", t0 + Duration::from_secs(60)), Some("body".into()));
+        assert_eq!(p.fresh("u", t0 + KEEP), None, "stale after twelve hours");
+        for i in 0..KEPT_MAX {
+            p.keep(format!("k{i}"), String::new(), t0 + Duration::from_secs(i as u64 + 1));
+        }
+        assert!(p.kept.len() <= KEPT_MAX);
+        assert!(p.fresh("u", t0 + Duration::from_secs(1)).is_none(), "the oldest went first");
+        assert!(p.fresh(&format!("k{}", KEPT_MAX - 1), t0 + Duration::from_secs(1)).is_some());
+    }
+
+    /// A source that said 429 or 503 rests for its Retry-After (at most an hour), others do not.
+    #[test]
+    fn a_busy_source_rests_for_its_retry_after() {
+        assert_eq!(retry_after(Some("120")), Duration::from_secs(120));
+        assert_eq!(retry_after(Some(" 7200 ")), Duration::from_secs(3600), "capped at an hour");
+        assert_eq!(retry_after(Some("Wed, 21 Oct 2026 07:28:00 GMT")), Duration::from_secs(60));
+        assert_eq!(retry_after(None), Duration::from_secs(60));
+        let t0 = Instant::now();
+        let mut p = Polite::default();
+        p.rest(host("https://en.wikipedia.org/w/api.php?x=1"), t0 + Duration::from_secs(120));
+        assert!(p.resting("en.wikipedia.org", t0 + Duration::from_secs(119)));
+        assert!(!p.resting("en.wikipedia.org", t0 + Duration::from_secs(120)));
+        assert!(!p.resting("api.github.com", t0));
+        assert_eq!(host("https://export.arxiv.org/api/query?search_query=x"), "export.arxiv.org");
     }
 
     /// The desktop proxy filters the same words. It is Python, so the check reads its source.

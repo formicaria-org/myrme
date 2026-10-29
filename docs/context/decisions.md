@@ -805,6 +805,19 @@ claim restates its quote. Tests: `a_quote_from_past_the_cut_is_not_supported_by_
 `an_arxiv_query_leaves_out_the_words_no_paper_is_found_by`, `the_desktop_proxy_leaves_out_the_same_fillers`,
 `the_user_agent_names_the_project_and_is_not_a_browser`. The contract is unchanged.
 
+## 2026-10-29 (later) — a claim keeps to its quote's numbers and negations; web answers are kept and busy sources rest `#method`
+
+- **`grounding::keeps_to_its_quote`**: a claim whose number is not a number of its quote (`1,450` and
+  `1450` are one), or that negates when its quote does not (en, fr, de, it, zh), is dropped like an
+  unsupported quote. Measured: over the recorded answers of four model variants it dropped exactly two
+  claims, both "there is no information about …" written over an unrelated quote on a case whose right
+  answer is nothing — exact rose 7/8 → 8/8 for both; Qwen3.5-0.8B live on CPU, four runs, 5/8 exact
+  and 8/8 grounded with and without it, the same cases each time. Showing the quote under each claim is
+  left to the owner.
+- **`DirectSearch`** keeps each answer 12 h in memory (256 at most, oldest first), and leaves a source
+  that answered 429 or 503 alone for its `Retry-After` (60 s when it names none, an hour at most) —
+  never a retry loop. Nothing is written to disk.
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading

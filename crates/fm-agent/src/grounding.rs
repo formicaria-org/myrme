@@ -188,7 +188,9 @@ pub fn verify(model_output: &str, sources: &[Source]) -> GroundedNote {
                 }
             });
             let verified = match source_id.and_then(|id| sources.iter().find(|s| s.id == id)) {
-                Some(src) => quote.as_deref().is_some_and(|q| quote_supported(q, &src.text)),
+                Some(src) => quote
+                    .as_deref()
+                    .is_some_and(|q| quote_supported(q, &src.text) && keeps_to_its_quote(&text, q)),
                 None => false,
             };
             Claim {
@@ -336,6 +338,83 @@ fn strip_quote_marks(s: &str) -> String {
 /// whitespace to single spaces, fold the unicode punctuation extracted text mangles (curly quotes →
 /// straight, non-breaking/thin spaces → space, soft hyphen removed) — so a faithful quote is not
 /// rejected merely because the source's markdown reflowed it. An empty quote is never supported.
+/// **A claim may not say what its quote does not** — the deterministic half of "does the claim
+/// restate its quote?" (2026-10-29, `docs/research/2026-10-29-web-research.md` §4.5 and §4.7). The
+/// quote check proves the source says the quote; it cannot see a claim that turns the quote's 1873
+/// into 1874, or adds a "not" the quote never had — the two cheapest ways a small model, or a page
+/// steering it, changes a fact while quoting faithfully. So:
+/// - **every number in the claim is a number in the quote** (`1,450` and `1450` are one number);
+/// - **a claim that negates quotes a negation** (in English, French, German, Italian or Chinese).
+///
+/// One-directional on purpose: a claim may restate *part* of its quote, so a quote's number or
+/// negation the claim leaves out is not a fault.
+fn keeps_to_its_quote(claim: &str, quote: &str) -> bool {
+    let theirs = numbers(quote);
+    numbers(claim).iter().all(|n| theirs.contains(n)) && (!negates(claim) || negates(quote))
+}
+
+/// The numbers in `s`, written one way: thousands separators dropped (`1,450`, `1 450` and `1.450`
+/// with three digits after the mark are 1450), a decimal comma read as a point.
+fn numbers(s: &str) -> Vec<String> {
+    let chars: Vec<char> = s.chars().collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        if !chars[i].is_ascii_digit() {
+            i += 1;
+            continue;
+        }
+        // Digit groups joined by one separator each: "1,450,000", "2.5", "1 450".
+        let mut groups = vec![String::new()];
+        let mut seps = Vec::new();
+        while i < chars.len() {
+            let c = chars[i];
+            if c.is_ascii_digit() {
+                groups.last_mut().unwrap().push(c);
+                i += 1;
+            } else if matches!(c, ',' | '.' | ' ' | '\u{a0}' | '\u{202f}' | '\'')
+                && chars.get(i + 1).is_some_and(char::is_ascii_digit)
+            {
+                seps.push(c);
+                groups.push(String::new());
+                i += 1;
+            } else {
+                break;
+            }
+        }
+        let thousands = groups.len() > 1
+            && groups[1..].iter().all(|g| g.len() == 3)
+            && seps.windows(2).all(|w| w[0] == w[1]);
+        let n = if thousands {
+            groups.concat()
+        } else {
+            let mut n = groups[0].clone();
+            for (sep, g) in seps.iter().zip(&groups[1..]) {
+                n.push(if matches!(sep, ',' | '.') { '.' } else { ' ' });
+                n.push_str(g);
+            }
+            n
+        };
+        out.push(n);
+    }
+    out
+}
+
+/// Whether `s` says *not* — a negating word, matched whole, in the languages the app is used in;
+/// for Chinese, a negating character anywhere.
+fn negates(s: &str) -> bool {
+    const WORDS: &[&str] = &[
+        "not", "no", "never", "none", "neither", "nor", "without", "cannot", //
+        "ne", "pas", "jamais", "aucun", "aucune", "sans", "ni", //
+        "nicht", "kein", "keine", "keinen", "keinem", "keiner", "keines", "nie", "niemals", "ohne",
+        "non", "mai", "nessun", "nessuno", "nessuna", "senza",
+    ];
+    let folded = crate::textmatch::loose(s);
+    folded.contains("n't")
+        || folded.split(|c: char| !c.is_alphanumeric()).any(|w| WORDS.contains(&w))
+        || s.chars().any(|c| matches!(c, '不' | '没' | '無' | '无' | '未' | '非' | '别'))
+}
+
 fn quote_supported(quote: &str, source_text: &str) -> bool {
     // The closing punctuation is not part of the words: a quote that ends "… public library." where
     // the source goes on ", where readers …" is still word for word.
@@ -672,6 +751,42 @@ mod tests {
         let g = verify(draft, &sources);
         assert!(g.verified.is_empty());
         assert_eq!(g.body, "- The sources found did not support an answer to this question.");
+    }
+
+    /// A faithful quote under an unfaithful claim: the quote check alone passed a claim that changed
+    /// its quote's number or added a "not" (2026-10-29). Such a claim is dropped; the same number
+    /// written another way, a partial restatement, and a negation the quote has are kept.
+    #[test]
+    fn a_claim_that_changes_its_quotes_number_or_adds_a_not_is_dropped() {
+        let srcs = vec![
+            src(
+                1,
+                "A",
+                "",
+                "The archive was founded in 1873. It holds 1,450 maps and is not open on Sundays.",
+            ),
+            src(2, "B", "", "Die Pumpe läuft mit 2,5 bar."),
+            src(3, "C", "", "这个泵运行很快。"),
+        ];
+        let kept = |draft: &str| verify(draft, &srcs).verified.len();
+        // Changed number, added negation (English, German, Chinese): dropped.
+        assert_eq!(kept("- Founded in 1874 [1]\n> The archive was founded in 1873"), 0);
+        assert_eq!(kept("- It was not founded in 1873 [1]\n> The archive was founded in 1873"), 0);
+        assert_eq!(
+            kept("- Die Pumpe läuft nicht mit 2,5 bar [2]\n> Die Pumpe läuft mit 2,5 bar"),
+            0
+        );
+        assert_eq!(kept("- 这个泵运行不快 [3]\n> 这个泵运行很快"), 0);
+        assert_eq!(kept("- It holds 1,451 maps [1]\n> It holds 1,450 maps"), 0);
+        // The same number written another way, a decimal comma, a negation the quote has, and a
+        // claim that restates only part of its quote: kept.
+        assert_eq!(kept("- It holds 1450 maps [1]\n> It holds 1,450 maps"), 1);
+        assert_eq!(kept("- The pump runs at 2.5 bar [2]\n> Die Pumpe läuft mit 2,5 bar"), 1);
+        assert_eq!(kept("- It isn't open on Sundays [1]\n> is not open on Sundays"), 1);
+        assert_eq!(
+            kept("- It holds maps [1]\n> It holds 1,450 maps and is not open on Sundays"),
+            1
+        );
     }
 
     /// D3: the model sees each source cut to a length; the check must see the same cut, or a quote

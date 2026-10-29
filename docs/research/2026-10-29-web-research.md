@@ -386,7 +386,7 @@ quoting. Extend it to the whole loop, offline and deterministic:
 |---|---|---|
 | **W0** | Fix D1–D4 — **done 2026-10-29** (`../context/decisions.md`); still to do: send searches with the person's words as well as the refined query | hours; no dependency |
 | **W1** | Wikipedia in the person's language plus English through interlanguage links, with **whole plain-text extracts** in place of snippets; passages chosen by BM25; verify against the packed passages | ~2 days; no dependency |
-| **W2** | Sources by command and surface (§2.3): MedlinePlus and Europe PMC added; Crossref and Unpaywall for papers; an on-device cache with `Retry-After` handling | ~3 days |
+| **W2** | Sources by command and surface (§2.3): MedlinePlus and Europe PMC added; Crossref and Unpaywall for papers; an on-device cache with `Retry-After` handling — **the cache and `Retry-After` done 2026-10-29** (in memory, `../context/decisions.md`) | ~3 days |
 | **W3** | The offline eval of §5 | ~3 days |
 | **W4** | The fixed two-round loop with `follow` (phone) and three rounds (laptop) | ~3 days + eval |
 | **W5** | The guarded fetch and dom_smoothie, for URLs a person pastes first, then for results; `cargo deny` on the html5ever stack | ~1 week |
