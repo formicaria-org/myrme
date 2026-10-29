@@ -6,7 +6,8 @@ major N whose minor is at least the one it needs.
 
 | Myrme | Contract | Linked by formicaria | What changed for users |
 |---|---|---|---|
-| **0.11.0** | **1.9** | 0.20.0 | Four commands on every device (`/search` is read as `/research`); a chat reply shows as it is written, on the phone too; the phone's model rereads far less of a conversation each turn, so a later reply starts about twice as soon |
+| **0.11.1** | **1.9** | 0.22.0 | A meeting whose zone is misspelt, or written only in the invitation, lands at the right time; `/research` searches arXiv for every word and leaves fillers out, checks a claim only against what the model was shown and against its quote's numbers and negations, writes claims as plain text, names itself to the sources, reuses an answer for 12 h and lets a busy source rest |
+| 0.11.0 | 1.9 | 0.20.0 – 0.21.0 | Four commands on every device (`/search` is read as `/research`); a chat reply shows as it is written, on the phone too; the phone's model rereads far less of a conversation each turn, so a later reply starts about twice as soon |
 | 0.10.0 | 1.8 | 0.19.0 | The assistant follows formicaria's clock and never its computer's: a change of zone, or a phone, no longer puts the meetings it finds hours off or proposes one twice; "tomorrow" in an email is the sender's tomorrow; a chat knows what day it is |
 | 0.9.0 | 1.7 | 0.18.0 – 0.18.1 | The meeting pass reads only what is new since its last read, so a long exchange with a meeting a week gets its next meeting proposed; an answer cut at the cap, or one that repeats itself, is read again instead of being taken for "no meetings"; a meeting restated without its time is the one already on that day |
 | 0.8.1 | 1.7 | 0.17.0 – 0.17.1 | A laptop whose only GPU is integrated runs the model on the CPU, about 2.5× faster at writing there, and says so in the assistant's log; a discrete GPU is used as before |
