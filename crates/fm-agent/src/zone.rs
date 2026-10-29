@@ -357,10 +357,17 @@ pub fn after_time(words: &[String]) -> Option<Zone> {
         let label = if *iana == "UTC" { "UTC".to_string() } else { w.to_uppercase() };
         return Some(Zone { label, tz });
     }
-    // "Berlin time", "New York time", "Italian time zone": one to three words, then "time".
+    // "Berlin time", "New York time", "Italian time zone", "Melbourne standard time": one to three
+    // words, then "time". A one-word place spelt one slip away is still read here (`near_place`),
+    // where "time" says a clock is meant: "17:30 Melbuorne time" was taken for the person's own clock
+    // and the meeting landed hours off (2026-10-29).
     for k in 1..=3 {
         if words.get(k).is_some_and(|w| w == "time" || w == "timezone") {
-            if let Some(iana) = place(&words[..k]) {
+            let named = match &words[..k] {
+                [rest @ .., season] if !rest.is_empty() && is_season(season) => rest,
+                all => all,
+            };
+            if let Some(iana) = place_or_near(named) {
                 return by_place(iana);
             }
         }
@@ -370,12 +377,79 @@ pub fn after_time(words: &[String]) -> Option<Zone> {
         let from =
             if words.get(1).is_some_and(|w| matches!(w.as_str(), "di" | "de")) { 2 } else { 1 };
         for k in from + 1..=from + 2 {
-            if let Some(iana) = words.get(from..k).and_then(place) {
+            if let Some(iana) = words.get(from..k).and_then(place_or_near) {
                 return by_place(iana);
             }
         }
     }
     None
+}
+
+/// The place named by the words **right after a time with nothing else** — `05:30 PM Melbourne`, as a
+/// calendar invitation writes it — spelt exactly, one to three words. Weaker than [`after_time`]: "at
+/// 17:30 London office" names a room, not a clock, so a caller trusts this only to confirm a time
+/// already read elsewhere in the same message.
+pub fn place_after_time(words: &[String]) -> Option<Zone> {
+    (1..=3.min(words.len())).rev().find_map(|k| place(&words[..k])).and_then(by_place)
+}
+
+/// "standard time", "daylight time", "summer time": the season of a clock, not part of its place.
+fn is_season(w: &str) -> bool {
+    matches!(w, "standard" | "daylight" | "summer" | "winter")
+}
+
+/// A place spelt exactly, else the one it is a slip away from ([`near_place`]). Used only where the
+/// words around it already say a clock is meant: before "time", after "ora di" or "heure de".
+fn place_or_near(words: &[String]) -> Option<&'static str> {
+    place(words).or_else(|| near_place(&words.join(" ")))
+}
+
+/// The one place a name is a slip away from — one letter added, dropped or changed, or two
+/// neighbours swapped, anywhere in it, a space counting as a letter (`new yrok`, `newyork`) — when the
+/// name has five letters or more and **exactly one** place is that close. Anything less certain names
+/// no clock, as before.
+fn near_place(phrase: &str) -> Option<&'static str> {
+    if phrase.chars().count() < 5 {
+        return None;
+    }
+    let names = PLACES
+        .iter()
+        .map(|(w, iana)| (*w, *iana))
+        .chain(cities().iter().map(|(c, iana)| (c.as_str(), iana.as_str())));
+    let mut found: Option<&'static str> = None;
+    for (name, iana) in names {
+        if name.chars().count() >= 5 && one_slip(phrase, name) {
+            match found {
+                Some(other) if other != iana => return None, // two places are that close: unsure
+                _ => found = Some(iana),
+            }
+        }
+    }
+    found
+}
+
+/// Whether `a` and `b` differ by exactly one edit: an insertion, a deletion, a substitution, or two
+/// neighbouring letters swapped.
+fn one_slip(a: &str, b: &str) -> bool {
+    let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+    if a == b {
+        return false;
+    }
+    let (n, m) = (a.len(), b.len());
+    if n == m {
+        let diff: Vec<usize> = (0..n).filter(|&i| a[i] != b[i]).collect();
+        return diff.len() == 1
+            || (diff.len() == 2
+                && diff[1] == diff[0] + 1
+                && a[diff[0]] == b[diff[1]]
+                && a[diff[1]] == b[diff[0]]);
+    }
+    let (long, short) = if n > m { (&a, &b) } else { (&b, &a) };
+    if long.len() != short.len() + 1 {
+        return false;
+    }
+    let i = (0..short.len()).find(|&i| long[i] != short[i]).unwrap_or(short.len());
+    long[i + 1..] == short[i..]
 }
 
 #[cfg(test)]
@@ -432,6 +506,114 @@ mod tests {
         assert_eq!(after_time(&words("heure de londres")).unwrap().label, "London time");
         assert_eq!(after_time(&words("tokyo time")).unwrap().label, "Tokyo time");
         assert_eq!(after_time(&words("pacific time")).unwrap().label, "Los Angeles time");
+    }
+
+    /// **A place one slip away is read where a clock is meant** (2026-10-29: a misspelt "… time"
+    /// landed seven hours off). Every kind of slip — a letter missing, extra, changed, or two swapped —
+    /// at the start, the middle and the end; one word and several; cities, countries and adjectives;
+    /// before "time", after "ora di" and "heure de".
+    #[test]
+    fn a_place_with_a_typo_is_still_read_where_a_clock_is_meant() {
+        let cases = [
+            // Two letters swapped in the middle.
+            ("melbuorne time", "Melbourne time"),
+            // Changed, missing, extra — at the start, the middle, the end.
+            ("xelbourne time", "Melbourne time"),
+            ("melbxurne time", "Melbourne time"),
+            ("melbournx time", "Melbourne time"),
+            ("elbourne time", "Melbourne time"),
+            ("melbourn time", "Melbourne time"),
+            ("mmelbourne time", "Melbourne time"),
+            ("melboourne time", "Melbourne time"),
+            ("melbournee time", "Melbourne time"),
+            // Other cities, each kind of slip.
+            ("lodnon time", "London time"),
+            ("londno time", "London time"),
+            ("tokio time", "Tokyo time"),
+            ("tokyoo time", "Tokyo time"),
+            ("berln time", "Berlin time"),
+            ("bwrlin time", "Berlin time"),
+            ("lisbno time", "Lisbon time"),
+            ("sydeny time", "Sydney time"),
+            // Several words: a slip inside one, or in the space between them.
+            ("new yrok time", "New York time"),
+            ("newyork time", "New York time"),
+            ("new  york time", "New York time"),
+            ("los angelse time", "Los Angeles time"),
+            ("san fransisco time", "Los Angeles time"),
+            // Countries and adjectives.
+            ("italain time", "Rome time"),
+            ("japnese time", "Tokyo time"),
+            ("germna time", "Berlin time"),
+            ("switzerlnd time", "Zurich time"),
+            // A season after the place, and a typo before it.
+            ("melbuorne standard time", "Melbourne time"),
+            // Italian and French.
+            ("ora di berlnio", "Berlin time"),
+            ("ora di londar", "London time"),
+            ("ora di madird", "Madrid time"),
+            ("ora italaina", "Rome time"),
+            ("heure de lodnres", "London time"),
+        ];
+        for (said, clock) in cases {
+            assert_eq!(
+                after_time(&words(said)).map(|z| z.label),
+                Some(clock.to_string()),
+                "{said:?}"
+            );
+        }
+    }
+
+    /// What a slip does **not** excuse: two slips, a slip as near one place as another, a name too
+    /// short to tell, a place not followed by "time", and the everyday "… time" a city is not.
+    #[test]
+    fn a_typo_too_far_unsure_or_out_of_context_names_no_clock() {
+        let none = [
+            "melbuonre time", // two slips
+            "lonodnn time",   // two slips
+            "lawson time",    // one slip from both Dawson and Mawson
+            "rme time",       // too short to tell
+            "prais",          // no "time" after it
+            "melbuorne",
+            "lodnon calling",
+            "lunch time",
+            "dinner time",
+            "break time",
+            "local time",
+            "meeting time",
+            "start time",
+            "office time",
+            "working time",
+            "spare time",
+            "night time",
+            "prime time",
+            "screen time",
+            "quality time",
+            "summer time",
+        ];
+        for said in none {
+            assert!(after_time(&words(said)).is_none(), "{said:?} named a clock");
+        }
+        assert!(one_slip("melbuorne", "melbourne") && one_slip("londn", "london"));
+        assert!(one_slip("newyork", "new york"), "a missing space is one slip");
+        assert!(!one_slip("london", "london") && !one_slip("malbuurne", "melbourne"));
+    }
+
+    #[test]
+    fn a_clocks_season_is_not_part_of_its_place() {
+        let z = after_time(&words("melbourne standard time")).unwrap();
+        assert_eq!(z.label, "Melbourne time");
+        assert_eq!(after_time(&words("british summer time")).unwrap().label, "London time");
+    }
+
+    /// An invitation's "05:30 PM Melbourne": a bare place, spelt exactly, read only by the caller
+    /// that confirms it.
+    #[test]
+    fn a_bare_place_after_a_time_is_read_only_spelt_exactly() {
+        assert_eq!(place_after_time(&words("melbourne")).unwrap().label, "Melbourne time");
+        assert_eq!(place_after_time(&words("new york meeting")).unwrap().label, "New York time");
+        assert!(place_after_time(&words("melbuorne")).is_none());
+        assert!(place_after_time(&words("works for me")).is_none());
     }
 
     #[test]

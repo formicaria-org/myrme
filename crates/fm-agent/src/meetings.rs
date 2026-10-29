@@ -967,7 +967,8 @@ pub fn resolve(
         .filter(|e| Some(*e) > start);
     // Written on another clock: moved onto the person's, on the meeting's own day (2026-10-23).
     let mut written = None;
-    if let (Some(s), Some(z), Some(here)) = (start, zone_in(&nquote), here) {
+    let zone = zone_in(&nquote).or_else(|| start.and_then(|s| zone_of_time(&msg, s)));
+    if let (Some(s), Some(z), Some(here)) = (start, zone, here) {
         if let Some((d, t)) = z.convert(day, s, here) {
             if (d, t) != (day, s) {
                 written = Some(format!("{:02}:{:02} {}", s.hour(), s.minute(), z.label));
@@ -1164,6 +1165,32 @@ fn zone_in(text: &str) -> Option<zone::Zone> {
     let words = tokens(text);
     times_in(&words).into_iter().find_map(|(_, next)| zone::after_time(&words[next..]))
 }
+
+/// The clock **the same time** is on elsewhere in the email, when the quoted sentence names none: a
+/// zone after it as [`zone_in`] reads one, or — in an **invitation line** only — a bare place, as
+/// Zoom and calendars write it: "Time: Nov 4, 2026 06:00 PM Tokyo" under "at 18:00" (2026-10-29:
+/// the sentence's own zone was misspelt, and the invitation that spelt it right was ignored). Only for
+/// the time already read, so a place named after some other time cannot move this one; and a bare
+/// place needs the invitation's label ("Time:", "When:") a few words before, because elsewhere a place
+/// after a time is often an address — "15:00 Denver Road" (the kind of case found in real mail the same day).
+fn zone_of_time(text: &str, at: Time) -> Option<zone::Zone> {
+    let words = tokens(text);
+    times_in(&words).into_iter().filter(|(t, _)| *t == at).find_map(|(_, next)| {
+        zone::after_time(&words[next..]).or_else(|| {
+            let from = next.saturating_sub(9);
+            words[from..next.saturating_sub(1)]
+                .iter()
+                .any(|w| INVITE_LABELS.contains(&w.trim_end_matches(':')))
+                .then(|| zone::place_after_time(&words[next..]))
+                .flatten()
+        })
+    })
+}
+
+/// The label an invitation puts before its time: Zoom's and Teams' "Time:", a calendar's "When:", and
+/// the same in Italian, French and German.
+const INVITE_LABELS: &[&str] =
+    &["time", "when", "orario", "quando", "ora", "heure", "quand", "zeit", "wann"];
 
 /// Every time in `words`, in order, each with the index of the word after it.
 fn times_in(words: &[String]) -> Vec<(Time, usize)> {
@@ -2546,6 +2573,58 @@ mod tests {
             Some("2026-10-08T12:30"),
             "compared on the reader's clock"
         );
+    }
+
+    /// **A zone that is written but misspelt, or written only in the invitation, still moves the
+    /// time** (2026-10-29). "17:30 Tokoy time" was read as the person's own 17:30, and so was a plain
+    /// "at 17:30" whose email carried "Time: … 05:30 PM Tokyo". A zone on another time in the same
+    /// email does not move this one.
+    #[test]
+    fn a_misspelt_or_invitation_only_zone_still_moves_the_time() {
+        let berlin = Here::parse("Europe/Berlin").unwrap();
+        let found = |quote: &str| Found {
+            status: "fixed".into(),
+            quote: quote.into(),
+            title: "Project call".into(),
+            date: "3rd of Nov".into(),
+            time: "17:30".into(),
+            end: String::new(),
+            place: String::new(),
+        };
+        let mail = |text: &str| {
+            on_clock(&format!("### Ana Ruiz — 2026-10-29 12:33 +09:00\n\n{text}\n"), Some(&berlin))
+        };
+        let today = date!(2026 - 10 - 29);
+
+        let q = "no problem, I suggest next week 3rd of Nov at 17:30 Tokoy time:";
+        let m = resolve(&found(q), &mail(q), today, Some(&berlin)).unwrap();
+        assert_eq!(m.start_stamp(), "2026-11-03T09:30", "17:30 in Tokyo is 09:30 in Berlin");
+        assert_eq!(m.written.as_deref(), Some("17:30 Tokyo time"));
+
+        let q = "no problem, I suggest next week 3rd of Nov at 17:30:";
+        let invite =
+            format!("{q}\nTopic: Project call\nTime: Nov 3, 2026 05:30 PM Tokyo\nJoin Zoom");
+        let m = resolve(&found(q), &mail(&invite), today, Some(&berlin)).unwrap();
+        assert_eq!(m.start_stamp(), "2026-11-03T09:30", "the invitation's zone confirms it");
+
+        // More slips, through the whole pass: a sentence's own zone, misspelt in other ways.
+        for (q, want) in [
+            ("next week 3rd of Nov at 10am Lodnon time works for me", "2026-11-03T11:00"),
+            ("next week 3rd of Nov at 17:30 Melbuorne standard time", "2026-11-03T07:30"),
+            ("fine with 3rd of Nov at 17:30 Toyko time.", "2026-11-03T09:30"),
+        ] {
+            let m = resolve(&found(q), &mail(q), today, Some(&berlin)).unwrap();
+            assert_eq!(m.start_stamp(), want, "{q:?}");
+        }
+
+        // A place after the same time that is not an invitation's — an address — moves nothing.
+        let address = format!("{q}\nWe meet at 17:30 Denver Road, room 4.");
+        let m = resolve(&found(q), &mail(&address), today, Some(&berlin)).unwrap();
+        assert_eq!(m.start_stamp(), "2026-11-03T17:30", "an address is not a clock");
+
+        let other = format!("{q}\nThe seminar is at 10:00 London time.");
+        let m = resolve(&found(q), &mail(&other), today, Some(&berlin)).unwrap();
+        assert_eq!(m.start_stamp(), "2026-11-03T17:30", "another time's zone does not move it");
     }
 
     #[test]

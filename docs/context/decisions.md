@@ -805,6 +805,33 @@ claim restates its quote. Tests: `a_quote_from_past_the_cut_is_not_supported_by_
 `an_arxiv_query_leaves_out_the_words_no_paper_is_found_by`, `the_desktop_proxy_leaves_out_the_same_fillers`,
 `the_user_agent_names_the_project_and_is_not_a_browser`. The contract is unchanged.
 
+## 2026-10-29 (later) — a zone written with a typo or only in the invitation still moves a meeting `#method`
+
+**Reported.** A meeting the person had set "at 17:30 [city] time" — the city misspelt by two swapped
+letters — was proposed at 17:30 on the person's own clock, hours off; the same email's invitation
+line, "Time: … 05:30 PM [city]", spelt it right and was ignored. The zone reader recognised a place
+only spelt exactly, and only before "time".
+
+**Decision** (`zone.rs`, `meetings.rs`):
+- **A place one slip away is read where a clock is meant** — before "time", after "ora di" / "heure
+  de" — one letter missing, extra or changed, or two neighbours swapped, a space counting as a letter;
+  only names of five letters or more, and only when **exactly one** place is that close (otherwise
+  nothing, as before). "Standard / daylight / summer time" after a place is read too.
+- **When the quoted sentence names no zone**, the same clock time elsewhere **in the same email** may:
+  with a zone after it as before, or — only in an **invitation line**, with "Time:" / "When:" (or the
+  Italian, French, German label) a few words before — a bare place, as Zoom and calendars write it.
+  The label is required because a place after a time is often an address (a street named after a
+  city, read as that city's clock) — found by running the reader over a user's real mail locally.
+
+**Measured on real mail, locally** (nothing copied here): 383 times in two vaults; the near-spelling
+rule read only the reported sentence's two copies; the invitation rule confirmed invitations and
+repeated mentions only. Tests with invented people and neutral zones: 34 typo cases and 21 cases
+that must name no clock (two slips, a slip as near Dawson as Mawson, ordinary "lunch time", "local
+time" …) in `zone.rs`; the whole pass in `meetings.rs` (`a_misspelt_or_invitation_only_zone_still_moves_the_time`).
+
+**Not done:** a meeting already accepted at the wrong time is not corrected by itself; the person
+moves it.
+
 ## 2026-10-29 (later) — a claim keeps to its quote's numbers and negations; web answers are kept and busy sources rest `#method`
 
 - **`grounding::keeps_to_its_quote`**: a claim whose number is not a number of its quote (`1,450` and
