@@ -50,7 +50,7 @@ git grep -hoE "fm_agent(_run)?::[A-Za-z_]+(::[A-Za-z_]+)*(::\{[^}]*\})?" <tag> -
 | `fm_agent_run::label::{read_with, ready_json_with}`, `fm_agent_run::ocr::{shared, ReadPage}` (1.7) | desktop + phone: a label read by the OCR first |
 | `VaultAccess::clock` (1.8) | phone: formicaria's clock, given to the assistant in process |
 | `VaultAccess::activity_draft` (1.9) | phone: the reply so far, shown while it is written |
-| `VaultAccess::food` (1.10) | phone: the app's food list, as a source for `/research` |
+| `VaultAccess::food`, `fm_agent_run::fmserve::best_food` (1.10) | phone: the app's food list, as a source for `/research`, and which of its hits a name means |
 | `fm_agent_run::manifest::{Manifest, Manifest::read, Manifest::platform_key, whisper_language}` | the catalogue |
 | `Manifest::phone_choices`, `Model::{phone_label, bytes, mmproj_bytes}` (1.5) | phone: the model chooser (shown only with two or more choices; one since 2026-10-20) |
 | `fm_agent_run::nativelib::native_lib_dir` (Android only) | phone: where the bundled runtime lives |
@@ -61,7 +61,8 @@ git grep -hoE "fm_agent(_run)?::[A-Za-z_]+(::[A-Za-z_]+)*(::\{[^}]*\})?" <tag> -
   would offer first for `name`, as its `food_get` answer (`name`, `src`, `per100`, `borrowed`).
   `/research` reads it for a "how much of a nutrient in a food" question and cites it as one more
   numbered source. The desktop's `FmServe` asks `/api/food_search` then `/api/food_get` (part 2);
-  the phone's vault can answer in process with the same two commands. A vault that does not answer
+  the phone's vault can answer in process with the same two commands, choosing among the hits with
+  `fmserve::best_food(name, hits) -> Option<String>` (the id of the food *named* so). A vault that does not answer
   leaves the web's sources alone, as before.
 
 **Contract 1.9 adds the reply as it is written** (`decisions.md` 2026-10-25):

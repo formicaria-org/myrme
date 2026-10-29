@@ -150,18 +150,22 @@ From a Myrme checkout, `pixi run fetch-whisper` still stages the same pieces by 
    A text-only model is not an error — the assistant says images are unavailable rather than asking
    a blind model to guess at a picture.
 
-**Web search** works in the app with nothing to set up — but it is **three sources, not the open
-web**: **Wikipedia, arXiv and GitHub**, over their public APIs, text only. Each is tried
-independently, so one being unreachable does not sink the answer. General web search (DuckDuckGo)
-is deliberately not included: it needs fragile HTML scraping of a site that blocks scrapers.
+**Web search** works in the app with nothing to set up — and it reads **only a list of reputable
+sources, never the open web**. Which ones depends on what you ask, in English, French, German,
+Italian or Chinese:
 
-For a research notebook the three cover a great deal, and it is worth knowing what they do not:
-a news story, a blog post, a vendor's documentation page. From a Myrme checkout you can run the
-keyless local proxy instead, which does reach the general web:
+| You ask about | It reads |
+|---|---|
+| Health — a symptom, a nutrient, a dose | MedlinePlus, then the public health bodies' own pages: the WHO, the NHS, the CDC, EFSA, gesund.bund.de, BfR, DGE, the Swiss BLV, Santé publique France, ANSES, ISS EpiCentro. Wikipedia last, marked *encyclopedia, not medical guidance* |
+| How much of a nutrient a food has | your app's own food list (with its table, and whether a value was borrowed from another), and the same bodies |
+| Papers — "studies on…", a DOI, a PMID | Europe PMC (which includes PubMed), arXiv, Crossref, and the papers the Wikipedia article cites |
+| Programming | Stack Overflow and GitHub |
+| Anything else | Wikipedia in your language and in English, arXiv, GitHub |
 
-   ```sh
-   pixi run search-proxy
-   ```
+Every source in an answer begins with whose it is ("NHS (UK): Vitamin K"), and a claim it cannot
+quote from one of them is dropped. A page is opened only if its site is on the list, and only its
+text is read — no scripts, no images, no links followed. No general search engine is used: a news
+story, a blog post or a vendor's documentation page is out of reach on purpose.
 
 ### On Android
 
@@ -389,7 +393,8 @@ To discard it entirely, use **Remove the model** — see "Getting the space back
 
 - **Off by default.** Nothing runs, downloads, or watches until you enable it.
 - **Your notes stay local.** The model runs on your device; notes are never uploaded. Only `/research`
-  touches the internet — and only the search terms, never your notes.
+  touches the internet — and only the words of your question, never your notes, and only the sources
+  listed above.
 - **You are always in control.** The assistant can only **reply** in a discussion or **propose** a
   change on a branch you review. It never writes to `main` on its own. Turn it off in Settings (or,
   on the desktop, simply don't run it) and formicaria is byte-for-byte the plain notebook.

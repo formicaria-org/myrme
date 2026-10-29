@@ -186,4 +186,6 @@ fn a_vault_may_offer_its_food_list() {
         v.food("spinach")
     }
     let _ = food::<fm_agent_run::fmserve::FmServe>;
+    let pick: fn(&str, &[serde_json::Value]) -> Option<String> = fm_agent_run::fmserve::best_food;
+    let _ = pick;
 }
