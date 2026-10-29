@@ -281,7 +281,8 @@ impl<L: LlmStep, S: WebSearch> StudyAssistant<L, S> {
         let write = |max_src: usize,
                      chars: usize|
          -> Result<(LlmResponse, Vec<crate::grounding::Source>), AgentError> {
-            let used: Vec<_> = sources.iter().take(max_src).cloned().collect();
+            // Cut as the model sees them, so `verify` checks a quote only against what was shown.
+            let used = crate::grounding::as_shown(&sources[..max_src.min(sources.len())], chars);
             let pack = crate::grounding::pack_sources(&used, chars);
             let user =
                 format!("{}\n{}\n\n# Numbered sources\n{}", heading::TASK, req.ask.trim(), pack);
@@ -735,6 +736,30 @@ mod tests {
         assert_eq!(seen.len(), 2);
         assert_eq!(seen[0].0, prompts::QUERY_REFINE_INSTRUCTION);
         assert_eq!(seen[1].0, prompts::GROUNDED_JSON_INSTRUCTION);
+    }
+
+    /// D3, through `research` itself: the model is shown each source cut to 700 characters, so a quote
+    /// from further in — true of the source, but never shown — is dropped, not shipped.
+    #[test]
+    fn research_checks_a_quote_only_against_what_the_model_was_shown() {
+        let long =
+            format!("{} The hidden tail says the tower is made of gold.", "Filler. ".repeat(100));
+        let web = FakeWeb {
+            hits: vec![SearchHit {
+                title: "Tower".into(),
+                url: "https://en.wikipedia.org/wiki/Tower".into(),
+                text: long,
+            }],
+            seen: RefCell::new(Vec::new()),
+        };
+        let draft = "- The tower is made of gold [1]\n> the tower is made of gold";
+        let agent = StudyAssistant::new(FakeLlm::new(&["tower", draft]), web);
+        let mut r = req(Some("what is the tower made of"));
+        r.inputs = vec![];
+        let out = agent.research(&r).unwrap();
+        assert!(out.grounded.verified.is_empty(), "never shown, so never supported");
+        assert_eq!(out.grounded.dropped.len(), 1);
+        assert!(!out.draft.new_body.contains("gold"));
     }
 
     #[test]

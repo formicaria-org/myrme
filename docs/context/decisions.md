@@ -770,6 +770,41 @@ release."* Evidence: `../research/2026-10-25-minimum-speed.md`.
   - n-gram drafting (no gain).
   - MTP waits on an offer of its download.
 
+## 2026-10-29 — `/research` fixes: arXiv words ANDed, an honest User-Agent, quotes checked against what was shown, claims as plain text `#method`
+
+**Found** by the research of `../research/2026-10-29-web-research.md` (§1, D1–D4), each confirmed in
+the code or with a live request; the owner asked for the four to be fixed.
+
+- **D1 — arXiv requires every word.** A space in `search_query` is OR at arXiv: *vitamin K
+  deficiency* matched 642,502 papers, a particle-physics paper first. `websearch::arxiv_query` joins
+  the words with `+AND+` (the same words then matched none — the truth); no words, no request. The
+  request is `https` now. The desktop proxy (`agents/search-proxy.py`) does the same. **Fillers are
+  left out** (`ARXIV_FILLERS`, 87 English function and question words): required, they made a search
+  find nothing — *how does attention work in transformers* matched 0 papers, and 5,198 without *how*,
+  *does* and *in*. A test reads the proxy's copy of the list so the two cannot drift.
+- **D2 — the client says who it is.** `formicaria-myrme/<version> (+https://github.com/formicaria-org/myrme)`,
+  replacing a string that began `Mozilla/5.0`. Wikimedia's policy forbids a bot to copy a browser's
+  user agent and asks for a contact; a project address, never a person's. The desktop proxy, which
+  sent a whole Chrome string, sends `formicaria-myrme-search-proxy (+…)`: **its DuckDuckGo engine
+  scrapes HTML and may now be refused** — accepted, it is fail-soft, and disguising the client is
+  what the research says never to do. Which contact goes in the UA for Wikimedia's shared bucket is
+  still the owner's question (§6 of the research).
+- **D3 — a quote is checked against the text the model was shown.** `pack_sources` cut each source to
+  700 characters (450 on the retry), but `verify` was given the full texts, so a quote from past the
+  cut — never shown, recalled or lucky — passed. `grounding::as_shown` makes one cut used by both.
+- **D4 — a claim reaches the note as text.** The claim is the model's words and a source can steer
+  them (a GitHub repository's description is anyone's). `assemble_body` now escapes `\ [ ] < >` in
+  claims and source titles and **drops any word carrying an address** (`://`, `www.`, `mailto:`); the
+  only link on a claim's line is the citation's, which code writes. Images were already blocked by
+  both shells' CSP.
+
+**Not done here** (the research's later steps): showing the quote under each claim, and a check that a
+claim restates its quote. Tests: `a_quote_from_past_the_cut_is_not_supported_by_the_source_as_shown`,
+`a_claim_and_a_title_reach_the_note_as_text_that_cannot_link`,
+`research_checks_a_quote_only_against_what_the_model_was_shown`, `an_arxiv_query_requires_every_word`,
+`an_arxiv_query_leaves_out_the_words_no_paper_is_found_by`, `the_desktop_proxy_leaves_out_the_same_fillers`,
+`the_user_agent_names_the_project_and_is_not_a_browser`. The contract is unchanged.
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading

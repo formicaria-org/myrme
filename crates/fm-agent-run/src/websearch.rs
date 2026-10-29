@@ -22,7 +22,15 @@
 use fm_agent::{AgentError, SearchHit, WebSearch};
 use std::time::Duration;
 
-const UA: &str = "Mozilla/5.0 (compatible; formicaria-study-agent)";
+/// **Who is asking, and where to reach the project** — never a browser's name. Wikimedia's policy
+/// says a bot must not copy a browser's user agent and must give a contact, and its 2026 limits give
+/// an identified client 200 requests a minute against 10 for an unidentified one. A project address,
+/// never a person's (2026-10-29, `docs/research/2026-10-29-web-research.md`, D2).
+pub const UA: &str = concat!(
+    "formicaria-myrme/",
+    env!("CARGO_PKG_VERSION"),
+    " (+https://github.com/formicaria-org/myrme)"
+);
 
 /// Multi-source, text-only grounded search done in-process. See the module docs.
 pub struct DirectSearch {
@@ -71,12 +79,19 @@ impl WebSearch for DirectSearch {
         .map(|b| parse_github(&b, n))
         .unwrap_or_default();
 
-        let arxiv = get(
-            format!("http://export.arxiv.org/api/query?search_query=all:{q}&max_results={n}"),
-            None,
-        )
-        .map(|b| parse_arxiv(&b, n))
-        .unwrap_or_default();
+        let terms = arxiv_query(query);
+        let arxiv = (!terms.is_empty())
+            .then(|| {
+                get(
+                    format!(
+                        "https://export.arxiv.org/api/query?search_query={terms}&max_results={n}"
+                    ),
+                    None,
+                )
+            })
+            .flatten()
+            .map(|b| parse_arxiv(&b, n))
+            .unwrap_or_default();
 
         // Round-robin interleave (Wikipedia, GitHub, arXiv order), so the top-k spans sources; dedupe
         // by URL. Empty is a legitimate answer (no network / all sources quiet) — the caller grounds in
@@ -150,6 +165,40 @@ fn inner(s: &str, tag: &str) -> String {
         None => String::new(),
     }
 }
+
+/// **arXiv's `search_query`, with every word that carries meaning required.** arXiv reads a space
+/// between terms as OR, so `all:vitamin K deficiency` matched 642,502 papers and put a
+/// particle-physics paper first; ANDed, the same words matched none, which was the truth (2026-10-29,
+/// measured; D1 of `docs/research/2026-10-29-web-research.md`).
+///
+/// **Requiring a filler word is the opposite mistake**: *how does attention work in transformers*
+/// matched 0 papers with every word required and 5,198 without *how*, *does* and *in* (measured the
+/// same day). So [`ARXIV_FILLERS`] — English function words, arXiv being English — are left out;
+/// a single letter such as the *K* of *vitamin K* is kept. Words are runs of letters and digits; empty
+/// when none is left, and then arXiv is not asked.
+pub fn arxiv_query(query: &str) -> String {
+    query
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty() && !ARXIV_FILLERS.contains(&w.to_lowercase().as_str()))
+        .map(|w| format!("all:{}", enc(w)))
+        .collect::<Vec<_>>()
+        .join("+AND+")
+}
+
+/// Words no paper is found by: articles, pronouns, auxiliaries, prepositions, conjunctions and the
+/// question words. Kept short and closed on purpose — a content word wrongly here makes a search
+/// broader, and one wrongly missing makes it find nothing, so only words that are never the subject
+/// belong. **Kept in step with `agents/search-proxy.py`'s `ARXIV_FILLERS`.**
+pub const ARXIV_FILLERS: &[&str] = &[
+    "a", "about", "after", "all", "also", "am", "an", "and", "any", "are", "as", "at", "be",
+    "been", "being", "between", "but", "by", "can", "could", "did", "do", "does", "doing",
+    "during", "each", "for", "from", "had", "has", "have", "having", "he", "her", "his", "how",
+    "i", "if", "in", "into", "is", "it", "its", "may", "me", "might", "my", "of", "on", "or",
+    "our", "she", "should", "so", "some", "such", "than", "that", "the", "their", "them", "then",
+    "there", "these", "they", "this", "those", "through", "to", "us", "was", "we", "were", "what",
+    "when", "where", "which", "while", "who", "whom", "whose", "why", "will", "with", "would",
+    "you", "your",
+];
 
 /// Round-robin over the sources in order, dedupe by URL, cap at `max`.
 fn interleave_dedup(sources: &[Vec<SearchHit>], max: usize) -> Vec<SearchHit> {
@@ -278,5 +327,60 @@ mod tests {
         assert!(parse_wikipedia("not json", 6).is_empty());
         assert!(parse_github("{}", 6).is_empty());
         assert!(parse_arxiv("<feed></feed>", 6).is_empty());
+    }
+
+    /// D1: arXiv reads a space as OR — "vitamin K deficiency" matched 642,502 papers, a physics paper
+    /// first. Every word is required, each encoded; no words means arXiv is not asked.
+    #[test]
+    fn an_arxiv_query_requires_every_word() {
+        assert_eq!(arxiv_query("vitamin K deficiency"), "all:vitamin+AND+all:K+AND+all:deficiency");
+        assert_eq!(arxiv_query("self-attention, 2017"), "all:self+AND+all:attention+AND+all:2017");
+        assert_eq!(
+            arxiv_query("carence en vitamine K – légumes"),
+            "all:carence+AND+all:en+AND+all:vitamine+AND+all:K+AND+all:l%C3%A9gumes"
+        );
+        assert_eq!(arxiv_query(" ?! "), "");
+    }
+
+    /// Requiring a filler word finds nothing: *how does attention work in transformers* matched 0
+    /// papers ANDed whole, 5,198 without its fillers (2026-10-29). Fillers go, in any case; the
+    /// content words and a lone letter stay; a question of fillers only asks arXiv nothing.
+    #[test]
+    fn an_arxiv_query_leaves_out_the_words_no_paper_is_found_by() {
+        assert_eq!(
+            arxiv_query("How does attention work in transformers?"),
+            "all:attention+AND+all:work+AND+all:transformers"
+        );
+        assert_eq!(arxiv_query("what does vitamin K do"), "all:vitamin+AND+all:K");
+        assert_eq!(arxiv_query("what is it"), "");
+        for w in ARXIV_FILLERS {
+            assert_eq!(*w, w.to_lowercase(), "the list is compared lower-case");
+        }
+    }
+
+    /// The desktop proxy filters the same words. It is Python, so the check reads its source.
+    #[test]
+    fn the_desktop_proxy_leaves_out_the_same_fillers() {
+        let py = include_str!("../../../agents/search-proxy.py");
+        let list = py
+            .split("ARXIV_FILLERS = frozenset(")
+            .nth(1)
+            .and_then(|rest| rest.split(".split()").next())
+            .expect("the proxy defines ARXIV_FILLERS");
+        let mut theirs: Vec<&str> =
+            list.split('"').skip(1).step_by(2).flat_map(str::split_whitespace).collect();
+        let mut ours = ARXIV_FILLERS.to_vec();
+        theirs.sort_unstable();
+        ours.sort_unstable();
+        assert_eq!(theirs, ours);
+    }
+
+    /// D2: the client says who it is and where to reach the project, and never poses as a browser
+    /// (Wikimedia's User-Agent policy).
+    #[test]
+    fn the_user_agent_names_the_project_and_is_not_a_browser() {
+        assert!(UA.starts_with("formicaria-myrme/"), "{UA}");
+        assert!(UA.contains("(+https://github.com/formicaria-org/myrme)"), "{UA}");
+        assert!(!UA.contains("Mozilla"), "{UA}");
     }
 }
