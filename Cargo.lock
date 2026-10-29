@@ -776,7 +776,7 @@ dependencies = [
 
 [[package]]
 name = "fm-agent"
-version = "0.12.0"
+version = "0.12.1"
 dependencies = [
  "jiff",
  "libc",
@@ -787,7 +787,7 @@ dependencies = [
 
 [[package]]
 name = "fm-agent-run"
-version = "0.12.0"
+version = "0.12.1"
 dependencies = [
  "clap",
  "flate2",
