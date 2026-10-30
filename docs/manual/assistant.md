@@ -184,9 +184,11 @@ downloaded on first enable.
    (`adb install -r mobile/formicaria-dev-android-arm64.apk`, or copy it across and open it). A **notes-only build** that contains none of the assistant is the default when built
    `--no-default-features` — so people who only want the notebook can ship a lighter app.
 
-2. **First launch** downloads the model (`qwen3.5-0.8b`, about 0.71 GB with its picture reader) over your connection,
-   shown by a persistent "study assistant" notification. It resumes if interrupted, and only happens
-   once. After that the assistant is ready and runs offline.
+2. **Turn it on** in **Settings → Study assistant**. On a phone that has no model yet, the switch
+   first shows the choices with what each downloads (`qwen3.5-0.8b` is about 0.71 GB with its picture
+   reader); nothing is downloaded until you pick one. The download is shown by a persistent "study
+   assistant" notification, resumes if interrupted, and happens once. After that the assistant is
+   ready and runs offline.
 
 ## Use it
 
