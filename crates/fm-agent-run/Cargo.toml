@@ -58,7 +58,7 @@ ureq = { version = "2", optional = true }
 sha2 = { version = "0.11", optional = true }
 flate2 = { version = "1", optional = true }
 tar = { version = "0.4", optional = true }
-zip = { version = "2", optional = true, default-features = false, features = ["deflate"] }
+zip = { version = "9", optional = true, default-features = false, features = ["deflate"] }
 oar-ocr = { version = "=0.8.1", optional = true, default-features = false, features = ["simd"] }
 ort = { version = "=2.0.0-rc.12", optional = true, default-features = false, features = ["load-dynamic", "std", "api-22"] }
 image = { version = "0.25", optional = true, default-features = false, features = ["jpeg", "png", "webp"] }

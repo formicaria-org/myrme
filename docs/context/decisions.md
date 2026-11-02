@@ -891,6 +891,22 @@ permissions in my opinion, it's public data that needs dissemination often."*
 **Consequence.** Contract 1.10. formicaria's privacy page already names "the assistant's web search";
 its manual's list of three sources is out of date once a formicaria links this release.
 
+## 2026-11-02 — `fm-agent-run` unpacks with `zip` 9 `#repo` `#contract`
+
+**What prompted it.** formicaria's gate went red on no change of its own: RUSTSEC-2026-0429 against
+`zip` 2, patched only in 9.0.0 and later. formicaria had already ruled to leave `zip` 2 once 9 had
+settled, from about 2026-11-01 (its `decisions.md#toolchain`, 2026-10-17), and it links this crate,
+so its tree cannot leave `zip` 2 until this one does.
+
+**What changed.** `zip = "9"` (resolved to 9.2.2) under the `download` feature, with the same
+features. `unpack_zip` needed no change and its two tests pass. It adds `cfg_aliases`, `nix` and
+`typed-path` to the lockfile; all three are permitted licences. It does not widen what a default
+build links, and the contract is unchanged.
+
+**What is left.** This repo's own lockfile also keeps `zip` 2.6.1, through `fm-fetch` at formicaria's
+tag `v0.9.2`. formicaria replaces `fm-fetch` with its own copy by `[patch]`, so nothing it ships is
+affected. Move that pin at the next Myrme release after a formicaria tag has `fm-fetch` on `zip` 9.
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading
