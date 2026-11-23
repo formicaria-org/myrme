@@ -100,8 +100,8 @@ mod tests {
 
     #[test]
     fn the_answer_is_read_through_a_fence() {
-        let a = "```json\n{\"name\": \"Sara Lodi\", \"about\": \"Student, ME5400A project\"}\n```";
-        assert_eq!(parse(a), Some(("Sara Lodi".into(), "Student, ME5400A project".into())));
+        let a = "```json\n{\"name\": \"Sara Lodi\", \"about\": \"Student, XY4400 project\"}\n```";
+        assert_eq!(parse(a), Some(("Sara Lodi".into(), "Student, XY4400 project".into())));
         assert_eq!(parse("no idea"), None);
     }
 }

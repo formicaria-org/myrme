@@ -6,7 +6,8 @@ major N whose minor is at least the one it needs.
 
 | Myrme | Contract | Linked by formicaria | What changed for users |
 |---|---|---|---|
-| **0.12.3** | **1.10** | formicaria `main` from 2026-11-02 | Nothing a person sees: the model runtime is unpacked with `zip` 9, so formicaria can leave `zip` 2 and its advisories behind |
+| **0.13.0** | **1.10** | formicaria 0.63.1 | **Meetings from mail:** a time range (`14:00–14:30`) is read whole, start and end from the email; a time with no zone is on its sender's clock when the email's heading gives it (formicaria 0.63.1 writes it); one meeting a day per conversation when one of them has no time |
+| 0.12.3 | 1.10 | formicaria `main` from 2026-11-02 | Nothing a person sees: the model runtime is unpacked with `zip` 9, so formicaria can leave `zip` 2 and its advisories behind |
 | 0.12.2 | 1.10 | formicaria 0.24.0 | The manual says that on a phone the assistant is turned on in Settings and downloads nothing until a model is picked (formicaria 0.24.0 no longer downloads it unasked) |
 | 0.12.1 | 1.10 | formicaria 0.23.0 | The manual's assistant chapter says which sources `/research` reads; `fmserve::best_food` listed in the contract |
 | 0.12.0 | 1.10 | — (superseded by 0.12.1 before formicaria linked it) | `/research` reads only a list of reputable sources (public health bodies, Wikipedia, Europe PMC, arXiv, Crossref, Stack Overflow, GitHub), chosen from the question in five languages; health questions read MedlinePlus and the bodies' own pages first, Wikipedia named as an encyclopedia; "how much X in Y" reads the app's food list; no general search engine |

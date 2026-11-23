@@ -778,6 +778,9 @@ struct Block {
     at: Option<String>,
     /// The heading's sender.
     by: Option<String>,
+    /// **The sender's own offset**, when the heading gives it (`… (sent 2026-11-17 15:54 +08:00)`):
+    /// the clock their bare "14:00" is on (2026-11-23).
+    offset: Option<i32>,
     text: String,
     /// The same email as written (case kept, whitespace folded) — what a near quote is replaced by.
     raw: String,
@@ -786,8 +789,14 @@ struct Block {
 /// Split the note into its emails at their `### Name — YYYY-MM-DD HH:MM` headings. Anything above the
 /// first heading (the person's own writing, an assistant box) is a block with no sending day.
 fn blocks(body: &str) -> Vec<Block> {
-    let mut out =
-        vec![Block { sent: None, at: None, by: None, text: String::new(), raw: String::new() }];
+    let mut out = vec![Block {
+        sent: None,
+        at: None,
+        by: None,
+        offset: None,
+        text: String::new(),
+        raw: String::new(),
+    }];
     let mut raw = String::new();
     for line in body.lines() {
         if let Some(head) = line.strip_prefix("### ") {
@@ -800,6 +809,7 @@ fn blocks(body: &str) -> Vec<Block> {
                 sent: heading_day(head),
                 at: heading_at(head),
                 by: head.rsplit_once(" — ").map(|(n, _)| n.trim().to_string()),
+                offset: heading_offset(head),
                 text: String::new(),
                 raw: String::new(),
             });
@@ -875,6 +885,14 @@ fn heading_day(head: &str) -> Option<Date> {
     let (y, m, dd) =
         (it.next()?.parse().ok()?, it.next()?.parse::<u8>().ok()?, it.next()?.parse().ok()?);
     Date::from_calendar_date(y, Month::try_from(m).ok()?, dd).ok()
+}
+
+/// The sender's offset a heading carries: `Ana — 2026-11-17 08:54 (sent 2026-11-17 15:54 +08:00)` →
+/// +8 h. `None` for a heading without it (the sender's clock is not known, and is not guessed).
+fn heading_offset(head: &str) -> Option<i32> {
+    let (_, sent) = head.split_once("(sent ")?;
+    let sent = sent.trim_end().strip_suffix(')')?.trim();
+    zone::offset_seconds(sent.rsplit(' ').next()?)
 }
 
 /// `Maria Rossi — 2026-10-07 09:12` → `2026-10-07T09:12`, the form `mail_last` takes.
@@ -960,14 +978,22 @@ pub fn resolve(
         None => return Err(Dropped::NoDate),
     };
     // A time only from the sentence itself; none there → the meeting is for the day, which is true.
+    let span = find_span(&nquote);
     let mut start =
-        find_time(&nquote).or_else(|| model_words(&f.time, &nquote).and_then(|n| read_time(&n)));
-    let mut end = start
-        .and(model_words(&f.end, &nquote).and_then(|n| read_time(&n)))
+        span.map(|s| s.0).or_else(|| model_words(&f.time, &nquote).and_then(|n| read_time(&n)));
+    let mut end = span
+        .and_then(|s| s.1)
+        .or_else(|| start.and(model_words(&f.end, &nquote).and_then(|n| read_time(&n))))
         .filter(|e| Some(*e) > start);
     // Written on another clock: moved onto the person's, on the meeting's own day (2026-10-23).
     let mut written = None;
-    let zone = zone_in(&nquote).or_else(|| start.and_then(|s| zone_of_time(&msg, s)));
+    // **A time with no zone written is on its sender's clock**, when the heading says which
+    // (2026-11-23, reversing 2026-10-23's "stays as written" for that case): a booking at 14:00 by
+    // someone eight hours east is 14:00 on their clock, not on the reader's. Without the sender's
+    // offset the time still stays as written.
+    let zone = zone_in(&nquote)
+        .or_else(|| start.and_then(|s| zone_of_time(&msg, s)))
+        .or_else(|| exact.offset.and_then(zone::of_offset));
     if let (Some(s), Some(z), Some(here)) = (start, zone, here) {
         if let Some((d, t)) = z.convert(day, s, here) {
             if (d, t) != (day, s) {
@@ -1053,7 +1079,36 @@ fn tokens(text: &str) -> Vec<String> {
             w.trim_matches(|c: char| ",;:()\"«»?!".contains(c)).trim_end_matches('.').to_string()
         })
         .filter(|w| !w.is_empty())
+        .flat_map(split_range)
         .collect()
+}
+
+/// **A time range written as one word** — `14:00–14:30`, `2:00-2:30`, `9.30—10.15` — as its two
+/// times with the dash between (2026-11-23: a booking "for 24 November, 14:00–14:30" read as no time
+/// at all, so the hour was the model's and the end was lost). Each side must be a time on its own (an
+/// hour of one or two digits, its minutes after `:`, `.` or `h`), so a date (`2026-11-24`) or a code
+/// with letters (`XB-04-02`) is left whole.
+fn split_range(w: String) -> Vec<String> {
+    let clock = |p: &str| {
+        let core = p.trim_end_matches(|c: char| c.is_ascii_alphabetic() || c == '.');
+        match core.split_once([':', '.', 'h']) {
+            Some((h, m)) => {
+                (1..=2).contains(&h.len())
+                    && h.chars().all(|c| c.is_ascii_digit())
+                    && m.len() == 2
+                    && m.chars().all(|c| c.is_ascii_digit())
+            }
+            None => false,
+        }
+    };
+    for dash in ['–', '—', '-'] {
+        if let Some((a, b)) = w.split_once(dash) {
+            if clock(a) && clock(b) {
+                return vec![a.to_string(), "–".to_string(), b.to_string()];
+            }
+        }
+    }
+    vec![w]
 }
 
 const DATE_GLUE: [&str; 17] = [
@@ -1156,8 +1211,26 @@ fn find_day(text: &str, anchor: Date, last: bool) -> Option<Date> {
 
 /// The first time written in `text`: `12pm`, `11:30am`, `15:30`, `10.30`, `alle 15`, `at 10`, `ore 9`.
 /// A bare number counts only after `at`/`alle`/`ore`/`h`/`dalle`/`verso`, or before `am`/`pm`.
+#[cfg(test)]
 fn find_time(text: &str) -> Option<Time> {
     times_in(&tokens(text)).into_iter().next().map(|(t, _)| t)
+}
+
+/// The first time written in `text` and, when a range follows it (`14:00–14:30`, `2:00-2:30 pm`,
+/// `from 14:00 to 14:30`), where it ends — read from the email, never the model's guess (2026-11-23).
+fn find_span(text: &str) -> Option<(Time, Option<Time>)> {
+    let words = tokens(text);
+    let times = times_in(&words);
+    let (start, next) = *times.first()?;
+    let joined = words
+        .get(next)
+        .is_some_and(|w| matches!(w.as_str(), "–" | "-" | "—" | "to" | "until" | "till" | "alle"));
+    let end = times
+        .get(1)
+        .filter(|(_, n2)| joined && (*n2 == next + 2 || *n2 == next + 3))
+        .map(|(t, _)| *t)
+        .filter(|e| *e > start);
+    Some((start, end))
 }
 
 /// The clock the sentence's times are on: a zone written right after one of them, the first found.
@@ -1473,6 +1546,35 @@ fn is_link(place: &str) -> bool {
     place.starts_with("https://") || place.starts_with("http://")
 }
 
+/// **One meeting a day per conversation, when one of them has no time** (2026-11-23): a model read
+/// "the link is as follows" and "the room booking for 24 November, 14:00–14:30" in one email as two
+/// meetings, and the one without a time was proposed beside the timed one. On a day that holds a
+/// timed meeting, a meeting with no time is the same meeting: it is dropped, and its place goes to
+/// the timed one when that has none (a link sent beside a booking). Call-offs are left alone.
+pub fn one_per_day(mut ms: Vec<Meeting>) -> Vec<Meeting> {
+    let untimed: Vec<usize> =
+        (0..ms.len()).filter(|&i| ms[i].start.is_none() && !ms[i].cancelled).collect();
+    let mut gone = Vec::new();
+    for i in untimed {
+        let day = ms[i].day;
+        if let Some(j) =
+            (0..ms.len()).find(|&j| ms[j].day == day && ms[j].start.is_some() && !ms[j].cancelled)
+        {
+            if ms[j].place.is_none() {
+                ms[j].place = ms[i].place.clone();
+            }
+            gone.push(i);
+        }
+    }
+    let mut k = 0;
+    ms.retain(|_| {
+        let keep = !gone.contains(&k);
+        k += 1;
+        keep
+    });
+    ms
+}
+
 /// Decide what to propose.
 ///
 /// - `current`: the conversation note's own `start`, and whether it is still ahead of us.
@@ -1662,6 +1764,58 @@ mod tests {
             None,
             "16 October 2026 is a Friday: the email contradicts itself"
         );
+    }
+
+    /// **A range written as one word** gives its start and its end, read from the email (2026-11-23);
+    /// a date or a code with letters is not a range.
+    #[test]
+    fn a_time_range_gives_its_start_and_end() {
+        let span = |p: &str| find_span(&loose(p));
+        assert_eq!(
+            span("for 24 November, 14:00–14:30, at XB-04-02"),
+            Some((time!(14:00), Some(time!(14:30))))
+        );
+        assert_eq!(
+            span("tomorrow afternoon, 2:00–2:30 PM"),
+            Some((time!(14:00), Some(time!(14:30))))
+        );
+        assert_eq!(span("on the 24th at 2.00-2.30 pm"), Some((time!(14:00), Some(time!(14:30)))));
+        assert_eq!(
+            span("from 14:00 to 15:15 in the hall"),
+            Some((time!(14:00), Some(time!(15:15))))
+        );
+        assert_eq!(span("at 14:00 in room XB-04-02"), Some((time!(14:00), None)));
+        assert_eq!(span("booked for 2026-11-24 in XB-04-02"), None);
+        assert_eq!(tokens("XB-04-02"), ["XB-04-02"]);
+    }
+
+    /// **One meeting a day when one has no time** (2026-11-23): the untimed one is the timed one, and
+    /// lends it its place when it has none.
+    #[test]
+    fn a_meeting_without_a_time_on_a_timed_meeting_s_day_is_that_meeting() {
+        let m = |start: Option<Time>, place: Option<&str>| Meeting {
+            title: "Defence".into(),
+            day: date!(2026 - 11 - 24),
+            start,
+            end: None,
+            place: place.map(str::to_string),
+            quote: String::new(),
+            sent_at: None,
+            said_by: None,
+            cancelled: false,
+            dated: true,
+            written: None,
+        };
+        let out =
+            one_per_day(vec![m(None, Some("https://meet.example/x")), m(Some(time!(14:00)), None)]);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].start, Some(time!(14:00)));
+        assert_eq!(out[0].place.as_deref(), Some("https://meet.example/x"));
+        // Another day, or a day with no timed meeting, is left alone.
+        let mut other = m(None, None);
+        other.day = date!(2026 - 11 - 25);
+        assert_eq!(one_per_day(vec![other.clone(), m(Some(time!(14:00)), None)]).len(), 2);
+        assert_eq!(one_per_day(vec![other]).len(), 1);
     }
 
     #[test]
@@ -2547,7 +2701,8 @@ mod tests {
 
     /// **"Tomorrow" is the sender's tomorrow**: written late on the 7th at −05:00 it is the 8th, though
     /// the email is already on the 8th on the reader's clock (read from there, it would be the 9th).
-    /// The hour, with no zone written, stays as written (2026-10-23).
+    /// The hour, with no zone written, is on the sender's clock (2026-11-23; it stayed as written
+    /// before): 6pm at −05:00 on the 8th is 08:00 on the 9th in Tokyo.
     #[test]
     fn a_relative_day_is_counted_from_the_sender_s_own_day() {
         let tokyo = Here::parse("Asia/Tokyo").unwrap();
@@ -2566,7 +2721,8 @@ mod tests {
             place: String::new(),
         };
         let m = resolve(&f, &body, date!(2026 - 10 - 07), Some(&tokyo)).unwrap();
-        assert_eq!(m.start_stamp(), "2026-10-08T18:00", "the 8th, not the 9th");
+        assert_eq!(m.start_stamp(), "2026-10-09T08:00", "the sender's 6pm on their 8th");
+        assert_eq!(m.written.as_deref(), Some("18:00 UTC-05:00"));
         let all = blocks(&body);
         assert_eq!(
             all[1].at.as_deref(),
@@ -2617,14 +2773,15 @@ mod tests {
             assert_eq!(m.start_stamp(), want, "{q:?}");
         }
 
-        // A place after the same time that is not an invitation's — an address — moves nothing.
+        // A place after the same time that is not an invitation's — an address — is not a clock:
+        // the time is on the sender's own (+09:00, 2026-11-23), not on Denver's.
         let address = format!("{q}\nWe meet at 17:30 Denver Road, room 4.");
         let m = resolve(&found(q), &mail(&address), today, Some(&berlin)).unwrap();
-        assert_eq!(m.start_stamp(), "2026-11-03T17:30", "an address is not a clock");
+        assert_eq!(m.start_stamp(), "2026-11-03T09:30", "an address is not a clock");
 
         let other = format!("{q}\nThe seminar is at 10:00 London time.");
         let m = resolve(&found(q), &mail(&other), today, Some(&berlin)).unwrap();
-        assert_eq!(m.start_stamp(), "2026-11-03T17:30", "another time's zone does not move it");
+        assert_eq!(m.start_stamp(), "2026-11-03T09:30", "another time's zone does not move it");
     }
 
     #[test]

@@ -164,6 +164,26 @@ fn civil_date(d: jiff::civil::Date) -> Option<Date> {
         .ok()
 }
 
+/// **The sender's own clock**, from the offset their email's heading carries (2026-11-23): a fixed
+/// offset, labelled as one (`UTC+08:00`). `None` for an offset no clock has.
+pub fn of_offset(seconds: i32) -> Option<Zone> {
+    let label = if seconds == 0 {
+        "UTC".to_string()
+    } else {
+        let (sign, a) = if seconds < 0 { ('-', -seconds) } else { ('+', seconds) };
+        format!("UTC{sign}{:02}:{:02}", a / 3600, a % 3600 / 60)
+    };
+    Some(Zone { label, tz: fixed(seconds)? })
+}
+
+/// An offset as a heading writes it (`+08:00`, `-0500`, `Z`) → seconds east of UTC.
+pub fn offset_seconds(s: &str) -> Option<i32> {
+    if s == "Z" {
+        return Some(0);
+    }
+    signed_offset(s)
+}
+
 fn fixed(seconds: i32) -> Option<TimeZone> {
     Offset::from_seconds(seconds).ok().map(TimeZone::fixed)
 }

@@ -89,7 +89,7 @@ person {me} is corresponding with, and say in a few words who that person is to 
 the emails say: their role, their course or project, their organisation. Prefer the plainest role the \
 emails support. Answer ONLY with a JSON object, no other text, with these keys:\n\
 \"name\": that person's full name, copied exactly as the emails write it;\n\
-\"about\": two to six words, in English, such as \"Master student, ME5400A project\", \"Collaborator on \
+\"about\": two to six words, in English, such as \"Master student, XY4400 project\", \"Collaborator on \
 the Moonshot project\" or \"Director of the Robotics Lab\". Never guess what the emails do not say.";
 
 /// The meeting pass's question: **where do the meetings stand now**, after the last message — not

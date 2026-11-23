@@ -387,6 +387,7 @@ impl<V: VaultAccess> Agent<V> {
             // Where the last read stopped: what came after it is news. Empty after a change of rules,
             // when the whole conversation is read again as history.
             let since = Some(read_to.as_str()).filter(|s| !s.is_empty());
+            let ok = meetings::one_per_day(ok);
             let plan = meetings::plan(ok, current, since, &taken, &linked, &proposed);
             let new_title = self.title_once(llm, &mut mem, id, title, &emails, me);
 
@@ -790,7 +791,8 @@ mod tests {
 
     /// **Headings with their offset, and a formicaria that takes instants** (2026-10-24, later): the
     /// emails' times are read onto the person's clock, and what is proposed is sent as a moment with
-    /// that clock's offset — so a change of zone between this pass and the write cannot move it.
+    /// that clock's offset — so a change of zone between this pass and the write cannot move it. A
+    /// bare hour is the sender's, on the heading's offset (2026-11-23).
     #[test]
     fn offset_headings_are_read_on_the_clock_and_starts_go_as_instants() {
         let mem = scratch();
@@ -804,8 +806,9 @@ mod tests {
         let tokyo = Clock::at(Here::parse("Asia/Tokyo").unwrap(), date!(2026 - 10 - 06), true);
         a.meeting_pass(&llm, &mem, &tokyo).unwrap().unwrap();
         let calls = a.fm.calls.borrow();
-        assert_eq!(calls[0].1["props"]["start"], "2026-10-08T15:00:00+09:00");
-        assert_eq!(calls[1].1["start"], "2026-10-28T10:00:00+09:00");
+        // "alle 15" and "alle 10" are the senders' own hours, on +02:00 (2026-11-23).
+        assert_eq!(calls[0].1["props"]["start"], "2026-10-08T22:00:00+09:00");
+        assert_eq!(calls[1].1["start"], "2026-10-28T17:00:00+09:00");
         assert_eq!(calls.len(), 2, "{calls:?}");
         drop(calls);
         let asked = *llm.1.borrow();
@@ -852,8 +855,8 @@ mod tests {
         let list = json!({
             "conversations": [
                 {"id": "A", "title": "Mei Lin", "start": "2026-10-23T16:00"},
-                {"id": "B", "title": "Siyu Hou", "start": "2026-10-23T16:00"},
-                {"id": "C", "title": "Chen Tingyu", "start": "2026-10-30T17:00"}
+                {"id": "B", "title": "Rina Takeda", "start": "2026-10-23T16:00"},
+                {"id": "C", "title": "Lin Weiran", "start": "2026-10-30T17:00"}
             ],
             "linked": {"C": ["2026-10-24T10:00"]},
             "taken": ["2026-10-27T09:30"]
@@ -865,7 +868,7 @@ mod tests {
         assert!(clash("2026-10-23T17:00", "B", &list).is_none(), "an hour apart is not a clash");
         assert!(clash("2026-10-23T16:00", "Z", &list).is_some());
         assert!(clash("2026-10-30T17:00", "C", &list).is_none(), "its own meeting is not a clash");
-        assert!(clash("2026-10-24T10:30", "A", &list).unwrap().contains("Chen Tingyu"), "linked");
+        assert!(clash("2026-10-24T10:30", "A", &list).unwrap().contains("Lin Weiran"), "linked");
         assert!(clash("2026-10-27T09:00", "A", &list).unwrap().contains("calendar"), "any meeting");
         assert!(clash("2026-10-23", "A", &list).is_none(), "a day with no time");
     }
@@ -878,7 +881,7 @@ mod tests {
             fm: MailVault {
                 start: Some("2026-10-23T16:00"),
                 others: Some(
-                    json!([{"id": "C2", "title": "Siyu Hou", "start": "2026-10-23T16:00"}]),
+                    json!([{"id": "C2", "title": "Rina Takeda", "start": "2026-10-23T16:00"}]),
                 ),
                 ..Default::default()
             },
@@ -890,7 +893,7 @@ mod tests {
             said.contains("is still on Fri 23 Oct at 16:00 \u{2014} but it clashes with"),
             "{said}"
         );
-        assert!(said.contains("Siyu Hou"), "{said}");
+        assert!(said.contains("Rina Takeda"), "{said}");
 
         let mem = scratch();
         let a = Agent {

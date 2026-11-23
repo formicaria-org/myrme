@@ -1,5 +1,5 @@
 {
-  "about": "Golden cases for M1, meetings from mail. Every name, address and exchange is invented. `body` is the conversation note as the pass reads it (`### Sender — sent`, then the email). `expect` is what a person reading the emails would put on the agenda, one line per meeting: `fixed <start stamp>` or `cancelled <day>`, plus ` @ <place>` when the place matters. `oracle` is an answer a perfect model would give, written by hand: replaying it through `meetings::parse` and `meetings::resolve` must give `expect`, which is what the CI test checks. `recorded` holds real models' answers from live runs (`tests/eval_meetings.rs`). `here`, when present, is the reader's own clock (a zone name or offset): a time the emails put on another clock must come out on this one (2026-10-23). A heading may carry its offset (`### Sender — 2026-10-07 22:30 -05:00`, formicaria 0.20): it is read onto `here` as the pass reads it, and a day the email names (\"tomorrow\") is counted from the sender's own day (2026-10-24).",
+  "about": "Golden cases for M1, meetings from mail. Every name, address and exchange is invented. `body` is the conversation note as the pass reads it (`### Sender — sent`, then the email). `expect` is what a person reading the emails would put on the agenda, one line per meeting: `fixed <start stamp>` or `cancelled <day>`, plus ` @ <place>` when the place matters. `oracle` is an answer a perfect model would give, written by hand: replaying it through `meetings::parse` and `meetings::resolve` must give `expect`, which is what the CI test checks. `recorded` holds real models' answers from live runs (`tests/eval_meetings.rs`). `here`, when present, is the reader's own clock (a zone name or offset): a time the emails put on another clock must come out on this one (2026-10-23). A heading may carry its offset (`### Sender — 2026-10-07 22:30 -05:00`, formicaria 0.20): it is read onto `here` as the pass reads it, and a day the email names (\"tomorrow\") is counted from the sender's own day (2026-10-24). A time with no zone written is on its sender's clock when the heading gives the sender's offset (`(sent … ±HH:MM)`), and stays as written otherwise (2026-11-23). Two meetings of one email on one day, one without a time, are one meeting (`one_per_day`, 2026-11-23).",
   "cases": [
     {
       "body": "### Lena Okafor — 2026-10-13 09:10\n\nHi Tom,\n\nCan we meet on Thursday at 3pm in room B12 to go through chapter 2?\n\nLena\n\n### Tom Reyes — 2026-10-13 10:02\n\nThursday at 3pm in B12 works for me, see you then.\n",
@@ -599,7 +599,7 @@
       "here": "Asia/Tokyo",
       "body": "### Ana Ruiz — 2026-10-07 22:30 -05:00\n\nHi Tom,\n\nShall we go through the draft tomorrow at 6pm?\n\nAna\n\n### Tom Reyes — 2026-10-08 13:05 +09:00\n\nYes, 6pm works. See you then.\n",
       "expect": [
-        "fixed 2026-10-08T18:00"
+        "fixed 2026-10-09T08:00"
       ],
       "oracle": [
         {
@@ -633,6 +633,59 @@
           "quote": "Friday at 11am in C4 is good for me."
         }
       ]
+    },
+    {
+      "id": "range-dash-one-meeting-two-sentences",
+      "title": "Project defence",
+      "today": "2026-11-23",
+      "here": "Asia/Tokyo",
+      "body": "### Ana Duarte — 2026-10-29 06:50\n\nDear Professor,\n\nFor the project defence, I would like to propose one of the slots from 23 to 25 November. Any time and room are fine with me.\n\nAna\n\n### Tom Reyes — 2026-10-29 07:21\n\nDear Ana,\n\nCould it be on the 24th? It can be at 2.00-2.30 pm or 7.30-8.00 pm, by video for me.\n\nTom\n\n### Rui Okada — 2026-10-30 10:18\n\nI am OK for 24 Nov., 2:00-2:30 PM by video.\n\n### Ana Duarte — 2026-10-30 10:26\n\nThank you both. Since 24 November, 14:00–14:30 works well for everyone, I have booked room XB-04-02 for that slot.\n\n### Ana Duarte — 2026-11-17 08:54\n\nDear Professor,\n\nI have filled in the shared sheet with the room booking for 24 November, 14:00–14:30, at XB-04-02. The video link is as follows:\nhttps://meet.example/def-456\n\nAna\n\n### Ana Duarte — 2026-11-23 09:21\n\nDear Professor,\n\nThis is a friendly reminder that my project defence is scheduled for tomorrow afternoon, 2:00–2:30 PM. The video link is as follows:\nhttps://meet.example/def-456\n\nAna\n",
+      "expect": [
+        "fixed 2026-11-24T14:00 @ XB-04-02"
+      ],
+      "oracle": [
+        {
+          "status": "fixed",
+          "title": "Project defence",
+          "date": "24 November",
+          "time": "",
+          "end": "",
+          "place": "https://meet.example/def-456",
+          "quote": "The video link is as follows:"
+        },
+        {
+          "status": "fixed",
+          "title": "Project defence",
+          "date": "24 November",
+          "time": "14:00",
+          "end": "14:30",
+          "place": "XB-04-02",
+          "quote": "I have filled in the shared sheet with the room booking for 24 November, 14:00–14:30, at XB-04-02."
+        }
+      ],
+      "recorded": {}
+    },
+    {
+      "id": "sender-clock-range",
+      "title": "Project defence",
+      "today": "2026-11-20",
+      "here": "Africa/Lagos",
+      "body": "### Ana Duarte — 2026-11-17 09:24 (sent 2026-11-17 13:54 +05:30)\n\nDear Professor,\n\nI have filled in the shared sheet with the room booking for 24 November, 14:00–14:30, at XB-04-02. The video link is as follows:\nhttps://meet.example/def-456\n\nAna\n",
+      "expect": [
+        "fixed 2026-11-24T09:30 @ XB-04-02"
+      ],
+      "oracle": [
+        {
+          "status": "fixed",
+          "title": "Project defence",
+          "date": "24 November",
+          "time": "14:00",
+          "end": "14:30",
+          "place": "XB-04-02",
+          "quote": "I have filled in the shared sheet with the room booking for 24 November, 14:00–14:30, at XB-04-02."
+        }
+      ],
+      "recorded": {}
     }
   ]
 }

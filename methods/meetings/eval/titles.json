@@ -27,9 +27,9 @@
     },
     {
       "id": "name-in-capitals",
-      "title": "Re: ME5400A project",
+      "title": "Re: XY4400 project",
       "me": "Anna Ferri",
-      "body": "### MARCO BIANCHI — 2026-10-09 18:12\n\nDear Prof. Ferri,\n\nI am a Master student in your ME5400A project and I will not make it to Friday's meeting.\n\nMarco\n\n### Anna Ferri — 2026-10-09 19:00\n\nNo problem, Marco.\n",
+      "body": "### MARCO BIANCHI — 2026-10-09 18:12\n\nDear Prof. Ferri,\n\nI am a Master student in your XY4400 project and I will not make it to Friday's meeting.\n\nMarco\n\n### Anna Ferri — 2026-10-09 19:00\n\nNo problem, Marco.\n",
       "name": "Marco Bianchi",
       "about_any": ["student", "master"]
     },
@@ -45,8 +45,8 @@
       "id": "chinese-thread",
       "title": "回复: 项目报告",
       "me": "Anna Ferri",
-      "body": "### Chen Tingyu — 2026-10-11 20:30\n\nDear Prof. Ferri,\n\nI am an undergraduate student in your NA project. Attached is our progress report.\n\nChen Tingyu\n\n### Anna Ferri — 2026-10-12 08:00\n\nThank you, Tingyu.\n",
-      "name": "Chen Tingyu",
+      "body": "### Lin Weiran — 2026-10-11 20:30\n\nDear Prof. Ferri,\n\nI am an undergraduate student in your NA project. Attached is our progress report.\n\nLin Weiran\n\n### Anna Ferri — 2026-10-12 08:00\n\nThank you, Weiran.\n",
+      "name": "Lin Weiran",
       "about_any": ["student", "undergraduate"]
     },
     {

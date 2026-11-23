@@ -907,6 +907,50 @@ build links, and the contract is unchanged.
 tag `v0.9.2`. formicaria replaces `fm-fetch` with its own copy by `[patch]`, so nothing it ships is
 affected. Move that pin at the next Myrme release after a formicaria tag has `fm-fetch` on `zip` 9.
 
+## 2026-11-23 — a bare time is on its sender's clock; a time range is read whole; one meeting a day when one has no time `#method`
+
+> Reverses, in part, *a meeting time written on another clock is moved onto the person's*
+> (2026-10-23) and point 7 of 2026-10-24 (later): "the hour, with no zone written, stays as
+> written" now holds only when the sender's clock is not known.
+
+**What prompted it.** A conversation (read locally; nothing of it is written here) fixed a meeting
+as "for 24 November, 14:00–14:30, at" a room, with a video link in the next sentence. The pass:
+- proposed **two** meetings for it: one quoting the link sentence, with the date and no time, and
+  one quoting the booking;
+- **read no time at all** in "14:00–14:30": `times_in` takes a time only as a word on its own, so
+  the hour came from the model's words and the end was lost;
+- did not see the two as one: the dedup compares starts, and a day is not a timed start;
+- gave the timed one an hour seven hours off, on a run that left no log. On today's clock the same
+  steps give the right hour, so that run's cause is not known; reading the time from the email
+  rather than the model's words removes the path it most likely took.
+
+The senders wrote on a clock seven hours from the reader's, as people do: "14:00" in an email is
+the sender's 14:00.
+
+**Decision.**
+1. **A time range written as one word is read whole** (`split_range`, `find_span`): `14:00–14:30`,
+   `2:00-2:30 pm`, `2.00-2.30`, and `from 14:00 to 14:30`, give the start and the end from the email.
+   The model's time and end are used only where the email has none. A date (`2026-11-24`) or a code
+   with letters (`XB-04-02`) is not a range.
+2. **A time with no zone written is on its sender's clock when the heading says which**
+   (`### Ana — 2026-11-17 09:24 (sent 2026-11-17 13:54 +05:30)`, the form `on_clock` already wrote
+   and formicaria now writes from the email's `Date:` header). It is moved onto the reader's, and
+   the box says so (`14:00 UTC+05:30`). Without the sender's offset it stays as written, as before.
+3. **One meeting a day per conversation when one has no time** (`one_per_day`, run by the pass and
+   the eval before planning): a meeting with no time on a day that holds a timed one is that meeting;
+   its place goes to the timed one when that has none. Call-offs are untouched.
+4. **`PASS_VERSION` stays 8.** A re-read would read headings written before formicaria keeps the
+   sender's offset exactly as before, and could propose moving a meeting a person set by hand. The
+   new rules apply as new mail arrives.
+5. **Real names out of the repo.** Two people's names from a user's mail and a course code had
+   reached a test (`fm-agent-run` `meetings.rs`), the titles eval and a prompt's example since
+   2026-10-20. They are replaced by invented ones; the git history still holds them, and rewriting
+   it is not done here.
+
+**Checked.** Eval cases `range-dash-one-meeting-two-sentences` (one meeting at 14:00, not two) and
+`sender-clock-range` (a booking at 14:00 +05:30, read on a +01:00 clock as 09:30); unit tests for
+ranges and `one_per_day`; `offset-headings-sender-day` and two unit tests changed with the rule.
+
 ## Rulings inherited from formicaria (before 2026-10-18)
 
 These still hold. Their full text is in formicaria's `docs/context/decisions.md`; grep the heading
